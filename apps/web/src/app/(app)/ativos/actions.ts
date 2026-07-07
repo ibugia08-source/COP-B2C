@@ -679,6 +679,15 @@ export async function uploadAttachment(assetId: string, formData: FormData): Pro
   const auth = await checkPermission("digital_assets.upload_attachments");
   if (!auth.ok) return { error: auth.error };
 
+  // Vercel tem filesystem efêmero/somente-leitura — anexos precisam de storage
+  // externo (Vercel Blob/S3). Evita crash confuso até isso ser configurado.
+  if (process.env.VERCEL) {
+    return {
+      error:
+        "Upload de anexos indisponível neste ambiente. Configure um storage externo (Vercel Blob/S3) — veja docs/DEPLOY.md.",
+    };
+  }
+
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Selecione um arquivo." };
   if (file.size > MAX_FILE_SIZE) return { error: "Arquivo muito grande (limite 25MB)." };

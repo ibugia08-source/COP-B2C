@@ -4,3 +4,7 @@ node_modules/
 *.db
 *.db-journal
 apps/web/uploads/
+
+# arquivos SQLite locais
+*.db-shm
+*.db-wal

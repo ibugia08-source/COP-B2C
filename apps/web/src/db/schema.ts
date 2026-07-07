@@ -1,13 +1,16 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
+  jsonb,
+  pgTable,
   primaryKey,
   real,
-  sqliteTable,
   text,
+  timestamp,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
 // Enums (SQLite não tem enum nativo — garantidos via Drizzle text({enum}) + Zod)
@@ -288,11 +291,11 @@ const id = () =>
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID());
 const createdAt = () =>
-  integer("created_at", { mode: "timestamp" })
+  timestamp("created_at", { mode: "date" })
     .notNull()
     .$defaultFn(() => new Date());
 const updatedAt = () =>
-  integer("updated_at", { mode: "timestamp" })
+  timestamp("updated_at", { mode: "date" })
     .notNull()
     .$defaultFn(() => new Date())
     .$onUpdateFn(() => new Date());
@@ -301,7 +304,7 @@ const updatedAt = () =>
 // Usuários, papéis e permissões
 // ---------------------------------------------------------------------------
 
-export const users = sqliteTable(
+export const users = pgTable(
   "users",
   {
     id: id(),
@@ -311,13 +314,13 @@ export const users = sqliteTable(
     // status ATIVO libera login; PENDENTE aguarda aprovação de um administrador.
     // isActive é mantido em sincronia (ATIVO => true) para as listas de atribuição.
     status: text("status", { enum: USER_STATUSES }).notNull().default("ATIVO"),
-    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    isActive: boolean("is_active").notNull().default(true),
     // como a conta foi criada: SELF_SIGNUP (auto-cadastro) ou ADMIN
     signupSource: text("signup_source", { enum: ["SELF_SIGNUP", "ADMIN"] })
       .notNull()
       .default("ADMIN"),
     approvedById: text("approved_by_id"),
-    approvedAt: integer("approved_at", { mode: "timestamp" }),
+    approvedAt: timestamp("approved_at", { mode: "date" }),
     avatarUrl: text("avatar_url"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -325,21 +328,21 @@ export const users = sqliteTable(
   (t) => [uniqueIndex("users_email_idx").on(t.email), index("users_status_idx").on(t.status)],
 );
 
-export const roles = sqliteTable("roles", {
+export const roles = pgTable("roles", {
   id: id(),
   name: text("name", { enum: ROLE_NAMES }).notNull().unique(),
   description: text("description"),
   createdAt: createdAt(),
 });
 
-export const permissions = sqliteTable("permissions", {
+export const permissions = pgTable("permissions", {
   id: id(),
   // formato "modulo.acao", ex.: "clients.view", "vault.revealSecret"
   key: text("key").notNull().unique(),
   description: text("description"),
 });
 
-export const userRoles = sqliteTable(
+export const userRoles = pgTable(
   "user_roles",
   {
     userId: text("user_id")
@@ -352,7 +355,7 @@ export const userRoles = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.roleId] })],
 );
 
-export const rolePermissions = sqliteTable(
+export const rolePermissions = pgTable(
   "role_permissions",
   {
     roleId: text("role_id")
@@ -365,7 +368,7 @@ export const rolePermissions = sqliteTable(
   (t) => [primaryKey({ columns: [t.roleId, t.permissionId] })],
 );
 
-export const teamMembers = sqliteTable("team_members", {
+export const teamMembers = pgTable("team_members", {
   id: id(),
   userId: text("user_id")
     .notNull()
@@ -374,7 +377,7 @@ export const teamMembers = sqliteTable("team_members", {
   phone: text("phone"),
   position: text("position"), // cargo (ex.: Gestor de Tráfego Sênior)
   status: text("status", { enum: TEAM_MEMBER_STATUSES }).notNull().default("ATIVO"),
-  hiredAt: integer("hired_at", { mode: "timestamp" }),
+  hiredAt: timestamp("hired_at", { mode: "date" }),
   notes: text("notes"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -384,7 +387,7 @@ export const teamMembers = sqliteTable("team_members", {
 // Clientes
 // ---------------------------------------------------------------------------
 
-export const clients = sqliteTable(
+export const clients = pgTable(
   "clients",
   {
     id: id(),
@@ -419,8 +422,8 @@ export const clients = sqliteTable(
     trafficManager1Id: text("traffic_manager_1_id").references(() => users.id),
     trafficManager2Id: text("traffic_manager_2_id").references(() => users.id),
     mainResponsibleId: text("main_responsible_id").references(() => users.id),
-    startDate: integer("start_date", { mode: "timestamp" }),
-    churnDate: integer("churn_date", { mode: "timestamp" }),
+    startDate: timestamp("start_date", { mode: "date" }),
+    churnDate: timestamp("churn_date", { mode: "date" }),
     churnReason: text("churn_reason"),
     notes: text("notes"),
     createdAt: createdAt(),
@@ -439,7 +442,7 @@ export const clients = sqliteTable(
   ],
 );
 
-export const clientContacts = sqliteTable(
+export const clientContacts = pgTable(
   "client_contacts",
   {
     id: id(),
@@ -450,27 +453,27 @@ export const clientContacts = sqliteTable(
     role: text("role"),
     phone: text("phone"),
     email: text("email"),
-    isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+    isPrimary: boolean("is_primary").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [index("client_contacts_client_idx").on(t.clientId)],
 );
 
-export const clientOperationalProfiles = sqliteTable("client_operational_profiles", {
+export const clientOperationalProfiles = pgTable("client_operational_profiles", {
   id: id(),
   clientId: text("client_id")
     .notNull()
     .unique()
     .references(() => clients.id, { onDelete: "cascade" }),
   // ["META_ADS","GOOGLE_ADS","SOCIAL_MEDIA","CRM","IA","SEO","GMB"]
-  platforms: text("platforms", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  platforms: jsonb("platforms").$type<string[]>().notNull().default([]),
   averageDailyBudget: real("average_daily_budget"),
   campaignObjective: text("campaign_objective"),
-  campaignTypes: text("campaign_types", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  campaignTypes: jsonb("campaign_types").$type<string[]>().notNull().default([]),
   offerDescription: text("offer_description"),
   funnelNotes: text("funnel_notes"),
   serviceRules: text("service_rules"),
-  monthlyMeetingRequired: integer("monthly_meeting_required", { mode: "boolean" })
+  monthlyMeetingRequired: boolean("monthly_meeting_required")
     .notNull()
     .default(false),
   briefingText: text("briefing_text"),
@@ -478,7 +481,7 @@ export const clientOperationalProfiles = sqliteTable("client_operational_profile
   updatedAt: updatedAt(),
 });
 
-export const clientHealthLogs = sqliteTable(
+export const clientHealthLogs = pgTable(
   "client_health_logs",
   {
     id: id(),
@@ -496,7 +499,7 @@ export const clientHealthLogs = sqliteTable(
 
 // Etapas de implantação (ex-status do ClickUp: criação de grupo, integração
 // Meta/Google, pesquisa de mercado, diagnóstico, estudo de funil...)
-export const clientPipelineStages = sqliteTable(
+export const clientPipelineStages = pgTable(
   "client_pipeline_stages",
   {
     id: id(),
@@ -508,7 +511,7 @@ export const clientPipelineStages = sqliteTable(
     status: text("status", { enum: PIPELINE_STAGE_STATUSES })
       .notNull()
       .default("PENDENTE"),
-    completedAt: integer("completed_at", { mode: "timestamp" }),
+    completedAt: timestamp("completed_at", { mode: "date" }),
     completedById: text("completed_by_id").references(() => users.id),
     createdAt: createdAt(),
   },
@@ -519,21 +522,21 @@ export const clientPipelineStages = sqliteTable(
 // Projetos e tarefas
 // ---------------------------------------------------------------------------
 
-export const projects = sqliteTable(
+export const projects = pgTable(
   "projects",
   {
     id: id(),
     name: text("name").notNull(),
     description: text("description"),
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
-    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    isActive: boolean("is_active").notNull().default(true),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [index("projects_client_idx").on(t.clientId)],
 );
 
-export const tasks = sqliteTable(
+export const tasks = pgTable(
   "tasks",
   {
     id: id(),
@@ -550,12 +553,12 @@ export const tasks = sqliteTable(
     assignedToId: text("assigned_to_id").references(() => users.id),
     createdById: text("created_by_id").references(() => users.id),
     cancelReason: text("cancel_reason"),
-    dueDate: integer("due_date", { mode: "timestamp" }),
-    startDate: integer("start_date", { mode: "timestamp" }),
-    completedAt: integer("completed_at", { mode: "timestamp" }),
+    dueDate: timestamp("due_date", { mode: "date" }),
+    startDate: timestamp("start_date", { mode: "date" }),
+    completedAt: timestamp("completed_at", { mode: "date" }),
     estimatedMinutes: integer("estimated_minutes"),
     trackedMinutes: integer("tracked_minutes").notNull().default(0),
-    tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -571,7 +574,7 @@ export const tasks = sqliteTable(
 );
 
 // Responsáveis adicionais ("outros responsáveis")
-export const taskAssignees = sqliteTable(
+export const taskAssignees = pgTable(
   "task_assignees",
   {
     taskId: text("task_id")
@@ -584,7 +587,7 @@ export const taskAssignees = sqliteTable(
   (t) => [primaryKey({ columns: [t.taskId, t.userId] })],
 );
 
-export const taskComments = sqliteTable(
+export const taskComments = pgTable(
   "task_comments",
   {
     id: id(),
@@ -598,7 +601,7 @@ export const taskComments = sqliteTable(
   (t) => [index("task_comments_task_idx").on(t.taskId)],
 );
 
-export const taskChecklists = sqliteTable(
+export const taskChecklists = pgTable(
   "task_checklists",
   {
     id: id(),
@@ -612,7 +615,7 @@ export const taskChecklists = sqliteTable(
   (t) => [index("task_checklists_task_idx").on(t.taskId)],
 );
 
-export const taskChecklistItems = sqliteTable(
+export const taskChecklistItems = pgTable(
   "task_checklist_items",
   {
     id: id(),
@@ -620,15 +623,15 @@ export const taskChecklistItems = sqliteTable(
       .notNull()
       .references(() => taskChecklists.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
-    isDone: integer("is_done", { mode: "boolean" }).notNull().default(false),
+    isDone: boolean("is_done").notNull().default(false),
     order: integer("order").notNull().default(0),
     completedById: text("completed_by_id").references(() => users.id),
-    completedAt: integer("completed_at", { mode: "timestamp" }),
+    completedAt: timestamp("completed_at", { mode: "date" }),
   },
   (t) => [index("task_checklist_items_checklist_idx").on(t.checklistId)],
 );
 
-export const taskAttachments = sqliteTable(
+export const taskAttachments = pgTable(
   "task_attachments",
   {
     id: id(),
@@ -645,7 +648,7 @@ export const taskAttachments = sqliteTable(
   (t) => [index("task_attachments_task_idx").on(t.taskId)],
 );
 
-export const taskDependencies = sqliteTable(
+export const taskDependencies = pgTable(
   "task_dependencies",
   {
     // taskId depende de dependsOnTaskId
@@ -659,7 +662,7 @@ export const taskDependencies = sqliteTable(
   (t) => [primaryKey({ columns: [t.taskId, t.dependsOnTaskId] })],
 );
 
-export const taskTimeEntries = sqliteTable(
+export const taskTimeEntries = pgTable(
   "task_time_entries",
   {
     id: id(),
@@ -669,7 +672,7 @@ export const taskTimeEntries = sqliteTable(
     userId: text("user_id").references(() => users.id),
     minutes: integer("minutes").notNull(),
     description: text("description"),
-    date: integer("date", { mode: "timestamp" }).notNull(),
+    date: timestamp("date", { mode: "date" }).notNull(),
     createdAt: createdAt(),
   },
   (t) => [index("task_time_entries_task_idx").on(t.taskId)],
@@ -679,7 +682,7 @@ export const taskTimeEntries = sqliteTable(
 // Criativos
 // ---------------------------------------------------------------------------
 
-export const creativeRequests = sqliteTable(
+export const creativeRequests = pgTable(
   "creative_requests",
   {
     id: id(),
@@ -695,9 +698,9 @@ export const creativeRequests = sqliteTable(
     requestedById: text("requested_by_id").references(() => users.id),
     copyResponsibleId: text("copy_responsible_id").references(() => users.id),
     assignedToId: text("assigned_to_id").references(() => users.id), // design/edição
-    dueDate: integer("due_date", { mode: "timestamp" }),
-    deliveredAt: integer("delivered_at", { mode: "timestamp" }),
-    approvedAt: integer("approved_at", { mode: "timestamp" }),
+    dueDate: timestamp("due_date", { mode: "date" }),
+    deliveredAt: timestamp("delivered_at", { mode: "date" }),
+    approvedAt: timestamp("approved_at", { mode: "date" }),
     fileLinks: text("file_links"),
     publishedLink: text("published_link"),
     offer: text("offer"),
@@ -723,7 +726,7 @@ export const creativeRequests = sqliteTable(
 // ---------------------------------------------------------------------------
 
 // Agrupador (equivalente a uma lista do Trello): um cliente, área interna ou plataforma
-export const digitalAssetGroups = sqliteTable(
+export const digitalAssetGroups = pgTable(
   "digital_asset_groups",
   {
     id: id(),
@@ -744,7 +747,7 @@ export const digitalAssetGroups = sqliteTable(
 );
 
 // Um ativo digital (equivalente a um cartão do Trello)
-export const digitalAssets = sqliteTable(
+export const digitalAssets = pgTable(
   "digital_assets",
   {
     id: id(),
@@ -769,14 +772,14 @@ export const digitalAssets = sqliteTable(
     externalId: text("external_id"),
     recoveryEmail: text("recovery_email"),
     notes: text("notes"),
-    tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
-    lastCheckedAt: integer("last_checked_at", { mode: "timestamp" }),
-    nextReviewAt: integer("next_review_at", { mode: "timestamp" }),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    lastCheckedAt: timestamp("last_checked_at", { mode: "date" }),
+    nextReviewAt: timestamp("next_review_at", { mode: "date" }),
     createdById: text("created_by_id").references(() => users.id),
     updatedById: text("updated_by_id").references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
-    archivedAt: integer("archived_at", { mode: "timestamp" }),
+    archivedAt: timestamp("archived_at", { mode: "date" }),
   },
   (t) => [
     index("assets_group_idx").on(t.groupId),
@@ -790,7 +793,7 @@ export const digitalAssets = sqliteTable(
 );
 
 // Segredos criptografados (senhas, tokens, e-mails de recuperação...)
-export const digitalAssetSecrets = sqliteTable(
+export const digitalAssetSecrets = pgTable(
   "digital_asset_secrets",
   {
     id: id(),
@@ -805,14 +808,14 @@ export const digitalAssetSecrets = sqliteTable(
     maskedPreview: text("masked_preview").notNull(),
     createdById: text("created_by_id").references(() => users.id),
     updatedById: text("updated_by_id").references(() => users.id),
-    lastRevealedAt: integer("last_revealed_at", { mode: "timestamp" }),
+    lastRevealedAt: timestamp("last_revealed_at", { mode: "date" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [index("asset_secrets_asset_idx").on(t.assetId)],
 );
 
-export const digitalAssetAttachments = sqliteTable(
+export const digitalAssetAttachments = pgTable(
   "digital_asset_attachments",
   {
     id: id(),
@@ -830,7 +833,7 @@ export const digitalAssetAttachments = sqliteTable(
 );
 
 // Comentários/diário operacional do ativo (substitui os comentários do Trello)
-export const digitalAssetComments = sqliteTable(
+export const digitalAssetComments = pgTable(
   "digital_asset_comments",
   {
     id: id(),
@@ -846,7 +849,7 @@ export const digitalAssetComments = sqliteTable(
   (t) => [index("asset_comments_asset_idx").on(t.assetId)],
 );
 
-export const digitalAssetStatusHistory = sqliteTable(
+export const digitalAssetStatusHistory = pgTable(
   "digital_asset_status_history",
   {
     id: id(),
@@ -863,14 +866,14 @@ export const digitalAssetStatusHistory = sqliteTable(
 );
 
 // Auditoria de ações sensíveis — NUNCA armazenar o valor do segredo aqui
-export const digitalAssetAuditLogs = sqliteTable(
+export const digitalAssetAuditLogs = pgTable(
   "digital_asset_audit_logs",
   {
     id: id(),
     assetId: text("asset_id").references(() => digitalAssets.id, { onDelete: "set null" }),
     userId: text("user_id").references(() => users.id),
     action: text("action", { enum: ASSET_AUDIT_ACTIONS }).notNull(),
-    metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown>>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     createdAt: createdAt(),
@@ -886,7 +889,7 @@ export const digitalAssetAuditLogs = sqliteTable(
 // Metas
 // ---------------------------------------------------------------------------
 
-export const goals = sqliteTable("goals", {
+export const goals = pgTable("goals", {
   id: id(),
   title: text("title").notNull(),
   description: text("description"),
@@ -900,14 +903,14 @@ export const goals = sqliteTable("goals", {
   megaTargetValue: real("mega_target_value"), // mega meta
   currentValue: real("current_value").notNull().default(0),
   unit: text("unit"), // ex.: "R$", "clientes", "%"
-  autoProgress: integer("auto_progress", { mode: "boolean" }).notNull().default(false),
-  periodStart: integer("period_start", { mode: "timestamp" }),
-  periodEnd: integer("period_end", { mode: "timestamp" }),
+  autoProgress: boolean("auto_progress").notNull().default(false),
+  periodStart: timestamp("period_start", { mode: "date" }),
+  periodEnd: timestamp("period_end", { mode: "date" }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
 
-export const goalTargets = sqliteTable(
+export const goalTargets = pgTable(
   "goal_targets",
   {
     id: id(),
@@ -926,7 +929,7 @@ export const goalTargets = sqliteTable(
 // Documentos (NUNCA credenciais — credenciais vão para o cofre)
 // ---------------------------------------------------------------------------
 
-export const documents = sqliteTable(
+export const documents = pgTable(
   "documents",
   {
     id: id(),
@@ -936,11 +939,11 @@ export const documents = sqliteTable(
     category: text("category"), // ex.: estrategia, funil, processo, wiki
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
     taskId: text("task_id").references(() => tasks.id, { onDelete: "set null" }),
-    isArchived: integer("is_archived", { mode: "boolean" }).notNull().default(false),
-    visibleToRoles: text("visible_to_roles", { mode: "json" })
+    isArchived: boolean("is_archived").notNull().default(false),
+    visibleToRoles: jsonb("visible_to_roles")
       .$type<string[]>()
       .notNull()
-      .default(sql`'[]'`),
+      .default([]),
     createdById: text("created_by_id").references(() => users.id),
     updatedById: text("updated_by_id").references(() => users.id),
     createdAt: createdAt(),
@@ -956,7 +959,7 @@ export const documents = sqliteTable(
 // Auditoria e notificações
 // ---------------------------------------------------------------------------
 
-export const activityLogs = sqliteTable(
+export const activityLogs = pgTable(
   "activity_logs",
   {
     id: id(),
@@ -964,7 +967,7 @@ export const activityLogs = sqliteTable(
     action: text("action").notNull(), // ex.: "client.statusChanged", "vault.secretRevealed"
     entityType: text("entity_type").notNull(), // ex.: "client", "task", "vaultItem"
     entityId: text("entity_id"),
-    metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown>>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -974,7 +977,7 @@ export const activityLogs = sqliteTable(
   ],
 );
 
-export const notifications = sqliteTable(
+export const notifications = pgTable(
   "notifications",
   {
     id: id(),
@@ -986,7 +989,7 @@ export const notifications = sqliteTable(
     body: text("body"),
     entityType: text("entity_type"),
     entityId: text("entity_id"),
-    readAt: integer("read_at", { mode: "timestamp" }),
+    readAt: timestamp("read_at", { mode: "date" }),
     createdAt: createdAt(),
   },
   (t) => [index("notifications_user_idx").on(t.userId, t.readAt)],
@@ -996,23 +999,23 @@ export const notifications = sqliteTable(
 // Automações
 // ---------------------------------------------------------------------------
 
-export const automationRules = sqliteTable("automation_rules", {
+export const automationRules = pgTable("automation_rules", {
   id: id(),
   name: text("name").notNull(),
   description: text("description"),
   triggerType: text("trigger_type", { enum: AUTOMATION_TRIGGERS }).notNull(),
-  conditions: text("conditions", { mode: "json" }).$type<Record<string, unknown>>(),
-  actions: text("actions", { mode: "json" }).$type<
+  conditions: jsonb("conditions").$type<Record<string, unknown>>(),
+  actions: jsonb("actions").$type<
     { type: (typeof AUTOMATION_ACTIONS)[number]; params?: Record<string, unknown> }[]
   >(),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  enabled: boolean("enabled").notNull().default(true),
   scope: text("scope", { enum: AUTOMATION_SCOPES }).notNull().default("GLOBAL"),
   createdById: text("created_by_id").references(() => users.id),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
 
-export const automationExecutionLogs = sqliteTable(
+export const automationExecutionLogs = pgTable(
   "automation_execution_logs",
   {
     id: id(),
@@ -1020,10 +1023,10 @@ export const automationExecutionLogs = sqliteTable(
       .notNull()
       .references(() => automationRules.id, { onDelete: "cascade" }),
     status: text("status", { enum: AUTOMATION_EXEC_STATUSES }).notNull(),
-    payload: text("payload", { mode: "json" }).$type<Record<string, unknown>>(),
+    payload: jsonb("payload").$type<Record<string, unknown>>(),
     error: text("error"),
-    detail: text("detail", { mode: "json" }).$type<Record<string, unknown>>(),
-    executedAt: integer("executed_at", { mode: "timestamp" })
+    detail: jsonb("detail").$type<Record<string, unknown>>(),
+    executedAt: timestamp("executed_at", { mode: "date" })
       .notNull()
       .$defaultFn(() => new Date()),
   },
@@ -1034,20 +1037,20 @@ export const automationExecutionLogs = sqliteTable(
 // Formulários
 // ---------------------------------------------------------------------------
 
-export const formTemplates = sqliteTable("form_templates", {
+export const formTemplates = pgTable("form_templates", {
   id: id(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(), // ex.: "onboarding", "briefing"
   description: text("description"),
   // definição dos campos: [{name, label, type, required, options?}]
-  fields: text("fields", { mode: "json" }).$type<Record<string, unknown>[]>().notNull(),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  fields: jsonb("fields").$type<Record<string, unknown>[]>().notNull(),
+  isActive: boolean("is_active").notNull().default(true),
   createdById: text("created_by_id").references(() => users.id),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
 
-export const formSubmissions = sqliteTable(
+export const formSubmissions = pgTable(
   "form_submissions",
   {
     id: id(),
@@ -1056,7 +1059,7 @@ export const formSubmissions = sqliteTable(
       .references(() => formTemplates.id, { onDelete: "cascade" }),
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
     submittedById: text("submitted_by_id").references(() => users.id),
-    data: text("data", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -1075,7 +1078,7 @@ export type TemplateItem = {
   role?: (typeof TEMPLATE_ROLES)[number]; // responsável padrão por função
 };
 
-export const taskTemplates = sqliteTable("task_templates", {
+export const taskTemplates = pgTable("task_templates", {
   id: id(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
@@ -1083,8 +1086,8 @@ export const taskTemplates = sqliteTable("task_templates", {
   taskType: text("task_type", { enum: TASK_TYPES }).notNull().default("OPERACIONAL"),
   // etapa do pipeline que dispara este template via automação (opcional)
   pipelineStage: text("pipeline_stage", { enum: PIPELINE_STAGES }),
-  items: text("items", { mode: "json" }).$type<TemplateItem[]>().notNull(),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  items: jsonb("items").$type<TemplateItem[]>().notNull(),
+  isActive: boolean("is_active").notNull().default(true),
   createdById: text("created_by_id").references(() => users.id),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -1094,7 +1097,7 @@ export const taskTemplates = sqliteTable("task_templates", {
 // Reuniões com cliente
 // ---------------------------------------------------------------------------
 
-export const clientMeetings = sqliteTable(
+export const clientMeetings = pgTable(
   "client_meetings",
   {
     id: id(),
@@ -1102,7 +1105,7 @@ export const clientMeetings = sqliteTable(
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    meetingDate: integer("meeting_date", { mode: "timestamp" }).notNull(),
+    meetingDate: timestamp("meeting_date", { mode: "date" }).notNull(),
     summary: text("summary"),
     createdById: text("created_by_id").references(() => users.id),
     createdAt: createdAt(),
@@ -1114,7 +1117,7 @@ export const clientMeetings = sqliteTable(
 // Importação (ClickUp → COP)
 // ---------------------------------------------------------------------------
 
-export const importLogs = sqliteTable("import_logs", {
+export const importLogs = pgTable("import_logs", {
   id: id(),
   source: text("source").notNull().default("CLICKUP"),
   fileName: text("file_name"),
@@ -1123,7 +1126,7 @@ export const importLogs = sqliteTable("import_logs", {
   importedRows: integer("imported_rows").notNull().default(0),
   skippedRows: integer("skipped_rows").notNull().default(0),
   errorRows: integer("error_rows").notNull().default(0),
-  report: text("report", { mode: "json" }).$type<Record<string, unknown>>(),
+  report: jsonb("report").$type<Record<string, unknown>>(),
   createdById: text("created_by_id").references(() => users.id),
   createdAt: createdAt(),
 });

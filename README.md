@@ -9,7 +9,7 @@ Central Operacional da B2C Gestão — substituto próprio do ClickUp para a rot
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Drizzle ORM · SQLite (dev) · Zod · jose (JWT) · bcryptjs · Vitest
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Drizzle ORM · Postgres (Neon serverless) · Zod · jose (JWT) · bcryptjs · Vitest
 
 ## Como rodar
 

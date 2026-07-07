@@ -1,0 +1,85 @@
+{
+  "name": "BANCO DE DADOS DE CONTAS E PERFIS DE CLIENTES (exemplo)",
+  "lists": [
+    { "id": "l1", "name": "Costa Imobiliária", "closed": false },
+    { "id": "l2", "name": "Ótica Kamyly", "closed": false },
+    { "id": "l3", "name": "B2C Gestão", "closed": false },
+    { "id": "l4", "name": "CONTAS DO TIK TOK", "closed": false },
+    { "id": "l5", "name": "DOLPHIN ANTY", "closed": false },
+    { "id": "l6", "name": "Cliente Antigo - PAUSADO", "closed": false }
+  ],
+  "members": [
+    { "id": "m1", "fullName": "Tiago" },
+    { "id": "m2", "fullName": "Marina" }
+  ],
+  "cards": [
+    {
+      "id": "c1",
+      "name": "BM Principal Costa Imobiliária",
+      "idList": "l1",
+      "closed": false,
+      "labels": [{ "name": "ATIVA" }],
+      "desc": "Login: costa.ads@gmail.com\nSenha: ExemploSenha!123\nE-mail de recuperação: backup.costa@gmail.com\nLink: https://business.facebook.com\nID: 1234567890",
+      "idMembers": ["m1"],
+      "attachments": [{ "name": "print-verificacao.png", "url": "https://trello.com/anexo-exemplo-1" }]
+    },
+    {
+      "id": "c2",
+      "name": "Instagram Ótica Kamyly",
+      "idList": "l2",
+      "closed": false,
+      "labels": [{ "name": "SENDO ESQUENTADA" }],
+      "desc": "Usuário: @oticakamyly\nSenha: OutraSenha#456\nEmail: social.kamyly@gmail.com\nSenha do email: SenhaMail789",
+      "idMembers": ["m2"]
+    },
+    {
+      "id": "c3",
+      "name": "Conta TikTok 04",
+      "idList": "l4",
+      "closed": false,
+      "labels": [{ "name": "BLOQUEADA" }],
+      "desc": "conta criada em janeiro, caiu na verificação\nprecisa de selfie do titular para desbloquear",
+      "idMembers": []
+    },
+    {
+      "id": "c4",
+      "name": "Perfil Dolphin 12 - aquecimento",
+      "idList": "l5",
+      "closed": false,
+      "labels": [{ "name": "PRONTA PARA USO" }],
+      "desc": "Perfil: DLP-012\nLink: https://app.dolphin-anty.com",
+      "idMembers": ["m1"]
+    },
+    {
+      "id": "c5",
+      "name": "Gmail interno relatórios",
+      "idList": "l3",
+      "closed": false,
+      "labels": [{ "name": "NÃO INFORMADO" }],
+      "desc": "Email: relatorios@b2cgestao.com.br\nSenha: SenhaInterna321",
+      "idMembers": []
+    },
+    {
+      "id": "c6",
+      "name": "Cartão arquivado antigo",
+      "idList": "l1",
+      "closed": true,
+      "labels": [],
+      "desc": ""
+    }
+  ],
+  "actions": [
+    {
+      "type": "commentCard",
+      "date": "2026-05-10T14:30:00.000Z",
+      "data": { "card": { "id": "c3" }, "text": "Análise solicitada dia 10/05, aguardando retorno do suporte." },
+      "memberCreator": { "fullName": "Tiago" }
+    },
+    {
+      "type": "commentCard",
+      "date": "2026-05-15T09:00:00.000Z",
+      "data": { "card": { "id": "c3" }, "text": "Suporte pediu documento do titular. Cliente avisado." },
+      "memberCreator": { "fullName": "Marina" }
+    }
+  ]
+}

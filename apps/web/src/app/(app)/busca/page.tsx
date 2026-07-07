@@ -1,0 +1,120 @@
+import Link from "next/link";
+import { like, or } from "drizzle-orm";
+import { db } from "@/db";
+import { clients, creativeRequests, documents, tasks } from "@/db/schema";
+import { hasPermission, requireSession } from "@/lib/auth/guard";
+import { CLIENT_STATUS_META, CREATIVE_STATUS_META, TASK_STATUS_META } from "@/lib/labels";
+import { EmptyState, PageHeader, StatusBadge } from "@/components/ui/primitives";
+
+type Search = Record<string, string | string[] | undefined>;
+
+export default async function BuscaPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const session = await requireSession();
+  const sp = await searchParams;
+  const q = typeof sp.q === "string" ? sp.q.trim() : "";
+
+  if (!q) {
+    return (
+      <div>
+        <PageHeader title="Busca" />
+        <EmptyState icon="🔍" title="Digite algo na busca do topo" description="Você pode buscar clientes, tarefas, criativos e documentos." />
+      </div>
+    );
+  }
+
+  const pattern = `%${q}%`;
+  const canClients = hasPermission(session, "clients.view");
+  const canTasks = hasPermission(session, "tasks.view");
+
+  const [foundClients, foundTasks, foundCreatives, foundDocs] = await Promise.all([
+    canClients
+      ? db.query.clients.findMany({
+          where: or(like(clients.name, pattern), like(clients.brandName, pattern), like(clients.niche, pattern)),
+          limit: 10,
+        })
+      : Promise.resolve([]),
+    canTasks
+      ? db.query.tasks.findMany({
+          where: or(like(tasks.title, pattern), like(tasks.description, pattern)),
+          limit: 10,
+        })
+      : Promise.resolve([]),
+    canTasks
+      ? db.query.creativeRequests.findMany({
+          where: or(like(creativeRequests.title, pattern), like(creativeRequests.briefing, pattern)),
+          with: { client: true },
+          limit: 10,
+        })
+      : Promise.resolve([]),
+    db.query.documents.findMany({
+      where: or(like(documents.title, pattern), like(documents.content, pattern)),
+      limit: 10,
+    }),
+  ]);
+
+  const total = foundClients.length + foundTasks.length + foundCreatives.length + foundDocs.length;
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      <PageHeader title={`Busca: "${q}"`} description={`${total} resultado${total === 1 ? "" : "s"}`} />
+
+      {total === 0 ? (
+        <EmptyState icon="🔍" title="Nada encontrado" description="Tente outro termo." />
+      ) : (
+        <div className="space-y-6">
+          {foundClients.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Clientes</h2>
+              <div className="space-y-1">
+                {foundClients.map((c) => (
+                  <Link key={c.id} href={`/clientes/${c.id}`} className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 transition hover:border-zinc-600">
+                    <span className="text-sm text-zinc-100">👥 {c.name}</span>
+                    <StatusBadge value={c.status} meta={CLIENT_STATUS_META} />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+          {foundTasks.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Tarefas</h2>
+              <div className="space-y-1">
+                {foundTasks.map((t) => (
+                  <Link key={t.id} href={`/tarefas/${t.id}`} className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 transition hover:border-zinc-600">
+                    <span className="text-sm text-zinc-100">☑ {t.title}</span>
+                    <StatusBadge value={t.status} meta={TASK_STATUS_META} />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+          {foundCreatives.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Criativos</h2>
+              <div className="space-y-1">
+                {foundCreatives.map((c) => (
+                  <Link key={c.id} href={`/criativos/${c.id}`} className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 transition hover:border-zinc-600">
+                    <span className="text-sm text-zinc-100">🎨 {c.title} <span className="text-xs text-zinc-500">({c.client.name})</span></span>
+                    <StatusBadge value={c.status} meta={CREATIVE_STATUS_META} />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+          {foundDocs.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Documentos</h2>
+              <div className="space-y-1">
+                {foundDocs.map((d) => (
+                  <Link key={d.id} href={`/documentos/${d.id}`} className="block rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-100 transition hover:border-zinc-600">
+                    📄 {d.title}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

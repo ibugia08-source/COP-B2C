@@ -9,12 +9,15 @@ import {
   clientOperationalProfiles,
   clients,
   HEALTH_STATUSES,
+  PIPELINE_STAGES,
   type AdsStatus,
   type HealthStatus,
+  type PipelineStage,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
 import { emitEvent } from "@/lib/automations/engine";
+import { isValidOptionValue } from "@/lib/config-options";
 import { clientFormSchema, operationalProfileSchema } from "@/lib/validations/client";
 
 export type ActionState = { error?: string; success?: string };
@@ -58,10 +61,18 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
     return { error: "Cliente com saúde CRÍTICA exige uma observação explicando o motivo." };
   }
 
+  // etapa inicial do pipeline (vinda do Kanban de Operação); padrão do schema se ausente
+  const stage = String(formData.get("pipelineStage") || "");
+  const stageValid =
+    stage &&
+    ((PIPELINE_STAGES as readonly string[]).includes(stage) ||
+      (await isValidOptionValue("operation", "pipeline", stage)));
+
   const [client] = await db
     .insert(clients)
     .values({
       ...d,
+      ...(stageValid ? { pipelineStage: stage as PipelineStage } : {}),
       startDate: d.startDate ? new Date(d.startDate) : null,
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,

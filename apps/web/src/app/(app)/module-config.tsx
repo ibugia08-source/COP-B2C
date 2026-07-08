@@ -6,7 +6,15 @@ import { ConfigDrawerButton, type DrawerGroup } from "./config-drawer";
  * Botão de engrenagem (admin/owner) que abre o drawer de configuração das
  * taxonomias do módulo. Renderiza nada para usuários comuns.
  */
-export async function ModuleConfig({ moduleKey, moduleLabel }: { moduleKey: ModuleKey; moduleLabel: string }) {
+export async function ModuleConfig({
+  moduleKey,
+  moduleLabel,
+  buttonLabel,
+}: {
+  moduleKey: ModuleKey;
+  moduleLabel: string;
+  buttonLabel?: string;
+}) {
   const session = await getSession();
   if (!session) return null;
   const isAdmin = session.roles.some((r) => r === "OWNER" || r === "ADMIN");
@@ -27,11 +35,12 @@ export async function ModuleConfig({ moduleKey, moduleLabel }: { moduleKey: Modu
           label: o.label,
           color: o.color,
           isActive: o.isActive,
+          isDefault: o.isDefault,
           isSystem: o.isSystem,
         })),
       };
     }),
   );
 
-  return <ConfigDrawerButton moduleLabel={moduleLabel} groups={groups} />;
+  return <ConfigDrawerButton moduleLabel={moduleLabel} buttonLabel={buttonLabel} groups={groups} />;
 }

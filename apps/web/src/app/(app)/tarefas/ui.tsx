@@ -4,27 +4,34 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useActionState } from "react";
-import { TASK_STATUSES, type TaskStatus } from "@/db/schema";
-import { formatDate, PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META } from "@/lib/labels";
+import { formatDate, PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
-import { changeTaskStatus, createTask, type ActionState } from "./actions";
+import { changeTaskStatus, createTask, quickCreateTask, type ActionState } from "./actions";
 
 const selectClass =
   "rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-emerald-600";
 
+export type Option = { value: string; label: string; color: Tone };
+
 // ---------------------------------------------------------------------------
-// Filtros
+// Filtros combinados — todos os selects escrevem na URL e se acumulam
 // ---------------------------------------------------------------------------
+
+export const TASK_FILTER_KEYS = ["cliente", "responsavel", "tipo", "status", "prioridade", "prazo", "tag", "criador"] as const;
 
 export function TaskFilters({
   users,
   clients,
   tags,
+  statusOptions,
+  typeOptions,
 }: {
   users: { id: string; name: string }[];
   clients: { id: string; name: string }[];
   tags: string[];
+  statusOptions: Option[];
+  typeOptions: Option[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,13 +45,15 @@ export function TaskFilters({
     startTransition(() => router.replace(`${pathname}?${next.toString()}`));
   }
   const sel = (key: string) => params.get(key) ?? "";
+  const hasFilters = TASK_FILTER_KEYS.some((k) => params.get(k));
 
   return (
-    <div className={`mb-4 flex flex-wrap gap-2 ${pending ? "opacity-60" : ""}`}>
-      <select className={selectClass} value={sel("cliente")} onChange={(e) => setParam("cliente", e.target.value)}>
-        <option value="">Cliente: todos</option>
-        {clients.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
+    <div className={`mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-2 ${pending ? "opacity-60" : ""}`}>
+      <select className={selectClass} value={sel("status")} onChange={(e) => setParam("status", e.target.value)}>
+        <option value="">Status: todos</option>
+        <option value="__abertas__">Abertas</option>
+        {statusOptions.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
       <select className={selectClass} value={sel("responsavel")} onChange={(e) => setParam("responsavel", e.target.value)}>
@@ -54,17 +63,17 @@ export function TaskFilters({
           <option key={u.id} value={u.id}>{u.name}</option>
         ))}
       </select>
-      <select className={selectClass} value={sel("tipo")} onChange={(e) => setParam("tipo", e.target.value)}>
-        <option value="">Tipo: todos</option>
-        {Object.entries(TASK_TYPE_META).map(([v, m]) => (
-          <option key={v} value={v}>{m.label}</option>
+      <select className={selectClass} value={sel("cliente")} onChange={(e) => setParam("cliente", e.target.value)}>
+        <option value="">Cliente: todos</option>
+        <option value="__none__">Sem cliente</option>
+        {clients.map((c) => (
+          <option key={c.id} value={c.id}>{c.name}</option>
         ))}
       </select>
-      <select className={selectClass} value={sel("status")} onChange={(e) => setParam("status", e.target.value)}>
-        <option value="">Status: todos</option>
-        <option value="__abertas__">Abertas</option>
-        {Object.entries(TASK_STATUS_META).map(([v, m]) => (
-          <option key={v} value={v}>{m.label}</option>
+      <select className={selectClass} value={sel("tipo")} onChange={(e) => setParam("tipo", e.target.value)}>
+        <option value="">Tipo: todos</option>
+        {typeOptions.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
       <select className={selectClass} value={sel("prioridade")} onChange={(e) => setParam("prioridade", e.target.value)}>
@@ -74,11 +83,17 @@ export function TaskFilters({
         ))}
       </select>
       <select className={selectClass} value={sel("prazo")} onChange={(e) => setParam("prazo", e.target.value)}>
-        <option value="">Prazo: todos</option>
+        <option value="">Vencimento: todos</option>
         <option value="hoje">Vence hoje</option>
-        <option value="semana">Vence em 7 dias</option>
+        <option value="semana">Esta semana</option>
         <option value="atrasadas">Atrasadas</option>
         <option value="sem">Sem prazo</option>
+      </select>
+      <select className={selectClass} value={sel("criador")} onChange={(e) => setParam("criador", e.target.value)}>
+        <option value="">Criado por: todos</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>{u.name}</option>
+        ))}
       </select>
       {tags.length > 0 && (
         <select className={selectClass} value={sel("tag")} onChange={(e) => setParam("tag", e.target.value)}>
@@ -88,13 +103,30 @@ export function TaskFilters({
           ))}
         </select>
       )}
+      {hasFilters && (
+        <button
+          type="button"
+          onClick={() => {
+            const next = new URLSearchParams(params.toString());
+            for (const k of TASK_FILTER_KEYS) next.delete(k);
+            startTransition(() => router.replace(`${pathname}?${next.toString()}`));
+          }}
+          className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 hover:text-white"
+        >
+          Limpar filtros
+        </button>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Modal de criação
+// Modal de criação (com briefing quando o tipo é CRIATIVO)
 // ---------------------------------------------------------------------------
+
+const CREATIVE_OBJECTIVES_OPTS = ["Mensagens", "Engajamento", "Reconhecimento", "Vendas", "Leads", "Social Media"];
+const CREATIVE_PLATFORM_OPTS = ["Meta Ads", "Google Ads", "Instagram", "TikTok", "Outro"];
+const CREATIVE_FORMAT_OPTS = ["Vídeo", "Imagem", "Carrossel", "Stories", "Reels", "Outro"];
 
 export function TaskCreateButton({
   users,
@@ -116,6 +148,7 @@ export function TaskCreateButton({
   label?: string;
 }) {
   const [open, setOpen] = useState(autoOpen ?? false);
+  const [type, setType] = useState(defaultType ?? "OPERACIONAL");
   const router = useRouter();
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
@@ -145,7 +178,7 @@ export function TaskCreateButton({
             <Textarea name="description" placeholder="Detalhes, contexto, links..." />
           </Field>
           <Field label="Tipo">
-            <Select name="type" defaultValue={defaultType ?? "OPERACIONAL"}>
+            <Select name="type" value={type} onChange={(e) => setType(e.target.value)}>
               {Object.entries(TASK_TYPE_META).map(([v, m]) => (
                 <option key={v} value={v}>{m.label}</option>
               ))}
@@ -200,6 +233,48 @@ export function TaskCreateButton({
             </Field>
           </div>
 
+          {type === "CRIATIVO" && (
+            <fieldset className="rounded-xl border border-purple-900/60 bg-purple-950/10 p-3 sm:col-span-2">
+              <legend className="px-1 text-xs font-semibold uppercase text-purple-300">Briefing do criativo</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field label="Objetivo">
+                  <Select name="creativeObjective" defaultValue="">
+                    <option value="">—</option>
+                    {CREATIVE_OBJECTIVES_OPTS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Plataforma">
+                  <Select name="creativePlatform" defaultValue="">
+                    <option value="">—</option>
+                    {CREATIVE_PLATFORM_OPTS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Formato">
+                  <Select name="creativeFormat" defaultValue="">
+                    <option value="">—</option>
+                    {CREATIVE_FORMAT_OPTS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Oferta">
+                  <Input name="creativeOffer" placeholder="Ex.: 20% off na primeira compra" />
+                </Field>
+                <Field label="CTA">
+                  <Input name="creativeCta" placeholder="Ex.: Fale conosco no WhatsApp" />
+                </Field>
+                <Field label="Link de referência">
+                  <Input name="creativeReference" placeholder="https://..." />
+                </Field>
+              </div>
+              <p className="mt-2 text-[11px] text-zinc-500">Anexos podem ser adicionados depois, dentro da tarefa.</p>
+            </fieldset>
+          )}
+
           {state.error && <div className="sm:col-span-2"><Alert>{state.error}</Alert></div>}
 
           <div className="flex justify-end gap-2 sm:col-span-2">
@@ -213,13 +288,13 @@ export function TaskCreateButton({
 }
 
 // ---------------------------------------------------------------------------
-// Kanban de tarefas
+// Kanban de tarefas — colunas dinâmicas (config do admin) + adicionar na coluna
 // ---------------------------------------------------------------------------
 
 export type KanbanTask = {
   id: string;
   title: string;
-  status: TaskStatus;
+  status: string;
   priority: string;
   type: string;
   clientName: string | null;
@@ -228,18 +303,89 @@ export type KanbanTask = {
   overdue: boolean;
 };
 
-const KANBAN_COLUMNS: TaskStatus[] = TASK_STATUSES.filter((s) => s !== "CANCELADA");
+function KanbanQuickAdd({ status, clientId }: { status: string; clientId?: string }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-export function TasksKanban({ items, canUpdate }: { items: KanbanTask[]; canUpdate: boolean }) {
+  function submit() {
+    if (!title.trim()) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await quickCreateTask(title, status, clientId ?? null);
+      if (result.error) setError(result.error);
+      else {
+        setTitle("");
+        setEditing(false);
+        router.refresh();
+      }
+    });
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="mt-1 rounded-lg border border-dashed border-zinc-800 px-2 py-1.5 text-left text-[11px] text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300"
+      >
+        + Adicionar tarefa
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1 space-y-1">
+      <Input
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); submit(); }
+          if (e.key === "Escape") setEditing(false);
+        }}
+        placeholder="Título da tarefa..."
+        className="text-xs"
+      />
+      {error && <p className="text-[11px] text-red-400">{error}</p>}
+      <div className="flex gap-1">
+        <Button size="sm" disabled={pending || !title.trim()} onClick={submit}>{pending ? "..." : "Criar"}</Button>
+        <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancelar</Button>
+      </div>
+    </div>
+  );
+}
+
+export function TasksKanban({
+  items,
+  columns,
+  canUpdate,
+  canCreate,
+  quickAddClientId,
+}: {
+  items: KanbanTask[];
+  columns: Option[];
+  canUpdate: boolean;
+  canCreate: boolean;
+  quickAddClientId?: string;
+}) {
   const router = useRouter();
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overCol, setOverCol] = useState<TaskStatus | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function onDrop(status: TaskStatus) {
+  // tarefas cujo status não corresponde a nenhuma coluna ativa (ex.: coluna desativada)
+  const known = new Set(columns.map((c) => c.value));
+  const orphans = items.filter((t) => !known.has(t.status));
+  const allColumns: Option[] = orphans.length
+    ? [...columns, { value: "__outros__", label: "Sem coluna", color: "zinc" }]
+    : columns;
+
+  function onDrop(status: string) {
     setOverCol(null);
-    if (!dragId || !canUpdate) return;
+    if (!dragId || !canUpdate || status === "__outros__") return;
     const task = items.find((t) => t.id === dragId);
     setDragId(null);
     if (!task || task.status === status) return;
@@ -255,26 +401,28 @@ export function TasksKanban({ items, canUpdate }: { items: KanbanTask[]; canUpda
     <div>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
       <div className={`flex gap-3 overflow-x-auto pb-4 ${isPending ? "opacity-70" : ""}`}>
-        {KANBAN_COLUMNS.map((status) => {
-          const columnTasks = items.filter((t) => t.status === status);
+        {allColumns.map((col) => {
+          const columnTasks =
+            col.value === "__outros__" ? orphans : items.filter((t) => t.status === col.value);
           return (
             <div
-              key={status}
+              key={col.value}
               onDragOver={(e) => {
-                if (canUpdate) {
+                if (canUpdate && col.value !== "__outros__") {
                   e.preventDefault();
-                  setOverCol(status);
+                  setOverCol(col.value);
                 }
               }}
-              onDragLeave={() => setOverCol((c) => (c === status ? null : c))}
-              onDrop={() => onDrop(status)}
+              onDragLeave={() => setOverCol((c) => (c === col.value ? null : c))}
+              onDrop={() => onDrop(col.value)}
               className={`flex w-60 shrink-0 flex-col rounded-xl border bg-zinc-900/50 ${
-                overCol === status ? "border-emerald-500" : "border-zinc-800"
+                overCol === col.value ? "border-emerald-500" : "border-zinc-800"
               }`}
             >
               <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
-                <span className="text-xs font-semibold text-zinc-300">
-                  {TASK_STATUS_META[status]?.label}
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+                  <span className={`inline-block h-2 w-2 rounded-full border ${TONE_CLASSES[col.color]}`} />
+                  {col.label}
                 </span>
                 <span className="rounded-full bg-zinc-800 px-1.5 text-[10px] text-zinc-400">
                   {columnTasks.length}
@@ -313,11 +461,129 @@ export function TasksKanban({ items, canUpdate }: { items: KanbanTask[]; canUpda
                     </div>
                   </div>
                 ))}
+                {canCreate && col.value !== "__outros__" && col.value !== "CANCELADA" && (
+                  <KanbanQuickAdd status={col.value} clientId={quickAddClientId} />
+                )}
               </div>
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lista — ação rápida de status por linha, colunas configuráveis e quick-add
+// ---------------------------------------------------------------------------
+
+export function RowStatusSelect({
+  taskId,
+  status,
+  options,
+}: {
+  taskId: string;
+  status: string;
+  options: Option[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <select
+      className={`${selectClass} ${pending ? "opacity-50" : ""}`}
+      value={status}
+      disabled={pending}
+      onChange={(e) =>
+        startTransition(async () => {
+          const result = await changeTaskStatus(taskId, e.target.value);
+          if (!result.error) router.refresh();
+        })
+      }
+    >
+      {!options.some((o) => o.value === status) && <option value={status}>{status}</option>}
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  );
+}
+
+export function ListColumnsPicker({
+  allColumns,
+  visible,
+}: {
+  allColumns: { key: string; label: string }[];
+  visible: string[];
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [open, setOpen] = useState(false);
+
+  function toggle(key: string) {
+    const next = new URLSearchParams(params.toString());
+    const set = new Set(visible);
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
+    next.set("cols", allColumns.map((c) => c.key).filter((k) => set.has(k)).join(","));
+    router.replace(`${pathname}?${next.toString()}`);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 hover:border-zinc-600"
+      >
+        Colunas ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-xl">
+          {allColumns.map((c) => (
+            <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800">
+              <input type="checkbox" checked={visible.includes(c.key)} onChange={() => toggle(c.key)} />
+              {c.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ListQuickAdd({ defaultStatus, clientId }: { defaultStatus: string; clientId?: string }) {
+  const router = useRouter();
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    if (!title.trim()) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await quickCreateTask(title, defaultStatus, clientId ?? null);
+      if (result.error) setError(result.error);
+      else {
+        setTitle("");
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-zinc-800 px-3 py-2">
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+        placeholder="+ Adicionar tarefa rápida..."
+        className="max-w-sm text-sm"
+      />
+      <Button size="sm" variant="secondary" disabled={pending || !title.trim()} onClick={submit}>
+        {pending ? "Criando..." : "Adicionar"}
+      </Button>
+      {error && <span className="text-xs text-red-400">{error}</span>}
     </div>
   );
 }

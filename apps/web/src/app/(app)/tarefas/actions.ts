@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
 import {
+  CREATIVE_APPROVALS,
   TASK_PRIORITIES,
   TASK_STATUSES,
   TASK_TYPES,
@@ -13,13 +14,21 @@ import {
   taskChecklists,
   taskComments,
   tasks,
+  type CreativeBrief,
   type TaskStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
 import { emitEvent } from "@/lib/automations/engine";
+import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
 import { notifyUser } from "@/lib/notify";
 import { applyTemplateToTask } from "@/lib/templates";
+
+/** Status válido = enum do sistema OU coluna criada pelo admin no Kanban. */
+async function isValidTaskStatus(status: string): Promise<boolean> {
+  if ((TASK_STATUSES as readonly string[]).includes(status)) return true;
+  return isValidOptionValue("tasks", "status", status);
+}
 
 export type ActionState = { error?: string; success?: string; taskId?: string };
 
@@ -28,7 +37,7 @@ const taskSchema = z.object({
   description: z.string().trim().optional(),
   type: z.enum(TASK_TYPES),
   priority: z.enum(TASK_PRIORITIES),
-  status: z.enum(TASK_STATUSES).default("A_FAZER"),
+  status: z.string().optional(), // enum do sistema ou coluna custom — validado à parte
   clientId: z.string().optional(),
   assignedToId: z.string().optional(),
   extraAssigneeIds: z.array(z.string()).default([]),
@@ -38,7 +47,27 @@ const taskSchema = z.object({
   dueDate: z.string().optional(),
   estimatedMinutes: z.coerce.number().int().positive().optional(),
   tags: z.string().optional(), // separadas por vírgula
+  // briefing de criativo (apenas quando type = CRIATIVO)
+  creativeObjective: z.string().trim().optional(),
+  creativePlatform: z.string().trim().optional(),
+  creativeFormat: z.string().trim().optional(),
+  creativeOffer: z.string().trim().optional(),
+  creativeCta: z.string().trim().optional(),
+  creativeReference: z.string().trim().optional(),
 });
+
+function buildCreativeBrief(d: z.infer<typeof taskSchema>, base?: CreativeBrief | null): CreativeBrief | null {
+  if (d.type !== "CRIATIVO") return null;
+  return {
+    approvalStatus: base?.approvalStatus ?? "PENDENTE",
+    objective: d.creativeObjective || undefined,
+    platform: d.creativePlatform || undefined,
+    format: d.creativeFormat || undefined,
+    offer: d.creativeOffer || undefined,
+    cta: d.creativeCta || undefined,
+    referenceLink: d.creativeReference || undefined,
+  };
+}
 
 function parseTaskForm(formData: FormData) {
   return taskSchema.safeParse({
@@ -46,7 +75,7 @@ function parseTaskForm(formData: FormData) {
     description: formData.get("description") || undefined,
     type: formData.get("type"),
     priority: formData.get("priority"),
-    status: formData.get("status") || "A_FAZER",
+    status: formData.get("status") || undefined,
     clientId: formData.get("clientId") || undefined,
     assignedToId: formData.get("assignedToId") || undefined,
     extraAssigneeIds: formData.getAll("extraAssigneeIds").map(String).filter(Boolean),
@@ -56,6 +85,12 @@ function parseTaskForm(formData: FormData) {
     dueDate: formData.get("dueDate") || undefined,
     estimatedMinutes: formData.get("estimatedMinutes") || undefined,
     tags: formData.get("tags") || undefined,
+    creativeObjective: formData.get("creativeObjective") || undefined,
+    creativePlatform: formData.get("creativePlatform") || undefined,
+    creativeFormat: formData.get("creativeFormat") || undefined,
+    creativeOffer: formData.get("creativeOffer") || undefined,
+    creativeCta: formData.get("creativeCta") || undefined,
+    creativeReference: formData.get("creativeReference") || undefined,
   });
 }
 
@@ -73,6 +108,9 @@ export async function createTask(_prev: ActionState, formData: FormData): Promis
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   const d = parsed.data;
 
+  const status = d.status || (await resolveDefaultValue("tasks", "status", "A_FAZER"));
+  if (!(await isValidTaskStatus(status))) return { error: "Status inválido." };
+
   const [task] = await db
     .insert(tasks)
     .values({
@@ -80,7 +118,8 @@ export async function createTask(_prev: ActionState, formData: FormData): Promis
       description: d.description ?? null,
       type: d.type,
       priority: d.priority,
-      status: d.status,
+      status: status as TaskStatus,
+      creative: buildCreativeBrief(d),
       clientId: d.clientId || null,
       parentTaskId: d.parentTaskId || null,
       digitalAssetId: d.digitalAssetId || null,
@@ -150,6 +189,7 @@ export async function updateTask(
       description: d.description ?? null,
       type: d.type,
       priority: d.priority,
+      creative: buildCreativeBrief(d, existing.creative),
       clientId: d.clientId || null,
       assignedToId: d.assignedToId || null,
       startDate: d.startDate ? new Date(d.startDate) : null,
@@ -177,10 +217,10 @@ export async function updateTask(
   return { success: "Tarefa atualizada." };
 }
 
-export async function changeTaskStatus(taskId: string, status: TaskStatus): Promise<ActionState> {
+export async function changeTaskStatus(taskId: string, status: string): Promise<ActionState> {
   const auth = await checkPermission("tasks.update");
   if (!auth.ok) return { error: auth.error };
-  if (!TASK_STATUSES.includes(status)) return { error: "Status inválido." };
+  if (!(await isValidTaskStatus(status))) return { error: "Status inválido." };
   if (status === "CANCELADA") return { error: "Para cancelar, use a ação Cancelar (exige motivo)." };
 
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
@@ -193,7 +233,7 @@ export async function changeTaskStatus(taskId: string, status: TaskStatus): Prom
 
   await db
     .update(tasks)
-    .set({ status, completedAt: status === "CONCLUIDA" ? new Date() : null })
+    .set({ status: status as TaskStatus, completedAt: status === "CONCLUIDA" ? new Date() : null })
     .where(eq(tasks.id, taskId));
 
   await logActivity({
@@ -366,6 +406,85 @@ export async function addTimeEntry(taskId: string, minutes: number, description:
     .where(eq(tasks.id, taskId));
   revalidatePath(`/tarefas/${taskId}`);
   return { success: "Tempo registrado." };
+}
+
+/** Criação rápida direto de uma coluna do Kanban ou do fim da Lista. */
+export async function quickCreateTask(
+  title: string,
+  status: string,
+  clientId?: string | null,
+): Promise<ActionState> {
+  const auth = await checkPermission("tasks.create");
+  if (!auth.ok) return { error: auth.error };
+  const clean = title.trim();
+  if (clean.length < 3) return { error: "Título muito curto." };
+  if (!(await isValidTaskStatus(status)) || status === "CANCELADA") return { error: "Coluna inválida." };
+
+  const [task] = await db
+    .insert(tasks)
+    .values({
+      title: clean,
+      type: "OPERACIONAL",
+      priority: "MEDIA",
+      status: status as TaskStatus,
+      clientId: clientId || null,
+      createdById: auth.session.userId,
+      completedAt: status === "CONCLUIDA" ? new Date() : null,
+    })
+    .returning();
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "task.created",
+    entityType: "task",
+    entityId: task.id,
+    metadata: { title: task.title, clientId: task.clientId, quick: true },
+  });
+  await emitEvent("TASK_CREATED", {
+    taskId: task.id,
+    clientId: task.clientId ?? undefined,
+    assigneeId: null,
+    withoutAssignee: true,
+    actorId: auth.session.userId,
+  });
+
+  revalidateTaskPaths(task.id, task.clientId);
+  return { success: "Tarefa criada.", taskId: task.id };
+}
+
+/** Atualiza o briefing/aprovação de uma tarefa do tipo CRIATIVO. */
+export async function updateCreativeBrief(taskId: string, brief: CreativeBrief): Promise<ActionState> {
+  const auth = await checkPermission("tasks.update");
+  if (!auth.ok) return { error: auth.error };
+  const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
+  if (!existing) return { error: "Tarefa não encontrada." };
+  if (existing.type !== "CRIATIVO") return { error: "Briefing só existe em tarefas do tipo Criativo." };
+  if (brief.approvalStatus && !CREATIVE_APPROVALS.includes(brief.approvalStatus)) {
+    return { error: "Status de aprovação inválido." };
+  }
+  if (brief.referenceLink && !/^https?:\/\//.test(brief.referenceLink)) {
+    return { error: "Link de referência deve começar com http(s)://" };
+  }
+
+  const clean: CreativeBrief = {
+    approvalStatus: brief.approvalStatus ?? existing.creative?.approvalStatus ?? "PENDENTE",
+    objective: brief.objective?.trim() || undefined,
+    platform: brief.platform?.trim() || undefined,
+    format: brief.format?.trim() || undefined,
+    offer: brief.offer?.trim() || undefined,
+    cta: brief.cta?.trim() || undefined,
+    referenceLink: brief.referenceLink?.trim() || undefined,
+  };
+  await db.update(tasks).set({ creative: clean }).where(eq(tasks.id, taskId));
+  await logActivity({
+    userId: auth.session.userId,
+    action: "task.creativeUpdated",
+    entityType: "task",
+    entityId: taskId,
+    metadata: { approvalStatus: clean.approvalStatus },
+  });
+  revalidateTaskPaths(taskId, existing.clientId);
+  return { success: "Briefing atualizado." };
 }
 
 export async function assignTask(taskId: string, userId: string | null): Promise<ActionState> {

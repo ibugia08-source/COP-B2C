@@ -4,7 +4,16 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { taskTemplates, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
-import { formatDate, PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META } from "@/lib/labels";
+import { resolveOptions } from "@/lib/config-options";
+import {
+  CLIENT_STATUS_META,
+  formatDate,
+  HEALTH_META,
+  PRIORITY_META,
+  TASK_STATUS_META,
+  TASK_TYPE_META,
+  type Tone,
+} from "@/lib/labels";
 import {
   Badge,
   EmptyState,
@@ -17,6 +26,7 @@ import {
   AttachmentForm,
   ChecklistSection,
   CommentForm,
+  CreativeBriefSection,
   TaskStatusControls,
   TimeEntryForm,
 } from "./ui";
@@ -48,7 +58,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
   const canAssign = hasPermission(session, "tasks.assign");
   const canCreate = hasPermission(session, "tasks.create");
 
-  const [allUsers, allClients, templates] = await Promise.all([
+  const [allUsers, allClients, templates, statusOptionsAll] = await Promise.all([
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
     db.query.clients.findMany({ columns: { id: true, name: true } }),
     db
@@ -56,7 +66,14 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
       .from(taskTemplates)
       .where(eq(taskTemplates.isActive, true))
       .orderBy(asc(taskTemplates.name)),
+    resolveOptions("tasks", "status"),
   ]);
+
+  const statusMeta: Record<string, { label: string; tone: Tone }> = { ...TASK_STATUS_META };
+  for (const o of statusOptionsAll) statusMeta[o.value] = { label: o.label, tone: o.color };
+  const statusOptions = statusOptionsAll
+    .filter((o) => o.isActive)
+    .map((o) => ({ value: o.value, label: o.label }));
 
   const overdue =
     !!task.dueDate && !task.completedAt && task.dueDate < new Date() &&
@@ -76,7 +93,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
           )}
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold">{task.title}</h1>
-            <StatusBadge value={task.status} meta={TASK_STATUS_META} />
+            <StatusBadge value={task.status} meta={statusMeta} />
             <StatusBadge value={task.priority} meta={PRIORITY_META} />
             <StatusBadge value={task.type} meta={TASK_TYPE_META} />
             {overdue && <Badge tone="red">vencida</Badge>}
@@ -91,7 +108,11 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
         </div>
 
         {canUpdate && (
-          <TaskStatusControls taskId={task.id} status={task.status} canComplete={canComplete} />
+          <TaskStatusControls taskId={task.id} status={task.status} statusOptions={statusOptions} canComplete={canComplete} />
+        )}
+
+        {task.type === "CRIATIVO" && (
+          <CreativeBriefSection taskId={task.id} brief={task.creative ?? null} canUpdate={canUpdate} />
         )}
 
         {task.description && (
@@ -148,7 +169,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
                     {s.title}
                   </Link>
                   <span className="flex items-center gap-2 text-xs text-zinc-500">
-                    <StatusBadge value={s.status} meta={TASK_STATUS_META} />
+                    <StatusBadge value={s.status} meta={statusMeta} />
                     {s.assignedTo && <UserAvatar name={s.assignedTo.name} size="sm" />}
                     {s.dueDate && formatDate(s.dueDate)}
                   </span>
@@ -182,6 +203,20 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
       </div>
 
       <aside className="space-y-4">
+        {task.client && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Cliente vinculado</h3>
+            <Link href={`/clientes/${task.client.id}`} className="text-sm font-semibold text-zinc-100 hover:text-emerald-300">
+              {task.client.name} →
+            </Link>
+            {task.client.niche && <p className="text-xs text-zinc-500">{task.client.niche}</p>}
+            <div className="mt-2 flex flex-wrap gap-1">
+              <StatusBadge value={task.client.status} meta={CLIENT_STATUS_META} />
+              <StatusBadge value={task.client.healthStatus} meta={HEALTH_META} />
+            </div>
+          </div>
+        )}
+
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase text-zinc-500">Detalhes</h3>
           <dl className="space-y-2 text-sm">
@@ -192,7 +227,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
                   <Link href={`/clientes/${task.client.id}`} className="text-emerald-400 hover:underline">
                     {task.client.name}
                   </Link>
-                ) : "—"}
+                ) : <span className="text-zinc-500">sem cliente</span>}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-2">

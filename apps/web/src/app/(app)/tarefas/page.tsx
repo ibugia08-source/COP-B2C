@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { and, asc, eq, isNull, like, lt, not, inArray, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, like, lt, not, inArray, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, tasks, users } from "@/db/schema";
+import { clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
-import { formatDate, PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META } from "@/lib/labels";
+import { resolveOptions } from "@/lib/config-options";
+import { formatDate, PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META, type Tone } from "@/lib/labels";
 import {
   Badge,
-
   EmptyState,
   PageHeader,
   StatCard,
@@ -16,13 +16,35 @@ import {
   Th,
   UserAvatar,
 } from "@/components/ui/primitives";
-import { TaskCreateButton, TaskFilters, TasksKanban, type KanbanTask } from "./ui";
+import {
+  ListColumnsPicker,
+  ListQuickAdd,
+  RowStatusSelect,
+  TaskCreateButton,
+  TaskFilters,
+  TasksKanban,
+  type KanbanTask,
+  type Option,
+} from "./ui";
 import { ModuleConfig } from "../module-config";
+import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
 
 const DAY = 24 * 60 * 60 * 1000;
+const FILTER_KEYS = ["cliente", "responsavel", "tipo", "status", "prioridade", "prazo", "tag", "criador"] as const;
+const LIST_COLUMNS = [
+  { key: "tipo", label: "Tipo" },
+  { key: "status", label: "Status" },
+  { key: "prioridade", label: "Prioridade" },
+  { key: "cliente", label: "Cliente" },
+  { key: "responsavel", label: "Responsável" },
+  { key: "vencimento", label: "Vencimento" },
+  { key: "tags", label: "Tags" },
+  { key: "criador", label: "Criada por" },
+] as const;
+const DEFAULT_COLS = "tipo,status,prioridade,cliente,responsavel,vencimento";
 
 export default async function TarefasPage({ searchParams }: { searchParams: Promise<Search> }) {
   const session = await requirePermission("tasks.view");
@@ -30,8 +52,11 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   const canUpdate = hasPermission(session, "tasks.update");
   const canCreate = hasPermission(session, "tasks.create");
 
+  // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [isNull(tasks.parentTaskId)];
-  if (str(sp.cliente)) filters.push(eq(tasks.clientId, str(sp.cliente)!));
+  const cliente = str(sp.cliente);
+  if (cliente === "__none__") filters.push(isNull(tasks.clientId));
+  else if (cliente) filters.push(eq(tasks.clientId, cliente));
   const resp = str(sp.responsavel);
   if (resp === "__none__") filters.push(isNull(tasks.assignedToId));
   else if (resp) filters.push(eq(tasks.assignedToId, resp));
@@ -41,6 +66,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   else if (status) filters.push(eq(tasks.status, status as never));
   if (str(sp.prioridade)) filters.push(eq(tasks.priority, str(sp.prioridade) as never));
   if (str(sp.tag)) filters.push(like(tasks.tags, `%"${str(sp.tag)}"%`));
+  if (str(sp.criador)) filters.push(eq(tasks.createdById, str(sp.criador)!));
 
   const now = new Date();
   const prazo = str(sp.prazo);
@@ -59,28 +85,58 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     filters.push(isNull(tasks.dueDate));
   }
 
-  // Visões rápidas
-  const visao = str(sp.visao) ?? "lista";
-  if (visao === "minhas") filters.push(eq(tasks.assignedToId, session.userId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])));
-  if (visao === "atrasadas") filters.push(lt(tasks.dueDate, now), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])));
-  if (visao === "sem-responsavel") filters.push(isNull(tasks.assignedToId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])));
+  const visao = str(sp.visao) ?? "kanban";
 
-  const [rows, allUsers, allClients, counts] = await Promise.all([
+  // mês do calendário (?mes=YYYY-MM)
+  const mesParam = str(sp.mes);
+  const [calYear, calMonth] = /^\d{4}-\d{2}$/.test(mesParam ?? "")
+    ? [Number(mesParam!.slice(0, 4)), Number(mesParam!.slice(5, 7)) - 1]
+    : [now.getFullYear(), now.getMonth()];
+  const monthStart = new Date(calYear, calMonth, 1);
+  const monthEnd = new Date(calYear, calMonth + 1, 1);
+
+  const [rows, allUsers, allClients, statusOptionsAll, typeOptionsAll, counts, meetings] = await Promise.all([
     db.query.tasks.findMany({
       where: and(...filters),
       orderBy: [asc(tasks.dueDate)],
-      with: { client: true, assignedTo: true, subtasks: true },
+      with: { client: true, assignedTo: true, createdBy: true, subtasks: true },
       limit: 300,
     }),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
     db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
+    resolveOptions("tasks", "status"),
+    resolveOptions("tasks", "type", { activeOnly: true }),
     Promise.all([
       db.$count(tasks, and(eq(tasks.assignedToId, session.userId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])))),
       db.$count(tasks, and(lt(tasks.dueDate, now), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])))),
       db.$count(tasks, and(isNull(tasks.assignedToId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])), isNull(tasks.parentTaskId))),
     ]),
+    visao === "calendario"
+      ? db.query.clientMeetings.findMany({
+          where: and(
+            gte(clientMeetings.meetingDate, monthStart),
+            lt(clientMeetings.meetingDate, monthEnd),
+            ...(cliente && cliente !== "__none__" ? [eq(clientMeetings.clientId, cliente)] : []),
+            ...(resp && resp !== "__none__" ? [eq(clientMeetings.responsibleId, resp)] : []),
+          ),
+          with: { client: true },
+        })
+      : Promise.resolve([]),
   ]);
   const [minhas, atrasadas, semResponsavel] = counts;
+
+  // meta de status (built-in + colunas custom do admin) para badges e selects
+  const statusMeta: Record<string, { label: string; tone: Tone }> = { ...TASK_STATUS_META };
+  for (const o of statusOptionsAll) statusMeta[o.value] = { label: o.label, tone: o.color };
+  const statusActive = statusOptionsAll.filter((o) => o.isActive);
+  const kanbanColumns: Option[] = statusActive
+    .filter((o) => o.value !== "CANCELADA")
+    .map((o) => ({ value: o.value, label: o.label, color: o.color }));
+  const defaultStatus =
+    kanbanColumns.find((c) => statusActive.find((o) => o.value === c.value)?.isDefault)?.value ??
+    kanbanColumns[0]?.value ?? "A_FAZER";
+  const statusFilterOptions: Option[] = statusActive.map((o) => ({ value: o.value, label: o.label, color: o.color }));
+  const typeOptions: Option[] = typeOptionsAll.map((o) => ({ value: o.value, label: o.label, color: o.color }));
 
   const tags = Array.from(new Set(rows.flatMap((t) => t.tags))).sort();
   const kanbanItems: KanbanTask[] = rows.map((t) => ({
@@ -95,16 +151,48 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     overdue: !!t.dueDate && !t.completedAt && t.dueDate < now && t.status !== "CONCLUIDA" && t.status !== "CANCELADA",
   }));
 
-  const viewTab = (key: string, label: string, badge?: number) => (
+  // --- helpers de URL (preservam filtros ao trocar visão/ordem) ------------
+  const buildHref = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) if (typeof v === "string" && v) next.set(k, v);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) next.delete(k);
+      else next.set(k, v);
+    }
+    const s = next.toString();
+    return s ? `/tarefas?${s}` : "/tarefas";
+  };
+  const activeFilterCount = FILTER_KEYS.filter((k) => str(sp[k])).length;
+  const showFilters = str(sp.filtros) === "1" || activeFilterCount > 0;
+
+  // --- ordenação e colunas da lista ----------------------------------------
+  const ordem = str(sp.ordem) ?? "vencimento";
+  const sorted = [...rows];
+  const prioRank: Record<string, number> = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 };
+  const statusRank = new Map(statusOptionsAll.map((o, i) => [o.value, i]));
+  if (ordem === "prioridade") sorted.sort((a, b) => (prioRank[a.priority] ?? 9) - (prioRank[b.priority] ?? 9));
+  else if (ordem === "titulo") sorted.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+  else if (ordem === "status") sorted.sort((a, b) => (statusRank.get(a.status) ?? 99) - (statusRank.get(b.status) ?? 99));
+  else if (ordem === "criacao") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  else sorted.sort((a, b) => (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity));
+
+  const visibleCols = (str(sp.cols) ?? DEFAULT_COLS).split(",").filter(Boolean);
+  const col = (key: string) => visibleCols.includes(key);
+  const sortTh = (key: string, label: string) => (
+    <Link href={buildHref({ ordem: key })} className={ordem === key ? "text-emerald-300" : "hover:text-zinc-200"}>
+      {label}{ordem === key ? " ↓" : ""}
+    </Link>
+  );
+
+  const viewBtn = (key: string, label: string) => (
     <Link
       key={key}
-      href={key === "lista" ? "/tarefas" : `/tarefas?visao=${key}`}
-      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+      href={buildHref({ visao: key === "kanban" ? null : key })}
+      className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
         visao === key ? "bg-emerald-950/70 text-emerald-300" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
       }`}
     >
       {label}
-      {badge != null && badge > 0 && <span className="ml-1 text-[10px] text-zinc-500">({badge})</span>}
     </Link>
   );
 
@@ -112,21 +200,37 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     <div>
       <PageHeader
         title="Tarefas"
-        description="Central de tarefas da operação — diárias, semanais, projetos e rotinas."
+        description="CRM interno de demandas — vinculadas ou não a clientes. Solicitações de criativo são tarefas do tipo Criativo."
         actions={
-          <div className="flex items-center gap-2">
-            <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" />
+          <div className="flex flex-wrap items-center gap-2">
+            <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" buttonLabel="Colunas" />
+            <Link
+              href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
+              className={`rounded-lg border px-3 py-2 text-sm transition ${
+                activeFilterCount > 0
+                  ? "border-emerald-700 text-emerald-300"
+                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+              }`}
+            >
+              Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </Link>
+            <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
+              {viewBtn("kanban", "Kanban")}
+              {viewBtn("lista", "Lista")}
+              {viewBtn("calendario", "Calendário")}
+            </span>
             <Link
               href="/tarefas/templates"
               className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+              title="Templates de checklist"
             >
-              📋 Templates
+              📋
             </Link>
             {canCreate && (
               <TaskCreateButton
                 users={allUsers}
                 clients={allClients}
-                defaultClientId={str(sp.cliente)}
+                defaultClientId={cliente !== "__none__" ? cliente : undefined}
                 defaultType={str(sp.tipo)}
                 digitalAssetId={str(sp.ativo)}
                 autoOpen={str(sp.nova) === "1"}
@@ -137,156 +241,140 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
       />
 
       <div className="mb-4 grid grid-cols-3 gap-3 sm:max-w-md">
-        <StatCard label="Minhas abertas" value={minhas} tone="text-sky-400" href="/tarefas?visao=minhas" />
-        <StatCard label="Atrasadas" value={atrasadas} tone="text-red-400" href="/tarefas?visao=atrasadas" />
-        <StatCard label="Sem responsável" value={semResponsavel} tone="text-amber-400" href="/tarefas?visao=sem-responsavel" />
+        <StatCard label="Minhas abertas" value={minhas} tone="text-sky-400" href={`/tarefas?responsavel=${session.userId}&status=__abertas__`} />
+        <StatCard label="Atrasadas" value={atrasadas} tone="text-red-400" href="/tarefas?prazo=atrasadas" />
+        <StatCard label="Sem responsável" value={semResponsavel} tone="text-amber-400" href="/tarefas?responsavel=__none__&status=__abertas__" />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-1 rounded-lg border border-zinc-800 bg-zinc-900/50 p-1">
-        {viewTab("lista", "Lista")}
-        {viewTab("kanban", "Kanban")}
-        {viewTab("calendario", "Calendário")}
-        {viewTab("minhas", "Minhas tarefas", minhas)}
-        {viewTab("atrasadas", "Atrasadas", atrasadas)}
-        {viewTab("sem-responsavel", "Sem responsável", semResponsavel)}
-      </div>
-
-      <TaskFilters users={allUsers} clients={allClients} tags={tags} />
-
-      {rows.length === 0 ? (
-        <EmptyState
-          icon="☑"
-          title="Nenhuma tarefa encontrada"
-          description="Crie uma tarefa ou ajuste os filtros."
+      {showFilters && (
+        <TaskFilters
+          users={allUsers}
+          clients={allClients}
+          tags={tags}
+          statusOptions={statusFilterOptions}
+          typeOptions={typeOptions}
         />
-      ) : visao === "kanban" ? (
-        <TasksKanban items={kanbanItems} canUpdate={canUpdate} />
-      ) : visao === "calendario" ? (
-        <CalendarView tasks={rows.filter((t) => t.dueDate)} />
-      ) : (
-        <Table
-          minWidth="860px"
-          head={
-            <>
-              <Th>Tarefa</Th>
-              <Th>Tipo</Th>
-              <Th>Status</Th>
-              <Th>Prioridade</Th>
-              <Th>Cliente</Th>
-              <Th>Responsável</Th>
-              <Th>Vencimento</Th>
-            </>
-          }
-        >
-          {rows.map((t) => {
-            const overdue = !!t.dueDate && !t.completedAt && t.dueDate < now && !["CONCLUIDA", "CANCELADA"].includes(t.status);
-            return (
-              <tr key={t.id} className="hover:bg-zinc-900/60">
-                <Td>
-                  <Link href={`/tarefas/${t.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
-                    {t.title}
-                  </Link>
-                  <span className="ml-2 space-x-1">
-                    {t.subtasks.length > 0 && <Badge tone="zinc">{t.subtasks.filter((s) => s.status === "CONCLUIDA").length}/{t.subtasks.length} sub</Badge>}
-                    {overdue && <Badge tone="red">vencida</Badge>}
-                    {!t.assignedToId && <Badge tone="amber">sem responsável</Badge>}
-                  </span>
-                </Td>
-                <Td><StatusBadge value={t.type} meta={TASK_TYPE_META} /></Td>
-                <Td><StatusBadge value={t.status} meta={TASK_STATUS_META} /></Td>
-                <Td><StatusBadge value={t.priority} meta={PRIORITY_META} /></Td>
-                <Td className="text-zinc-400">
-                  {t.client ? (
-                    <Link href={`/clientes/${t.client.id}`} className="hover:text-emerald-300">{t.client.name}</Link>
-                  ) : "—"}
-                </Td>
-                <Td>
-                  {t.assignedTo ? (
-                    <span className="flex items-center gap-1.5">
-                      <UserAvatar name={t.assignedTo.name} size="sm" />
-                      <span className="text-xs text-zinc-400">{t.assignedTo.name.split(" ")[0]}</span>
-                    </span>
-                  ) : <span className="text-amber-500">—</span>}
-                </Td>
-                <Td className={overdue ? "text-red-400" : "text-zinc-400"}>{formatDate(t.dueDate)}</Td>
-              </tr>
-            );
-          })}
-        </Table>
       )}
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Calendário simples (mês atual)
-// ---------------------------------------------------------------------------
-
-function CalendarView({ tasks: rows }: { tasks: { id: string; title: string; dueDate: Date | null; status: string }[] }) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const startWeekday = firstDay.getDay();
-
-  const byDay = new Map<number, typeof rows>();
-  for (const t of rows) {
-    if (!t.dueDate || t.dueDate.getMonth() !== month || t.dueDate.getFullYear() !== year) continue;
-    const d = t.dueDate.getDate();
-    byDay.set(d, [...(byDay.get(d) ?? []), t]);
-  }
-
-  const cells: (number | null)[] = [
-    ...Array.from({ length: startWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-
-  return (
-    <div>
-      <p className="mb-2 text-sm font-semibold capitalize text-zinc-300">
-        {new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(now)}
-      </p>
-      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-zinc-500">
-        {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => (
-          <div key={d} className="py-1">{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((day, i) => (
-          <div
-            key={i}
-            className={`min-h-20 rounded-lg border p-1.5 ${
-              day === now.getDate() ? "border-emerald-700 bg-emerald-950/20" : "border-zinc-800 bg-zinc-900/40"
-            } ${day == null ? "opacity-30" : ""}`}
-          >
-            {day && (
+      {visao === "kanban" ? (
+        <TasksKanban
+          items={kanbanItems}
+          columns={kanbanColumns}
+          canUpdate={canUpdate}
+          canCreate={canCreate}
+          quickAddClientId={cliente !== "__none__" ? cliente : undefined}
+        />
+      ) : visao === "calendario" ? (
+        <CalendarMonth
+          year={calYear}
+          month={calMonth}
+          buildHref={buildHref}
+          items={[
+            ...sorted
+              .filter((t): t is typeof t & { dueDate: Date } => !!t.dueDate)
+              .map<CalendarItem>((t) => ({
+                kind: "task",
+                id: t.id,
+                title: t.title,
+                href: `/tarefas/${t.id}`,
+                date: t.dueDate,
+                done: t.status === "CONCLUIDA",
+              })),
+            ...meetings.map<CalendarItem>((m) => ({
+              kind: "meeting",
+              id: m.id,
+              title: `${m.client?.name ?? "Cliente"} — ${m.title}`,
+              href: `/clientes/${m.clientId}`,
+              date: m.meetingDate,
+              showTime: true,
+            })),
+          ]}
+        />
+      ) : rows.length === 0 ? (
+        <>
+          <EmptyState icon="☑" title="Nenhuma tarefa encontrada" description="Crie uma tarefa ou ajuste os filtros." />
+          {canCreate && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
+        </>
+      ) : (
+        <div>
+          <div className="mb-2 flex justify-end">
+            <ListColumnsPicker allColumns={[...LIST_COLUMNS]} visible={visibleCols} />
+          </div>
+          <Table
+            minWidth="860px"
+            head={
               <>
-                <p className="text-right text-[10px] text-zinc-500">{day}</p>
-                <div className="space-y-0.5">
-                  {(byDay.get(day) ?? []).slice(0, 3).map((t) => (
-                    <Link
-                      key={t.id}
-                      href={`/tarefas/${t.id}`}
-                      className={`block truncate rounded px-1 py-0.5 text-[10px] ${
-                        t.status === "CONCLUIDA" ? "bg-zinc-800 text-zinc-500 line-through" : "bg-sky-950/60 text-sky-300 hover:bg-sky-900/60"
-                      }`}
-                    >
+                <Th>{sortTh("titulo", "Tarefa")}</Th>
+                {col("tipo") && <Th>Tipo</Th>}
+                {col("status") && <Th>{sortTh("status", "Status")}</Th>}
+                {col("prioridade") && <Th>{sortTh("prioridade", "Prioridade")}</Th>}
+                {col("cliente") && <Th>Cliente</Th>}
+                {col("responsavel") && <Th>Responsável</Th>}
+                {col("vencimento") && <Th>{sortTh("vencimento", "Vencimento")}</Th>}
+                {col("tags") && <Th>Tags</Th>}
+                {col("criador") && <Th>Criada por</Th>}
+              </>
+            }
+          >
+            {sorted.map((t) => {
+              const overdue = !!t.dueDate && !t.completedAt && t.dueDate < now && !["CONCLUIDA", "CANCELADA"].includes(t.status);
+              return (
+                <tr key={t.id} className="hover:bg-zinc-900/60">
+                  <Td>
+                    <Link href={`/tarefas/${t.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
                       {t.title}
                     </Link>
-                  ))}
-                  {(byDay.get(day)?.length ?? 0) > 3 && (
-                    <p className="text-[10px] text-zinc-500">+{byDay.get(day)!.length - 3}</p>
+                    <span className="ml-2 space-x-1">
+                      {t.subtasks.length > 0 && <Badge tone="zinc">{t.subtasks.filter((s) => s.status === "CONCLUIDA").length}/{t.subtasks.length} sub</Badge>}
+                      {overdue && <Badge tone="red">vencida</Badge>}
+                      {!t.assignedToId && <Badge tone="amber">sem responsável</Badge>}
+                    </span>
+                  </Td>
+                  {col("tipo") && <Td><StatusBadge value={t.type} meta={TASK_TYPE_META} /></Td>}
+                  {col("status") && (
+                    <Td>
+                      {canUpdate && t.status !== "CANCELADA" ? (
+                        <RowStatusSelect taskId={t.id} status={t.status} options={statusFilterOptions.filter((o) => o.value !== "CANCELADA")} />
+                      ) : (
+                        <StatusBadge value={t.status} meta={statusMeta} />
+                      )}
+                    </Td>
                   )}
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-      {rows.length === 0 && (
-        <div className="mt-4">
-          <EmptyState icon="🗓️" title="Nenhuma tarefa com prazo neste mês" />
+                  {col("prioridade") && <Td><StatusBadge value={t.priority} meta={PRIORITY_META} /></Td>}
+                  {col("cliente") && (
+                    <Td className="text-zinc-400">
+                      {t.client ? (
+                        <Link href={`/clientes/${t.client.id}`} className="hover:text-emerald-300">{t.client.name}</Link>
+                      ) : "—"}
+                    </Td>
+                  )}
+                  {col("responsavel") && (
+                    <Td>
+                      {t.assignedTo ? (
+                        <span className="flex items-center gap-1.5">
+                          <UserAvatar name={t.assignedTo.name} size="sm" />
+                          <span className="text-xs text-zinc-400">{t.assignedTo.name.split(" ")[0]}</span>
+                        </span>
+                      ) : <span className="text-amber-500">—</span>}
+                    </Td>
+                  )}
+                  {col("vencimento") && (
+                    <Td className={overdue ? "text-red-400" : "text-zinc-400"}>{formatDate(t.dueDate)}</Td>
+                  )}
+                  {col("tags") && (
+                    <Td>
+                      <span className="flex flex-wrap gap-1">
+                        {t.tags.map((tag) => <Badge key={tag} tone="zinc">#{tag}</Badge>)}
+                        {t.tags.length === 0 && "—"}
+                      </span>
+                    </Td>
+                  )}
+                  {col("criador") && <Td className="text-xs text-zinc-500">{t.createdBy?.name ?? "—"}</Td>}
+                </tr>
+              );
+            })}
+          </Table>
+          {canCreate && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
         </div>
       )}
     </div>

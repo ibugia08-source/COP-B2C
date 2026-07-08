@@ -63,6 +63,16 @@ export async function ensureGroup(moduleKey: string, groupKey: string): Promise<
   return { groupId };
 }
 
+/** Gera um valor estável (SLUG_MAIUSCULO) para opções criadas em grupos de sistema. */
+function slugValue(label: string): string {
+  return label
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
 export async function createOption(
   moduleKey: string,
   groupKey: string,
@@ -76,7 +86,11 @@ export async function createOption(
   const groupId = await materialize(moduleKey, groupKey);
   if (!groupId) return { error: "Grupo inválido." };
 
-  const value = clean; // grupos livres usam o próprio rótulo como valor
+  const builtin = getBuiltinGroup(moduleKey, groupKey);
+  // grupos livres usam o próprio rótulo como valor; grupos de sistema ganham um
+  // slug estável — colunas novas convivem com as travadas sem quebrar a lógica
+  const value = builtin?.isSystem ? slugValue(clean) : clean;
+  if (!value) return { error: "Nome inválido." };
   const dup = await db.query.configOptions.findFirst({
     where: and(eq(configOptions.groupId, groupId), eq(configOptions.value, value)),
   });
@@ -123,6 +137,19 @@ export async function toggleOption(optionId: string): Promise<ActionState> {
     .where(eq(configOptions.id, optionId));
   revalidatePath("/");
   return { success: option.isActive ? "Opção desativada." : "Opção reativada." };
+}
+
+/** Define a opção padrão do grupo (ex.: coluna inicial do Kanban). */
+export async function setDefaultOption(optionId: string): Promise<ActionState> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { error: auth.error };
+  const option = await db.query.configOptions.findFirst({ where: eq(configOptions.id, optionId) });
+  if (!option) return { error: "Opção não encontrada." };
+  if (!option.isActive) return { error: "Ative a opção antes de torná-la padrão." };
+  await db.update(configOptions).set({ isDefault: false }).where(eq(configOptions.groupId, option.groupId));
+  await db.update(configOptions).set({ isDefault: true, updatedAt: new Date() }).where(eq(configOptions.id, optionId));
+  revalidatePath("/");
+  return { success: "Opção padrão definida." };
 }
 
 export async function reorderOptions(orderedIds: string[]): Promise<ActionState> {

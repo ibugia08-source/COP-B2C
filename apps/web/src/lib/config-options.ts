@@ -90,6 +90,7 @@ export type ResolvedOption = {
   color: Tone;
   order: number;
   isActive: boolean;
+  isDefault: boolean;
   isSystem: boolean;
 };
 
@@ -118,6 +119,7 @@ export async function resolveOptions(
       color: (o.color as Tone) ?? "zinc",
       order: o.order,
       isActive: o.isActive,
+      isDefault: o.isDefault,
       isSystem: o.isSystem,
     }));
   } else {
@@ -128,12 +130,33 @@ export async function resolveOptions(
       color: o.color,
       order: i,
       isActive: true,
+      isDefault: false,
       isSystem: builtin?.isSystem ?? false,
     }));
   }
 
   resolved.sort((a, b) => a.order - b.order);
   return opts.activeOnly ? resolved.filter((o) => o.isActive) : resolved;
+}
+
+/** Valor padrão do grupo (coluna inicial do Kanban): o marcado como padrão, senão o primeiro ativo. */
+export async function resolveDefaultValue(
+  moduleKey: string,
+  groupKey: string,
+  fallback: string,
+): Promise<string> {
+  const options = await resolveOptions(moduleKey, groupKey, { activeOnly: true });
+  return options.find((o) => o.isDefault)?.value ?? options[0]?.value ?? fallback;
+}
+
+/** Valida se um valor pertence ao grupo (built-in travado ou coluna criada pelo admin). */
+export async function isValidOptionValue(
+  moduleKey: string,
+  groupKey: string,
+  value: string,
+): Promise<boolean> {
+  const options = await resolveOptions(moduleKey, groupKey);
+  return options.some((o) => o.value === value);
 }
 
 /**

@@ -83,6 +83,14 @@ export const PRIORITY_META: Record<string, Meta> = {
   URGENTE: { label: "Urgente", tone: "red" },
 };
 
+// Aprovação de tarefas do tipo CRIATIVO (briefing em tasks.creative)
+export const CREATIVE_APPROVAL_META: Record<string, Meta> = {
+  PENDENTE: { label: "Em produção", tone: "blue" },
+  AGUARDANDO_APROVACAO: { label: "Aguardando aprovação", tone: "amber" },
+  APROVADO: { label: "Aprovado", tone: "green" },
+  REPROVADO: { label: "Reprovado", tone: "red" },
+};
+
 export const CREATIVE_STATUS_META: Record<string, Meta> = {
   SOLICITADO: { label: "Solicitado", tone: "purple" },
   EM_ROTEIRO: { label: "Em roteiro", tone: "blue" },

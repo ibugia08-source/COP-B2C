@@ -15,6 +15,7 @@ import {
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
 import { emitEvent } from "@/lib/automations/engine";
+import { isValidOptionValue } from "@/lib/config-options";
 
 export type MoveResult = { error?: string; success?: string; requires?: "PERDIDO" | "CRITICO" };
 
@@ -37,7 +38,7 @@ const STAGE_TO_STATUS: Partial<Record<PipelineStage, ClientStatus>> = {
 
 export async function moveClientStage(
   clientId: string,
-  toStage: PipelineStage,
+  toStageInput: string,
   extras?: {
     churnReason?: string;
     churnDate?: string;
@@ -47,7 +48,14 @@ export async function moveClientStage(
 ): Promise<MoveResult> {
   const auth = await checkPermission("clients.moveStatus");
   if (!auth.ok) return { error: auth.error };
-  if (!PIPELINE_STAGES.includes(toStage)) return { error: "Etapa inválida." };
+  // etapa válida = enum do sistema OU coluna criada pelo admin (essas não têm regras especiais)
+  if (
+    !(PIPELINE_STAGES as readonly string[]).includes(toStageInput) &&
+    !(await isValidOptionValue("operation", "pipeline", toStageInput))
+  ) {
+    return { error: "Etapa inválida." };
+  }
+  const toStage = toStageInput as PipelineStage;
 
   const client = await db.query.clients.findFirst({
     where: eq(clients.id, clientId),

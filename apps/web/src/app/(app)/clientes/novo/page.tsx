@@ -7,8 +7,13 @@ import { PageHeader } from "@/components/ui/primitives";
 import { createClient } from "../actions";
 import { ClientForm } from "../client-form";
 
-export default async function NovoClientePage() {
+export default async function NovoClientePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ etapa?: string }>;
+}) {
   await requirePermission("clients.create");
+  const { etapa } = await searchParams;
   const [allUsers, niches] = await Promise.all([
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
     resolveOptions("clients", "niche", { activeOnly: true }),
@@ -22,6 +27,7 @@ export default async function NovoClientePage() {
         niches={niches.map((n) => n.value)}
         action={createClient}
         submitLabel="Cadastrar cliente"
+        defaultStage={etapa}
       />
     </div>
   );

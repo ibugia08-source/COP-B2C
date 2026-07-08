@@ -21,11 +21,13 @@ import {
 } from "@/lib/labels";
 import { getActiveServices } from "@/lib/settings";
 import { isGoogleMeetEnabled } from "@/lib/google-meet";
+import { resolveMeta } from "@/lib/config-options";
 import { getClientTimeline } from "@/lib/timeline";
 import { ClientMeetings } from "./meetings";
 import { Tabs } from "@/components/ui/overlay";
 import {
   Alert,
+  Badge,
   Button,
   EmptyState,
   StatusBadge,
@@ -75,7 +77,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   const canUpdate = hasPermission(session, "clients.update");
   const canMoveStatus = hasPermission(session, "clients.moveStatus");
   const canCreateTask = hasPermission(session, "tasks.create");
-  const [timeline, services, meetUsers, meetEnabled] = await Promise.all([
+  const [timeline, services, meetUsers, meetEnabled, taskStatusMetaResolved] = await Promise.all([
     getClientTimeline(client.id),
     getActiveServices(),
     db.query.users.findMany({
@@ -84,7 +86,9 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       orderBy: (u, { asc }) => [asc(u.name)],
     }),
     isGoogleMeetEnabled(),
+    resolveMeta("tasks", "status"),
   ]);
+  const taskStatusMeta = { ...TASK_STATUS_META, ...taskStatusMetaResolved };
 
   // Pendências (regras de negócio)
   const pendencias: string[] = [];
@@ -175,40 +179,70 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
     <EmptyState icon="🔒" title="Sem permissão para editar o perfil operacional" />
   );
 
-  const tarefas = client.tasks.length ? (
-    <Table
-      head={
-        <>
-          <Th>Tarefa</Th>
-          <Th>Tipo</Th>
-          <Th>Status</Th>
-          <Th>Responsável</Th>
-          <Th>Prazo</Th>
-        </>
-      }
-    >
-      {client.tasks.map((t) => (
-        <tr key={t.id} className="hover:bg-zinc-900/60">
-          <Td>
-            <Link href={`/tarefas/${t.id}`} className="text-zinc-100 hover:text-emerald-300">
-              {t.title}
+  // Resumo de tarefas: atrasadas + contagem por status
+  const nowTasks = new Date();
+  const overdueTasks = client.tasks.filter(
+    (t) => t.dueDate && !t.completedAt && t.dueDate < nowTasks && !["CONCLUIDA", "CANCELADA"].includes(t.status),
+  );
+  const tasksByStatus = new Map<string, number>();
+  for (const t of client.tasks) tasksByStatus.set(t.status, (tasksByStatus.get(t.status) ?? 0) + 1);
+
+  const tarefas = (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {canCreateTask && (
+          <Button size="sm" href={`/tarefas?nova=1&cliente=${client.id}`}>+ Nova tarefa para este cliente</Button>
+        )}
+        <Link href={`/tarefas?cliente=${client.id}`} className="text-xs text-emerald-400 hover:underline">
+          ver no CRM de Tarefas →
+        </Link>
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          {overdueTasks.length > 0 && <Badge tone="red">{overdueTasks.length} atrasada{overdueTasks.length > 1 ? "s" : ""}</Badge>}
+          {Array.from(tasksByStatus.entries()).map(([s, n]) => (
+            <Link key={s} href={`/tarefas?cliente=${client.id}&status=${encodeURIComponent(s)}`}>
+              <Badge tone={taskStatusMeta[s]?.tone ?? "zinc"}>
+                {taskStatusMeta[s]?.label ?? s}: {n}
+              </Badge>
             </Link>
-          </Td>
-          <Td><StatusBadge value={t.type} meta={TASK_TYPE_META} /></Td>
-          <Td><StatusBadge value={t.status} meta={TASK_STATUS_META} /></Td>
-          <Td>{t.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={t.assignedTo.name} size="sm" />{t.assignedTo.name.split(" ")[0]}</span> : <span className="text-amber-500">—</span>}</Td>
-          <Td className={t.dueDate && !t.completedAt && t.dueDate < new Date() ? "text-red-400" : "text-zinc-400"}>
-            {formatDate(t.dueDate)}
-          </Td>
-        </tr>
-      ))}
-    </Table>
-  ) : (
-    <EmptyState
-      icon="☑"
-      title="Nenhuma tarefa para este cliente"
-      action={<Button size="sm" href={`/tarefas?nova=1&cliente=${client.id}`}>+ Nova tarefa</Button>}
-    />
+          ))}
+        </span>
+      </div>
+      {client.tasks.length ? (
+        <Table
+          head={
+            <>
+              <Th>Tarefa</Th>
+              <Th>Tipo</Th>
+              <Th>Status</Th>
+              <Th>Responsável</Th>
+              <Th>Prazo</Th>
+            </>
+          }
+        >
+          {client.tasks.map((t) => {
+            const overdue = !!t.dueDate && !t.completedAt && t.dueDate < nowTasks && !["CONCLUIDA", "CANCELADA"].includes(t.status);
+            return (
+              <tr key={t.id} className="hover:bg-zinc-900/60">
+                <Td>
+                  <Link href={`/tarefas/${t.id}`} className="text-zinc-100 hover:text-emerald-300">
+                    {t.title}
+                  </Link>
+                  {overdue && <Badge tone="red">vencida</Badge>}
+                </Td>
+                <Td><StatusBadge value={t.type} meta={TASK_TYPE_META} /></Td>
+                <Td><StatusBadge value={t.status} meta={taskStatusMeta} /></Td>
+                <Td>{t.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={t.assignedTo.name} size="sm" />{t.assignedTo.name.split(" ")[0]}</span> : <span className="text-amber-500">—</span>}</Td>
+                <Td className={overdue ? "text-red-400" : "text-zinc-400"}>
+                  {formatDate(t.dueDate)}
+                </Td>
+              </tr>
+            );
+          })}
+        </Table>
+      ) : (
+        <EmptyState icon="☑" title="Nenhuma tarefa para este cliente" />
+      )}
+    </div>
   );
 
   const now = new Date();

@@ -76,6 +76,23 @@ export const TASK_STATUSES = [
 ] as const;
 export const TASK_PRIORITIES = ["BAIXA", "MEDIA", "ALTA", "URGENTE"] as const;
 
+// Aprovação de tarefas do tipo CRIATIVO (briefing fica em tasks.creative)
+export const CREATIVE_APPROVALS = [
+  "PENDENTE",
+  "AGUARDANDO_APROVACAO",
+  "APROVADO",
+  "REPROVADO",
+] as const;
+export type CreativeBrief = {
+  objective?: string;
+  platform?: string;
+  format?: string;
+  offer?: string;
+  cta?: string;
+  referenceLink?: string;
+  approvalStatus?: (typeof CREATIVE_APPROVALS)[number];
+};
+
 export const CREATIVE_STATUSES = [
   "SOLICITADO",
   "EM_ROTEIRO",
@@ -557,6 +574,8 @@ export const tasks = pgTable(
     estimatedMinutes: integer("estimated_minutes"),
     trackedMinutes: integer("tracked_minutes").notNull().default(0),
     tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    // Briefing de criativo — usado quando type = CRIATIVO (Criativos não é mais módulo próprio)
+    creative: jsonb("creative").$type<CreativeBrief>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -1395,6 +1414,16 @@ export const taskChecklistItemsRelations = relations(taskChecklistItems, ({ one 
     fields: [taskChecklistItems.checklistId],
     references: [taskChecklists.id],
   }),
+}));
+
+export const taskAttachmentsRelations = relations(taskAttachments, ({ one }) => ({
+  task: one(tasks, { fields: [taskAttachments.taskId], references: [tasks.id] }),
+  uploadedBy: one(users, { fields: [taskAttachments.uploadedById], references: [users.id] }),
+}));
+
+export const taskTimeEntriesRelations = relations(taskTimeEntries, ({ one }) => ({
+  task: one(tasks, { fields: [taskTimeEntries.taskId], references: [tasks.id] }),
+  user: one(users, { fields: [taskTimeEntries.userId], references: [users.id] }),
 }));
 
 export const digitalAssetGroupsRelations = relations(digitalAssetGroups, ({ one, many }) => ({

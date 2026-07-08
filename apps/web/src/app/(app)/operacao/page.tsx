@@ -1,40 +1,74 @@
 import Link from "next/link";
-import { and, eq, inArray, isNull, not, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, not, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, tasks, users } from "@/db/schema";
+import { agencyServices, clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { resolveOptions } from "@/lib/config-options";
 import {
   ADS_META,
   AGENCY_BRAND_META,
   formatDate,
   HEALTH_META,
   PIPELINE_STAGE_META,
+  type Tone,
 } from "@/lib/labels";
-import { Button, EmptyState, PageHeader, StatusBadge, Table, Td, Th } from "@/components/ui/primitives";
-import { OperationKanban, type KanbanClient } from "./kanban";
+import { EmptyState, PageHeader, StatusBadge, Table, Td, Th } from "@/components/ui/primitives";
+import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
+import { OperationKanban, type KanbanClient, type StageOption } from "./kanban";
 import { OperationFilters } from "./ui-filters";
 import { ModuleConfig } from "../module-config";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
 
+const FILTER_KEYS = ["etapa", "cliente", "responsavel", "gestor", "estrategista", "saude", "empresa", "nicho", "ads", "servico"] as const;
+
 export default async function OperacaoPage({ searchParams }: { searchParams: Promise<Search> }) {
   const session = await requirePermission("clients.view");
   const sp = await searchParams;
   const canMove = hasPermission(session, "clients.moveStatus");
+  const canCreate = hasPermission(session, "clients.create");
 
+  // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [];
+  if (str(sp.etapa)) filters.push(eq(clients.pipelineStage, str(sp.etapa) as never));
+  if (str(sp.cliente)) filters.push(eq(clients.id, str(sp.cliente)!));
+  if (str(sp.responsavel)) filters.push(eq(clients.mainResponsibleId, str(sp.responsavel)!));
   if (str(sp.gestor)) filters.push(eq(clients.trafficManager1Id, str(sp.gestor)!));
+  if (str(sp.estrategista)) filters.push(eq(clients.strategistId, str(sp.estrategista)!));
   if (str(sp.saude)) filters.push(eq(clients.healthStatus, str(sp.saude) as never));
   if (str(sp.nicho)) filters.push(eq(clients.niche, str(sp.nicho)!));
   if (str(sp.empresa)) filters.push(eq(clients.agencyBrand, str(sp.empresa) as never));
   if (str(sp.ads)) filters.push(eq(clients.adsStatus, str(sp.ads) as never));
 
-  const rows = await db.query.clients.findMany({
-    where: filters.length ? and(...filters) : undefined,
-    with: { trafficManager1: true, strategist: true, operationalProfile: true },
-    orderBy: (c, { asc }) => [asc(c.name)],
-  });
+  const [allRows, allUsers, niches, servicesRows, stageOptionsAll, clientOptions] = await Promise.all([
+    db.query.clients.findMany({
+      where: filters.length ? and(...filters) : undefined,
+      with: { trafficManager1: true, strategist: true, operationalProfile: true },
+      orderBy: (c, { asc: a }) => [a(c.name)],
+    }),
+    db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
+    db.selectDistinct({ niche: clients.niche }).from(clients),
+    db
+      .select({ name: agencyServices.name })
+      .from(agencyServices)
+      .where(eq(agencyServices.isActive, true))
+      .orderBy(asc(agencyServices.order), asc(agencyServices.name)),
+    resolveOptions("operation", "pipeline"),
+    db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
+  ]);
+
+  // serviço utilizado: filtra sobre o perfil operacional (lista de serviços do cliente)
+  const servico = str(sp.servico);
+  const rows = servico
+    ? allRows.filter((c) => (c.operationalProfile?.platforms ?? []).includes(servico))
+    : allRows;
+
+  // meta de etapas (built-in + colunas custom) e colunas ativas do Kanban
+  const stageMeta: Record<string, { label: string; tone: Tone }> = { ...PIPELINE_STAGE_META };
+  for (const o of stageOptionsAll) stageMeta[o.value] = { label: o.label, tone: o.color };
+  const stageActive = stageOptionsAll.filter((o) => o.isActive);
+  const kanbanColumns: StageOption[] = stageActive.map((o) => ({ value: o.value, label: o.label, color: o.color }));
 
   // próximo prazo por cliente (menor dueDate de tarefa aberta)
   const openTasks = rows.length
@@ -77,80 +111,186 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     };
   });
 
-  const [allUsers, niches] = await Promise.all([
-    db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
-    db.selectDistinct({ niche: clients.niche }).from(clients),
-  ]);
+  // --- visões e URLs --------------------------------------------------------
+  const visao = str(sp.visao) ?? "kanban";
+  const buildHref = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) if (typeof v === "string" && v) next.set(k, v);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) next.delete(k);
+      else next.set(k, v);
+    }
+    const s = next.toString();
+    return s ? `/operacao?${s}` : "/operacao";
+  };
+  const activeFilterCount = FILTER_KEYS.filter((k) => str(sp[k])).length;
+  const showFilters = str(sp.filtros) === "1" || activeFilterCount > 0;
 
-  const viewList = str(sp.visao) === "lista";
+  // --- calendário: demandas operacionais com prazo + reuniões ---------------
+  const now = new Date();
+  const mesParam = str(sp.mes);
+  const [calYear, calMonth] = /^\d{4}-\d{2}$/.test(mesParam ?? "")
+    ? [Number(mesParam!.slice(0, 4)), Number(mesParam!.slice(5, 7)) - 1]
+    : [now.getFullYear(), now.getMonth()];
+  const monthStart = new Date(calYear, calMonth, 1);
+  const monthEnd = new Date(calYear, calMonth + 1, 1);
+
+  let calendarItems: CalendarItem[] = [];
+  if (visao === "calendario" && rows.length) {
+    const clientIds = rows.map((r) => r.id);
+    const [monthTasks, monthMeetings] = await Promise.all([
+      db.query.tasks.findMany({
+        where: and(
+          inArray(tasks.clientId, clientIds),
+          gte(tasks.dueDate, monthStart),
+          lt(tasks.dueDate, monthEnd),
+        ),
+        with: { client: true },
+      }),
+      db.query.clientMeetings.findMany({
+        where: and(
+          inArray(clientMeetings.clientId, clientIds),
+          gte(clientMeetings.meetingDate, monthStart),
+          lt(clientMeetings.meetingDate, monthEnd),
+        ),
+        with: { client: true },
+      }),
+    ]);
+    calendarItems = [
+      ...monthTasks
+        .filter((t): t is typeof t & { dueDate: Date } => !!t.dueDate)
+        .map<CalendarItem>((t) => ({
+          kind: "task",
+          id: t.id,
+          title: `${t.client?.name ?? ""} — ${t.title}`,
+          href: `/tarefas/${t.id}`,
+          date: t.dueDate,
+          done: t.status === "CONCLUIDA",
+        })),
+      ...monthMeetings.map<CalendarItem>((m) => ({
+        kind: "meeting",
+        id: m.id,
+        title: `${m.client?.name ?? "Cliente"} — ${m.title}`,
+        href: `/clientes/${m.clientId}`,
+        date: m.meetingDate,
+        showTime: true,
+      })),
+    ];
+  }
+
+  const viewBtn = (key: string, label: string) => (
+    <Link
+      key={key}
+      href={buildHref({ visao: key === "kanban" ? null : key })}
+      className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+        visao === key ? "bg-emerald-950/70 text-emerald-300" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+      }`}
+    >
+      {label}
+    </Link>
+  );
 
   return (
     <div>
       <PageHeader
         title="Operação"
-        description="Pipeline do ciclo de vida do cliente — tarefas internas ficam no módulo Tarefas."
+        description="CRM operacional — pipeline do ciclo de vida do cliente. Demandas internas ficam em Tarefas."
         actions={
-          <div className="flex items-center gap-2">
-            <ModuleConfig moduleKey="operation" moduleLabel="Operação" />
-            <Button variant={viewList ? "secondary" : "primary"} size="sm" href="/operacao">
-              Kanban
-            </Button>
-            <Button variant={viewList ? "primary" : "secondary"} size="sm" href="/operacao?visao=lista">
-              Lista
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ModuleConfig moduleKey="operation" moduleLabel="Operação" buttonLabel="Colunas" />
+            <Link
+              href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
+              className={`rounded-lg border px-3 py-2 text-sm transition ${
+                activeFilterCount > 0
+                  ? "border-emerald-700 text-emerald-300"
+                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+              }`}
+            >
+              Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </Link>
+            <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
+              {viewBtn("kanban", "Kanban")}
+              {viewBtn("lista", "Lista")}
+              {viewBtn("calendario", "Calendário")}
+            </span>
+            {canCreate && (
+              <Link
+                href="/clientes/novo"
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-500"
+              >
+                + Novo cliente
+              </Link>
+            )}
           </div>
         }
       />
 
-      <OperationFilters
-        users={allUsers}
-        niches={niches.map((n) => n.niche).filter((n): n is string => !!n)}
-      />
+      {showFilters && (
+        <OperationFilters
+          users={allUsers}
+          clients={clientOptions}
+          niches={niches.map((n) => n.niche).filter((n): n is string => !!n)}
+          services={servicesRows.map((s) => s.name)}
+          stageOptions={stageActive.map((o) => ({ value: o.value, label: o.label }))}
+        />
+      )}
 
-      {rows.length === 0 ? (
+      {visao === "calendario" ? (
+        <CalendarMonth year={calYear} month={calMonth} buildHref={buildHref} items={calendarItems} />
+      ) : rows.length === 0 ? (
         <EmptyState
           icon="🔄"
           title="Nenhum cliente no pipeline"
           description="Cadastre clientes ou limpe os filtros para vê-los aqui."
         />
-      ) : viewList ? (
-        <Table
-          minWidth="800px"
-          head={
-            <>
-              <Th>Cliente</Th>
-              <Th>Etapa</Th>
-              <Th>Saúde</Th>
-              <Th>Ads</Th>
-              <Th>Empresa</Th>
-              <Th>Gestor 1</Th>
-              <Th>Próximo prazo</Th>
-              <Th>Pendências</Th>
-            </>
-          }
-        >
-          {kanbanClients.map((c) => (
-            <tr key={c.id} className="hover:bg-zinc-900/60">
-              <Td>
-                <Link href={`/clientes/${c.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
-                  {c.name}
-                </Link>
-                {c.niche && <p className="text-xs text-zinc-500">{c.niche}</p>}
-              </Td>
-              <Td><StatusBadge value={c.pipelineStage} meta={PIPELINE_STAGE_META} /></Td>
-              <Td><StatusBadge value={c.healthStatus} meta={HEALTH_META} /></Td>
-              <Td><StatusBadge value={c.adsStatus} meta={ADS_META} /></Td>
-              <Td><StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} /></Td>
-              <Td className="text-zinc-400">{c.gestor1 ?? "—"}</Td>
-              <Td className={c.nextDue && new Date(c.nextDue) < new Date() ? "text-red-400" : "text-zinc-400"}>
-                {c.nextDue ? formatDate(new Date(c.nextDue)) : "—"}
-              </Td>
-              <Td className="text-xs text-amber-400">{c.pendencias.join(" · ") || "—"}</Td>
-            </tr>
-          ))}
-        </Table>
+      ) : visao === "lista" ? (
+        <div>
+          <Table
+            minWidth="800px"
+            head={
+              <>
+                <Th>Cliente</Th>
+                <Th>Etapa</Th>
+                <Th>Saúde</Th>
+                <Th>Ads</Th>
+                <Th>Empresa</Th>
+                <Th>Gestor 1</Th>
+                <Th>Próximo prazo</Th>
+                <Th>Pendências</Th>
+              </>
+            }
+          >
+            {kanbanClients.map((c) => (
+              <tr key={c.id} className="hover:bg-zinc-900/60">
+                <Td>
+                  <Link href={`/clientes/${c.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
+                    {c.name}
+                  </Link>
+                  {c.niche && <p className="text-xs text-zinc-500">{c.niche}</p>}
+                </Td>
+                <Td><StatusBadge value={c.pipelineStage} meta={stageMeta} /></Td>
+                <Td><StatusBadge value={c.healthStatus} meta={HEALTH_META} /></Td>
+                <Td><StatusBadge value={c.adsStatus} meta={ADS_META} /></Td>
+                <Td><StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} /></Td>
+                <Td className="text-zinc-400">{c.gestor1 ?? "—"}</Td>
+                <Td className={c.nextDue && new Date(c.nextDue) < new Date() ? "text-red-400" : "text-zinc-400"}>
+                  {c.nextDue ? formatDate(new Date(c.nextDue)) : "—"}
+                </Td>
+                <Td className="text-xs text-amber-400">{c.pendencias.join(" · ") || "—"}</Td>
+              </tr>
+            ))}
+          </Table>
+          {canCreate && (
+            <Link
+              href="/clientes/novo"
+              className="mt-2 block rounded-lg border border-dashed border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300"
+            >
+              + Adicionar novo cliente
+            </Link>
+          )}
+        </div>
       ) : (
-        <OperationKanban clients={kanbanClients} canMove={canMove} />
+        <OperationKanban clients={kanbanClients} columns={kanbanColumns} canMove={canMove} canCreate={canCreate} />
       )}
     </div>
   );

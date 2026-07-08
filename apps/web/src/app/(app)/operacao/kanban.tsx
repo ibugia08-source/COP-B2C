@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { PIPELINE_STAGES, type PipelineStage } from "@/db/schema";
-import { ADS_META, AGENCY_BRAND_META, formatDate, HEALTH_META, PIPELINE_STAGE_META } from "@/lib/labels";
+import { ADS_META, AGENCY_BRAND_META, formatDate, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { moveClientStage } from "./actions";
+
+export type StageOption = { value: string; label: string; color: Tone };
 
 export type KanbanClient = {
   id: string;
@@ -16,22 +17,32 @@ export type KanbanClient = {
   agencyBrand: string;
   healthStatus: string;
   adsStatus: string;
-  pipelineStage: PipelineStage;
+  pipelineStage: string;
   gestor1: string | null;
   estrategista: string | null;
   nextDue: string | null; // ISO
   pendencias: string[];
 };
 
-type PendingMove = { client: KanbanClient; toStage: PipelineStage; kind: "PERDIDO" | "CRITICO" };
+type PendingMove = { client: KanbanClient; toStage: string; kind: "PERDIDO" | "CRITICO" };
 
-export function OperationKanban({ clients, canMove }: { clients: KanbanClient[]; canMove: boolean }) {
+export function OperationKanban({
+  clients,
+  columns,
+  canMove,
+  canCreate,
+}: {
+  clients: KanbanClient[];
+  columns: StageOption[];
+  canMove: boolean;
+  canCreate: boolean;
+}) {
   const router = useRouter();
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overStage, setOverStage] = useState<PipelineStage | null>(null);
+  const [overStage, setOverStage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // campos dos modais obrigatórios
@@ -40,7 +51,14 @@ export function OperationKanban({ clients, canMove }: { clients: KanbanClient[];
   const [criticalReason, setCriticalReason] = useState("");
   const [actionPlan, setActionPlan] = useState("");
 
-  function doMove(client: KanbanClient, toStage: PipelineStage, extras?: Parameters<typeof moveClientStage>[2]) {
+  // clientes cuja etapa não tem coluna ativa (ex.: coluna desativada pelo admin)
+  const known = new Set(columns.map((c) => c.value));
+  const orphans = clients.filter((c) => !known.has(c.pipelineStage));
+  const allColumns: StageOption[] = orphans.length
+    ? [...columns, { value: "__outros__", label: "Sem coluna", color: "zinc" }]
+    : columns;
+
+  function doMove(client: KanbanClient, toStage: string, extras?: Parameters<typeof moveClientStage>[2]) {
     setError(null);
     startTransition(async () => {
       const result = await moveClientStage(client.id, toStage, extras);
@@ -65,9 +83,9 @@ export function OperationKanban({ clients, canMove }: { clients: KanbanClient[];
     });
   }
 
-  function onDrop(stage: PipelineStage) {
+  function onDrop(stage: string) {
     setOverStage(null);
-    if (!dragId || !canMove) return;
+    if (!dragId || !canMove || stage === "__outros__") return;
     const client = clients.find((c) => c.id === dragId);
     setDragId(null);
     if (!client || client.pipelineStage === stage) return;
@@ -88,26 +106,29 @@ export function OperationKanban({ clients, canMove }: { clients: KanbanClient[];
       )}
 
       <div className={`flex gap-3 overflow-x-auto pb-4 ${isPending ? "opacity-70" : ""}`}>
-        {PIPELINE_STAGES.map((stage) => {
-          const stageClients = clients.filter((c) => c.pipelineStage === stage);
-          const meta = PIPELINE_STAGE_META[stage];
+        {allColumns.map((col) => {
+          const stageClients =
+            col.value === "__outros__" ? orphans : clients.filter((c) => c.pipelineStage === col.value);
           return (
             <div
-              key={stage}
+              key={col.value}
               onDragOver={(e) => {
-                if (canMove) {
+                if (canMove && col.value !== "__outros__") {
                   e.preventDefault();
-                  setOverStage(stage);
+                  setOverStage(col.value);
                 }
               }}
-              onDragLeave={() => setOverStage((s) => (s === stage ? null : s))}
-              onDrop={() => onDrop(stage)}
+              onDragLeave={() => setOverStage((s) => (s === col.value ? null : s))}
+              onDrop={() => onDrop(col.value)}
               className={`flex w-64 shrink-0 flex-col rounded-xl border bg-zinc-900/50 ${
-                overStage === stage ? "border-emerald-500" : "border-zinc-800"
+                overStage === col.value ? "border-emerald-500" : "border-zinc-800"
               }`}
             >
               <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
-                <span className="text-xs font-semibold text-zinc-300">{meta?.label ?? stage}</span>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+                  <span className={`inline-block h-2 w-2 rounded-full border ${TONE_CLASSES[col.color]}`} />
+                  {col.label}
+                </span>
                 <span className="rounded-full bg-zinc-800 px-1.5 text-[10px] text-zinc-400">
                   {stageClients.length}
                 </span>
@@ -154,6 +175,14 @@ export function OperationKanban({ clients, canMove }: { clients: KanbanClient[];
                     )}
                   </div>
                 ))}
+                {canCreate && col.value !== "__outros__" && (
+                  <Link
+                    href={`/clientes/novo?etapa=${encodeURIComponent(col.value)}`}
+                    className="mt-1 rounded-lg border border-dashed border-zinc-800 px-2 py-1.5 text-left text-[11px] text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300"
+                  >
+                    + Novo cliente nesta etapa
+                  </Link>
+                )}
               </div>
             </div>
           );

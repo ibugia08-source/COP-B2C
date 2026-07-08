@@ -20,12 +20,14 @@ export function ClientForm({
   niches,
   action,
   submitLabel,
+  defaultStage,
 }: {
   client?: Client;
   users: UserOption[];
   niches: string[];
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
+  defaultStage?: string;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, {});
 
@@ -40,6 +42,7 @@ export function ClientForm({
 
   return (
     <form action={formAction} className="max-w-4xl space-y-6">
+      {defaultStage && <input type="hidden" name="pipelineStage" value={defaultStage} />}
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:grid-cols-2 lg:grid-cols-3">
         <h2 className="text-sm font-semibold text-zinc-300 sm:col-span-2 lg:col-span-3">Identificação</h2>
         <Field label="Nome do cliente *" htmlFor="name">

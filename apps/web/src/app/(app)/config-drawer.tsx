@@ -10,6 +10,7 @@ import {
   deleteOption,
   reorderOptions,
   restoreDefaults,
+  setDefaultOption,
   toggleOption,
   updateOption,
   type ActionState,
@@ -23,6 +24,7 @@ export type DrawerOption = {
   label: string;
   color: Tone;
   isActive: boolean;
+  isDefault: boolean;
   isSystem: boolean;
 };
 export type DrawerGroup = {
@@ -93,11 +95,15 @@ function OptionRow({
     <div className={`flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 ${option.isActive ? "" : "opacity-50"}`}>
       <ColorDot tone={option.color} />
       <span className="text-sm text-zinc-200">{option.label}</span>
+      {option.isDefault && <Badge tone="green">padrão</Badge>}
       {option.isSystem && <Badge tone="zinc">sistema</Badge>}
       {!option.isActive && <Badge tone="amber">inativa</Badge>}
       <span className="ml-auto flex items-center gap-1">
         <button type="button" onClick={() => reorder(-1)} disabled={pending || index === 0} className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 disabled:opacity-30">↑</button>
         <button type="button" onClick={() => reorder(1)} disabled={pending || index === total - 1} className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 disabled:opacity-30">↓</button>
+        {!option.isDefault && option.isActive && (
+          <button type="button" onClick={() => onAction(() => setDefaultOption(option.id!))} disabled={pending || !option.id} title="Usar como coluna/valor padrão" className="rounded px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800">padrão</button>
+        )}
         <button type="button" onClick={() => setEditing(true)} className="rounded px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800">editar</button>
         <button type="button" onClick={() => onAction(() => toggleOption(option.id!))} disabled={pending} className="rounded px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800">
           {option.isActive ? "desativar" : "ativar"}
@@ -120,7 +126,9 @@ function GroupPanel({ group, onAction, pending }: { group: DrawerGroup; onAction
         <div>
           <h3 className="text-sm font-semibold text-zinc-200">{group.name}</h3>
           {group.isSystem && (
-            <p className="text-[11px] text-zinc-500">Valores do sistema — edite rótulo, cor e ordem; novos valores não são aceitos.</p>
+            <p className="text-[11px] text-zinc-500">
+              Valores do sistema são travados (edite rótulo, cor, ordem e ativação). Colunas novas que você adicionar podem ser excluídas.
+            </p>
           )}
         </div>
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => onAction(() => restoreDefaults(group.moduleKey, group.groupKey))}>
@@ -135,9 +143,8 @@ function GroupPanel({ group, onAction, pending }: { group: DrawerGroup; onAction
         {group.options.length === 0 && <p className="text-sm text-zinc-500">Nenhuma opção ainda.</p>}
       </div>
 
-      {!group.isSystem && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
-          <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Nova opção..." className="w-44" />
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
+          <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder={group.isSystem ? "Nova coluna..." : "Nova opção..."} className="w-44" />
           <div className="flex items-center gap-1">
             {TONES.map((t) => (
               <button key={t} type="button" onClick={() => setNewColor(t)} className={`rounded-full p-0.5 ${newColor === t ? "ring-2 ring-emerald-500" : ""}`}>
@@ -148,13 +155,20 @@ function GroupPanel({ group, onAction, pending }: { group: DrawerGroup; onAction
           <Button size="sm" disabled={pending || !newLabel.trim()} onClick={() => { onAction(() => createOption(group.moduleKey, group.groupKey, newLabel, newColor)); setNewLabel(""); }}>
             + Adicionar
           </Button>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
-export function ConfigDrawerButton({ moduleLabel, groups }: { moduleLabel: string; groups: DrawerGroup[] }) {
+export function ConfigDrawerButton({
+  moduleLabel,
+  buttonLabel,
+  groups,
+}: {
+  moduleLabel: string;
+  buttonLabel?: string;
+  groups: DrawerGroup[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(groups[0]?.groupKey ?? "");
@@ -177,10 +191,12 @@ export function ConfigDrawerButton({ moduleLabel, groups }: { moduleLabel: strin
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Configurar opções do módulo"
-        className="rounded-lg border border-zinc-700 p-2 text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+        title="Configurar opções e colunas do módulo (admins)"
+        className={`rounded-lg border border-zinc-700 text-zinc-400 transition hover:border-zinc-500 hover:text-white ${
+          buttonLabel ? "px-3 py-2 text-sm" : "p-2"
+        }`}
       >
-        ⚙
+        ⚙{buttonLabel ? ` ${buttonLabel}` : ""}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={`Configurar — ${moduleLabel}`} wide>
         {groups.length === 0 ? (

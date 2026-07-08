@@ -58,7 +58,7 @@ function describeMetadata(action: string, metadata: Record<string, unknown> | nu
   return undefined;
 }
 
-/** Timeline unificada do cliente: logs + tarefas + reuniões + criativos + financeiro. */
+/** Timeline unificada do cliente: logs + tarefas + reuniões + ativos. */
 export async function getClientTimeline(clientId: string, filter?: TimelineItem["kind"]): Promise<TimelineItem[]> {
   const [logs, client] = await Promise.all([
     db.query.activityLogs.findMany({
@@ -71,7 +71,6 @@ export async function getClientTimeline(clientId: string, filter?: TimelineItem[
       with: {
         tasks: { orderBy: (t, { desc: d }) => [d(t.updatedAt)], limit: 50 },
         meetings: true,
-        creativeRequests: true,
         healthLogs: true,
       },
     }),
@@ -110,24 +109,6 @@ export async function getClientTimeline(clientId: string, filter?: TimelineItem[
         detail: meeting.title + (meeting.summary ? ` — ${meeting.summary}` : ""),
         kind: "reuniao",
       });
-    }
-    for (const cr of client.creativeRequests) {
-      items.push({
-        date: cr.createdAt,
-        icon: "🎨",
-        title: "Criativo solicitado",
-        detail: cr.title,
-        kind: "criativo",
-      });
-      if (cr.approvedAt) {
-        items.push({
-          date: cr.approvedAt,
-          icon: "🎉",
-          title: "Criativo aprovado",
-          detail: cr.title,
-          kind: "criativo",
-        });
-      }
     }
   }
 

@@ -42,7 +42,7 @@ export function ClientQuickActions({ client, canMoveStatus }: { client: Client; 
       <Button size="sm" variant="secondary" href={`/tarefas?nova=1&cliente=${client.id}`}>
         + Tarefa
       </Button>
-      <Button size="sm" variant="secondary" href={`/criativos?novo=1&cliente=${client.id}`}>
+      <Button size="sm" variant="secondary" href={`/tarefas?nova=1&tipo=CRIATIVO&cliente=${client.id}`}>
         + Criativo
       </Button>
       <Button size="sm" variant="secondary" onClick={() => setModal("reuniao")}>

@@ -100,6 +100,7 @@ export function TaskCreateButton({
   users,
   clients,
   defaultClientId,
+  defaultType,
   autoOpen,
   parentTaskId,
   digitalAssetId,
@@ -108,6 +109,7 @@ export function TaskCreateButton({
   users: { id: string; name: string }[];
   clients: { id: string; name: string }[];
   defaultClientId?: string;
+  defaultType?: string;
   autoOpen?: boolean;
   parentTaskId?: string;
   digitalAssetId?: string;
@@ -143,7 +145,7 @@ export function TaskCreateButton({
             <Textarea name="description" placeholder="Detalhes, contexto, links..." />
           </Field>
           <Field label="Tipo">
-            <Select name="type" defaultValue="OPERACIONAL">
+            <Select name="type" defaultValue={defaultType ?? "OPERACIONAL"}>
               {Object.entries(TASK_TYPE_META).map(([v, m]) => (
                 <option key={v} value={v}>{m.label}</option>
               ))}

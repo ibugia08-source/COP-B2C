@@ -40,7 +40,7 @@ Login de desenvolvimento: `owner@b2cgestao.com.br` / `cop123456` (todos os usuá
 
 ## Módulos implementados
 
-Dashboard executivo · Clientes (ficha 360°) · Operação (Kanban do ciclo de vida) · Tarefas (lista/kanban/calendário, subtarefas, checklists) · Templates operacionais · Criativos + Social Media · Equipe e papéis · Metas · Banco de Ativos Digitais (contas, perfis e credenciais com AES-256-GCM e auditoria) · Documentos/Wiki · Formulários · Automações (motor gatilho→condição→ação) · Importação do ClickUp e do Trello ([docs/IMPORTACAO.md](docs/IMPORTACAO.md)).
+Dashboard executivo · Clientes (ficha 360°) · Operação (Kanban do ciclo de vida) · Tarefas (lista/kanban/calendário, subtarefas, checklists — criativos e social media são tipos de tarefa) · Templates operacionais · Equipe & Acessos (só admins) · Serviços configuráveis + feature flags · Metas · Banco de Ativos Digitais (contas, perfis e credenciais com AES-256-GCM e auditoria) · Documentos/Wiki · Formulários · Automações (motor gatilho→condição→ação) · Importação do ClickUp e do Trello ([docs/IMPORTACAO.md](docs/IMPORTACAO.md)).
 
 ## Estrutura
 

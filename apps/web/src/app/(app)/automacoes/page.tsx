@@ -15,8 +15,6 @@ const TRIGGER_LABELS: Record<string, string> = {
   TASK_DUE_SOON: "Tarefa vencendo",
   TASK_OVERDUE: "Tarefa vencida",
   TASK_STATUS_CHANGED: "Status de tarefa alterado",
-  CREATIVE_REQUEST_CREATED: "Criativo solicitado",
-  CREATIVE_STATUS_CHANGED: "Status de criativo alterado",
   RECEIVABLE_OVERDUE: "Cobrança vencida",
   CREDENTIAL_CREATED: "Credencial criada",
   FORM_SUBMITTED: "Formulário enviado",

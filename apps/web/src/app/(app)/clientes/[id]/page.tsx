@@ -12,7 +12,6 @@ import {
   ASSET_TYPE_LABEL,
   BUSINESS_MODEL_LABEL,
   CLIENT_STATUS_META,
-  CREATIVE_STATUS_META,
   formatDate,
   formatMoney,
   HEALTH_META,
@@ -20,11 +19,11 @@ import {
   TASK_STATUS_META,
   TASK_TYPE_META,
 } from "@/lib/labels";
+import { getActiveServices } from "@/lib/settings";
 import { getClientTimeline } from "@/lib/timeline";
 import { Tabs } from "@/components/ui/overlay";
 import {
   Alert,
-  Badge,
   Button,
   EmptyState,
   StatusBadge,
@@ -60,7 +59,6 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       contacts: true,
       meetings: { orderBy: (m, { desc }) => [desc(m.meetingDate)] },
       tasks: { orderBy: (t, { desc }) => [desc(t.updatedAt)], with: { assignedTo: true } },
-      creativeRequests: { orderBy: (c, { desc }) => [desc(c.createdAt)] },
       digitalAssets: {
         orderBy: (a, { asc }) => [asc(a.title)],
         with: { group: true, assignedTo: true },
@@ -74,7 +72,10 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   const canCreateAsset = hasPermission(session, "digital_assets.create");
   const canUpdate = hasPermission(session, "clients.update");
   const canMoveStatus = hasPermission(session, "clients.moveStatus");
-  const timeline = await getClientTimeline(client.id);
+  const [timeline, services] = await Promise.all([
+    getClientTimeline(client.id),
+    getActiveServices(),
+  ]);
 
   // Pendências (regras de negócio)
   const pendencias: string[] = [];
@@ -146,7 +147,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
           <h3 className="mb-2 text-sm font-semibold text-zinc-300">Resumo operacional</h3>
           <InfoRow label="Etapa do pipeline"><StatusBadge value={client.pipelineStage} meta={PIPELINE_STAGE_META} /></InfoRow>
           <InfoRow label="Tarefas em aberto">{openTasks.length}</InfoRow>
-          <InfoRow label="Plataformas">{client.operationalProfile?.platforms.join(", ") || "—"}</InfoRow>
+          <InfoRow label="Serviços utilizados">{client.operationalProfile?.platforms.join(", ") || "—"}</InfoRow>
           <InfoRow label="Verba diária média">{client.operationalProfile?.averageDailyBudget != null ? formatMoney(client.operationalProfile.averageDailyBudget) : "—"}</InfoRow>
         </div>
         {client.notes && (
@@ -160,7 +161,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   );
 
   const operacao = canUpdate ? (
-    <OperationalProfileForm clientId={client.id} profile={client.operationalProfile ?? null} />
+    <OperationalProfileForm clientId={client.id} profile={client.operationalProfile ?? null} services={services} />
   ) : (
     <EmptyState icon="🔒" title="Sem permissão para editar o perfil operacional" />
   );
@@ -198,28 +199,6 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       icon="☑"
       title="Nenhuma tarefa para este cliente"
       action={<Button size="sm" href={`/tarefas?nova=1&cliente=${client.id}`}>+ Nova tarefa</Button>}
-    />
-  );
-
-  const criativos = client.creativeRequests.length ? (
-    <Table
-      head={<><Th>Criativo</Th><Th>Status</Th><Th>Prazo</Th></>}
-    >
-      {client.creativeRequests.map((c) => (
-        <tr key={c.id} className="hover:bg-zinc-900/60">
-          <Td>
-            <Link href={`/criativos/${c.id}`} className="text-zinc-100 hover:text-emerald-300">{c.title}</Link>
-          </Td>
-          <Td><StatusBadge value={c.status} meta={CREATIVE_STATUS_META} /></Td>
-          <Td className="text-zinc-400">{formatDate(c.dueDate)}</Td>
-        </tr>
-      ))}
-    </Table>
-  ) : (
-    <EmptyState
-      icon="🎨"
-      title="Nenhum criativo solicitado"
-      action={<Button size="sm" href={`/criativos?novo=1&cliente=${client.id}`}>+ Solicitar criativo</Button>}
     />
   );
 
@@ -369,16 +348,12 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
           { key: "visao", label: "Visão Geral", content: visaoGeral },
           { key: "operacao", label: "Operação", content: operacao },
           { key: "tarefas", label: "Tarefas", content: tarefas, badge: openTasks.length },
-          { key: "criativos", label: "Criativos", content: criativos, badge: client.creativeRequests.filter((c) => !["PUBLICADO", "CANCELADO", "APROVADO"].includes(c.status)).length },
           { key: "ativos", label: "Ativos Digitais", content: ativosDigitais, badge: client.digitalAssets.length },
           { key: "documentos", label: "Documentos", content: documentos },
           { key: "reunioes", label: "Reuniões", content: reunioes },
           { key: "historico", label: "Histórico", content: historico },
         ]}
       />
-      <div className="mt-6 text-xs text-zinc-600">
-        <Badge tone="zinc">ID {client.id.slice(0, 8)}</Badge>
-      </div>
     </div>
   );
 }

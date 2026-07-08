@@ -20,14 +20,16 @@ describe("matriz de permissões", () => {
     expect(roleHasPermission(["ADMIN"], "digital_assets.view_audit_logs")).toBe(true);
   });
 
-  it("aprovação de acessos (team.approve) é só de OWNER/ADMIN", () => {
+  it("módulo Equipe é exclusivo de administradores (OWNER/ADMIN)", () => {
+    expect(roleHasPermission(["OWNER"], "team.view")).toBe(true);
+    expect(roleHasPermission(["ADMIN"], "team.view")).toBe(true);
     expect(roleHasPermission(["OWNER"], "team.approve")).toBe(true);
     expect(roleHasPermission(["ADMIN"], "team.approve")).toBe(true);
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "team.approve")).toBe(false);
-    expect(roleHasPermission(["GESTOR_TRAFEGO"], "team.approve")).toBe(false);
-    // gestor operacional ainda gerencia equipe, mas não aprova acessos
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "team.view")).toBe(true);
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "team.create")).toBe(true);
+    for (const role of ["GESTOR_OPERACIONAL", "GESTOR_TRAFEGO", "SOCIAL_MEDIA", "DESIGNER", "COMERCIAL"] as const) {
+      expect(roleHasPermission([role], "team.view")).toBe(false);
+      expect(roleHasPermission([role], "team.create")).toBe(false);
+      expect(roleHasPermission([role], "team.approve")).toBe(false);
+    }
   });
 
   it("não existe mais nenhuma permissão financeira nem papel FINANCEIRO", () => {

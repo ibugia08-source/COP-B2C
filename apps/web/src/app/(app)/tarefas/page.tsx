@@ -125,6 +125,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                 users={allUsers}
                 clients={allClients}
                 defaultClientId={str(sp.cliente)}
+                defaultType={str(sp.tipo)}
                 digitalAssetId={str(sp.ativo)}
                 autoOpen={str(sp.nova) === "1"}
               />

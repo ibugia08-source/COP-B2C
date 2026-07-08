@@ -17,7 +17,6 @@ import { applyTemplateToClient } from "@/lib/templates";
 export type AutomationPayload = {
   clientId?: string;
   taskId?: string;
-  creativeId?: string;
   receivableId?: string;
   formSlug?: string;
   assigneeId?: string | null;
@@ -56,37 +55,6 @@ async function runAction(
       return { ...result };
     }
     case "CREATE_TASK": {
-      // Caso especial: tarefas de copy/design a partir de uma solicitação de criativo
-      if (p.fromCreative && payload.creativeId) {
-        const { creativeRequests } = await import("@/db/schema");
-        const creative = await db.query.creativeRequests.findFirst({
-          where: eq(creativeRequests.id, payload.creativeId),
-        });
-        if (!creative) throw new Error("Criativo não encontrado");
-        const created: string[] = [];
-        const specs = [
-          { role: "copy", userId: creative.copyResponsibleId, title: `Copy — ${creative.title}` },
-          { role: "design", userId: creative.assignedToId, title: `Design/edição — ${creative.title}` },
-        ];
-        for (const spec of specs) {
-          const [task] = await db
-            .insert(tasks)
-            .values({
-              title: spec.title,
-              description: creative.briefing ?? null,
-              type: "CRIATIVO",
-              status: "A_FAZER",
-              priority: "MEDIA",
-              clientId: creative.clientId,
-              assignedToId: spec.userId,
-              createdById: payload.actorId ?? null,
-              dueDate: creative.dueDate,
-            })
-            .returning();
-          created.push(task.id);
-        }
-        return { taskIds: created };
-      }
       const [task] = await db
         .insert(tasks)
         .values({

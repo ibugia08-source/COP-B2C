@@ -1,11 +1,12 @@
 import { db } from "./index";
 import {
+  agencyServices,
+  appSettings,
   automationRules,
   clientHealthLogs,
   clientMeetings,
   clientOperationalProfiles,
   clients,
-  creativeRequests,
   digitalAssetComments,
   digitalAssetGroups,
   digitalAssetSecrets,
@@ -115,7 +116,6 @@ async function seed() {
   const tiago = uid("trafego1@b2cgestao.com.br");
   const marina = uid("trafego2@b2cgestao.com.br");
   const sofia = uid("social@b2cgestao.com.br");
-  const diego = uid("designer@b2cgestao.com.br");
   const admin = uid("admin@b2cgestao.com.br");
   const owner = uid("owner@b2cgestao.com.br");
 
@@ -208,7 +208,7 @@ async function seed() {
   await db.insert(clientOperationalProfiles).values([
     {
       clientId: sorriso.id,
-      platforms: ["META_ADS", "GOOGLE_ADS", "CRM"],
+      platforms: ["Meta Ads", "Google Ads", "CRM"],
       averageDailyBudget: 150,
       campaignObjective: "Leads para avaliação odontológica",
       campaignTypes: ["Leads", "Remarketing"],
@@ -220,7 +220,7 @@ async function seed() {
     },
     {
       clientId: modaBella.id,
-      platforms: ["META_ADS", "SOCIAL_MEDIA"],
+      platforms: ["Meta Ads", "Social Media"],
       averageDailyBudget: 80,
       campaignObjective: "Vendas no e-commerce",
       campaignTypes: ["Conversão", "Catálogo"],
@@ -229,7 +229,7 @@ async function seed() {
     },
     {
       clientId: advocacia.id,
-      platforms: ["GOOGLE_ADS", "GMB"],
+      platforms: ["Google Ads", "Google Meu Negócio"],
       averageDailyBudget: 60,
       campaignObjective: "Casos previdenciários",
       campaignTypes: ["Pesquisa"],
@@ -306,27 +306,6 @@ async function seed() {
       { checklistId: cl.id, content: "Registrar retorno ao cliente", order: 3 },
     ]);
   }
-
-  // --- Criativos ---------------------------------------------------------------------
-  await db.insert(creativeRequests).values([
-    {
-      clientId: sorriso.id, title: "Vídeo depoimento lentes", objective: "LEADS", platform: "META_ADS",
-      creativeType: "VIDEO", status: "AGUARDANDO_APROVACAO", requestedById: tiago,
-      copyResponsibleId: sofia, assignedToId: diego, dueDate: new Date("2026-07-10"),
-      briefing: "Depoimento da paciente Maria com antes/depois.", offer: "Avaliação gratuita", cta: "Agende sua avaliação",
-    },
-    {
-      clientId: modaBella.id, title: "Carrossel coleção inverno", objective: "VENDAS", platform: "INSTAGRAM",
-      creativeType: "CARROSSEL", status: "EM_DESIGN", requestedById: marina,
-      copyResponsibleId: sofia, assignedToId: diego, dueDate: new Date("2026-07-05"),
-      briefing: "5 looks da coleção com preço.", offer: "20% off primeira compra", cta: "Compre agora",
-    },
-    {
-      clientId: academia.id, title: "Reels desafio 30 dias", objective: "ENGAJAMENTO", platform: "INSTAGRAM",
-      creativeType: "REELS", status: "SOLICITADO", requestedById: tiago, dueDate: new Date("2026-07-15"),
-      briefing: "Chamada para o desafio de 30 dias com resultado de alunos.",
-    },
-  ]);
 
   // --- Banco de Ativos Digitais ------------------------------------------------
   const sec = (v: string) => ({ encryptedValue: encryptSecret(v), maskedPreview: maskSecret(v) });
@@ -685,12 +664,6 @@ async function seed() {
         scope: "OPERACIONAL", createdById: owner,
       },
       {
-        name: "Criativo solicitado → tarefas para copy/design",
-        triggerType: "CREATIVE_REQUEST_CREATED",
-        actions: [{ type: "CREATE_TASK", params: { fromCreative: true } }],
-        scope: "GLOBAL", createdById: owner,
-      },
-      {
         name: "Ativo bloqueado → alerta operacional",
         triggerType: "ASSET_STATUS_CHANGED",
         conditions: { toStatus: "BLOQUEADA" },
@@ -705,6 +678,20 @@ async function seed() {
         scope: "GLOBAL", createdById: owner,
       },
     ])
+    .onConflictDoNothing();
+
+  // --- Serviços da agência + feature flags -----------------------------------
+  await db
+    .insert(agencyServices)
+    .values(
+      ["Meta Ads", "Google Ads", "Social Media", "CRM", "IA", "SEO", "Google Meu Negócio"].map(
+        (name, i) => ({ name, order: i }),
+      ),
+    )
+    .onConflictDoNothing();
+  await db
+    .insert(appSettings)
+    .values({ key: "feature_flags", value: { copiloto: false, google_drive: false, google_meet: false } })
     .onConflictDoNothing();
 
   // --- Formulários -----------------------------------------------------------------------

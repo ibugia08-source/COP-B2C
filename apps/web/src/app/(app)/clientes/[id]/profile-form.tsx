@@ -5,44 +5,41 @@ import type { ClientOperationalProfile } from "@/db/schema";
 import { Alert, Button, Field, Input, Textarea } from "@/components/ui/primitives";
 import { saveOperationalProfile, type ActionState } from "../actions";
 
-const PLATFORMS = ["META_ADS", "GOOGLE_ADS", "SOCIAL_MEDIA", "CRM", "IA", "SEO", "GMB"] as const;
-const PLATFORM_LABELS: Record<string, string> = {
-  META_ADS: "Meta Ads",
-  GOOGLE_ADS: "Google Ads",
-  SOCIAL_MEDIA: "Social Media",
-  CRM: "CRM",
-  IA: "IA",
-  SEO: "SEO",
-  GMB: "Google Meu Negócio",
-};
-
 export function OperationalProfileForm({
   clientId,
   profile,
+  services,
 }: {
   clientId: string;
   profile: ClientOperationalProfile | null;
+  // serviços ativos do cadastro configurável da agência (Configurações → Serviços)
+  services: { id: string; name: string }[];
 }) {
   const action = saveOperationalProfile.bind(null, clientId);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, {});
 
   return (
     <form action={formAction} className="max-w-3xl space-y-4">
-      <Field label="Plataformas utilizadas">
+      <Field label="Serviços utilizados">
         <div className="flex flex-wrap gap-2">
-          {PLATFORMS.map((p) => (
+          {services.length === 0 && (
+            <p className="text-xs text-zinc-500">
+              Nenhum serviço cadastrado — peça a um administrador para configurar em Configurações → Serviços.
+            </p>
+          )}
+          {services.map((s) => (
             <label
-              key={p}
+              key={s.id}
               className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-300 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-300"
             >
               <input
                 type="checkbox"
                 name="platforms"
-                value={p}
-                defaultChecked={profile?.platforms.includes(p)}
+                value={s.name}
+                defaultChecked={profile?.platforms.includes(s.name)}
                 className="accent-emerald-500"
               />
-              {PLATFORM_LABELS[p]}
+              {s.name}
             </label>
           ))}
         </div>

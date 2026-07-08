@@ -15,7 +15,6 @@ const NAV: NavDef[] = [
   { href: "/clientes", label: "Clientes", icon: "👥", permission: "clients.view" },
   { href: "/operacao", label: "Operação", icon: "🔄", permission: "clients.view" },
   { href: "/tarefas", label: "Tarefas", icon: "☑", permission: "tasks.view" },
-  { href: "/criativos", label: "Criativos", icon: "🎨", permission: "tasks.view" },
   { href: "/equipe", label: "Equipe", icon: "🧑‍💼", permission: "team.view" },
   { href: "/metas", label: "Metas", icon: "🎯", permission: "goals.view" },
   { href: "/ativos", label: "Banco de Ativos Digitais", icon: "🗄️", permission: "digital_assets.view" },
@@ -28,7 +27,7 @@ const NAV: NavDef[] = [
 const CREATE_OPTIONS: { label: string; href: string; permission?: PermissionKey }[] = [
   { label: "Novo cliente", href: "/clientes/novo", permission: "clients.create" },
   { label: "Nova tarefa", href: "/tarefas?nova=1", permission: "tasks.create" },
-  { label: "Nova solicitação de criativo", href: "/criativos?novo=1", permission: "tasks.create" },
+  { label: "Nova tarefa de criativo", href: "/tarefas?nova=1&tipo=CRIATIVO", permission: "tasks.create" },
   { label: "Novo ativo digital", href: "/ativos?novo=1", permission: "digital_assets.create" },
   { label: "Novo documento", href: "/documentos?novo=1" },
 ];

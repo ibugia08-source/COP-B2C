@@ -90,8 +90,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard label="Tarefas atrasadas" value={data.tasks.overdue} tone="text-red-400" href="/tarefas?visao=atrasadas" />
           <StatCard label="Tarefas sem responsável" value={data.tasks.unassigned} tone="text-amber-400" href="/tarefas?visao=sem-responsavel" />
-          <StatCard label="Criativos p/ aprovação" value={data.creatives.waitingApproval} tone="text-amber-400" href="/criativos?visao=aprovacao" />
-          <StatCard label="Criativos atrasados" value={data.creatives.overdue} tone="text-red-400" href="/criativos?visao=atrasados" />
+          <StatCard label="Tarefas de criativo abertas" value={data.creatives.open} tone="text-amber-400" href="/tarefas?tipo=CRIATIVO&status=__abertas__" />
+          <StatCard label="Criativos atrasados" value={data.creatives.overdue} tone="text-red-400" href="/tarefas?tipo=CRIATIVO&prazo=atrasadas" />
         </div>
       )}
 

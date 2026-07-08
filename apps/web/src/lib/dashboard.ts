@@ -2,7 +2,6 @@ import { and, eq, gte, inArray, isNull, not, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   clients,
-  creativeRequests,
   digitalAssetAuditLogs,
   digitalAssets,
   tasks,
@@ -16,7 +15,6 @@ export type DashboardFilters = {
 };
 
 const OPEN_TASK = ["CONCLUIDA", "CANCELADA"] as const;
-const OPEN_CREATIVE = ["SOLICITADO", "EM_ROTEIRO", "EM_DESIGN", "EM_EDICAO", "AGUARDANDO_APROVACAO"];
 
 export async function getDashboardData(filters: DashboardFilters) {
   const now = new Date();
@@ -33,7 +31,7 @@ export async function getDashboardData(filters: DashboardFilters) {
   const clientIds = allClients.map((c) => c.id);
   const filtered = !!(filters.empresa || filters.gestor || filters.nicho);
 
-  const [openTasks, allUsers, creatives, assets, recentReveals] = await Promise.all([
+  const [openTasks, allUsers, assets, recentReveals] = await Promise.all([
     db.query.tasks.findMany({
       where: and(
         not(inArray(tasks.status, [...OPEN_TASK])),
@@ -43,10 +41,6 @@ export async function getDashboardData(filters: DashboardFilters) {
       with: { assignedTo: true },
     }),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
-    db.query.creativeRequests.findMany({
-      where: filtered && clientIds.length ? inArray(creativeRequests.clientId, clientIds) : undefined,
-      with: { assignedTo: true, copyResponsible: true },
-    }),
     db.query.digitalAssets.findMany({
       where: and(
         isNull(digitalAssets.archivedAt),
@@ -76,7 +70,8 @@ export async function getDashboardData(filters: DashboardFilters) {
 
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const overdueTasks = openTasks.filter((t) => t.dueDate && t.dueDate < now);
-  const openCreatives = creatives.filter((c) => OPEN_CREATIVE.includes(c.status));
+  // criativo agora é tipo de tarefa
+  const creativeTasks = openTasks.filter((t) => t.type === "CRIATIVO");
 
   const workload = allUsers
     .map((u) => {
@@ -87,7 +82,7 @@ export async function getDashboardData(filters: DashboardFilters) {
         overdue: userTasks.filter((t) => t.dueDate && t.dueDate < now).length,
         urgent: userTasks.filter((t) => t.priority === "URGENTE").length,
         clients: allClients.filter((c) => c.trafficManager1Id === u.id || c.mainResponsibleId === u.id).length,
-        creatives: openCreatives.filter((c) => c.assignedToId === u.id || c.copyResponsibleId === u.id).length,
+        creatives: creativeTasks.filter((t) => t.assignedToId === u.id).length,
         assets: assets.filter((a) => a.assignedToId === u.id || a.ownerUserId === u.id).length,
       };
     })
@@ -112,8 +107,8 @@ export async function getDashboardData(filters: DashboardFilters) {
       byStatus: groupCount(openTasks.map((t) => t.status)),
     },
     creatives: {
-      waitingApproval: creatives.filter((c) => c.status === "AGUARDANDO_APROVACAO").length,
-      overdue: openCreatives.filter((c) => c.dueDate && c.dueDate < now).length,
+      open: creativeTasks.length,
+      overdue: creativeTasks.filter((t) => t.dueDate && t.dueDate < now).length,
     },
     assets: {
       total: assets.length,

@@ -63,8 +63,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, PermissionKey[]> = {
   OWNER: ALL,
   // Quase total: não altera configurações críticas
   ADMIN: ALL.filter((p) => p !== "settings.update"),
-  // Clientes, operação, tarefas, equipe e ativos — mas NÃO revela segredos
-  // (revelação exige permissão explícita concedida por OWNER/ADMIN)
+  // Clientes, operação, tarefas e ativos — SEM módulo Equipe (só admins) e
+  // sem revelar segredos (exige permissão explícita concedida por OWNER/ADMIN)
   GESTOR_OPERACIONAL: [
     "clients.view",
     "clients.create",
@@ -76,9 +76,6 @@ export const ROLE_PERMISSIONS: Record<RoleName, PermissionKey[]> = {
     "tasks.delete",
     "tasks.assign",
     "tasks.complete",
-    "team.view",
-    "team.create",
-    "team.update",
     "goals.view",
     "goals.create",
     "goals.update",

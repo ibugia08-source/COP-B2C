@@ -13,6 +13,13 @@ export default async function ConfiguracoesPage() {
       <PageHeader title="Configurações" description="Parâmetros do sistema, permissões e ferramentas administrativas." />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link href="/configuracoes/servicos" className="block">
+          <Card className="p-5 transition hover:border-zinc-600">
+            <p className="text-2xl">🧩</p>
+            <h3 className="mt-2 font-semibold">Serviços & Módulos</h3>
+            <p className="mt-1 text-sm text-zinc-400">Serviços da agência e módulos opcionais (Co-piloto, Google).</p>
+          </Card>
+        </Link>
         <Link href="/configuracoes/importacao" className="block">
           <Card className="p-5 transition hover:border-zinc-600">
             <p className="text-2xl">📥</p>

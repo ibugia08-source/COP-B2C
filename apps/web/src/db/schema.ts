@@ -256,8 +256,6 @@ export const AUTOMATION_TRIGGERS = [
   "TASK_DUE_SOON",
   "TASK_OVERDUE",
   "TASK_STATUS_CHANGED",
-  "CREATIVE_REQUEST_CREATED",
-  "CREATIVE_STATUS_CHANGED",
   "ASSET_CREATED",
   "ASSET_STATUS_CHANGED",
   "FORM_SUBMITTED",
@@ -679,7 +677,9 @@ export const taskTimeEntries = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Criativos
+// Criativos — DEPRECATED: o módulo foi absorvido por Tarefas (tipo CRIATIVO).
+// A tabela permanece apenas para preservar dados históricos em produção;
+// nenhuma tela ou action escreve/lê daqui. Remover em uma limpeza futura.
 // ---------------------------------------------------------------------------
 
 export const creativeRequests = pgTable(
@@ -1117,6 +1117,32 @@ export const clientMeetings = pgTable(
 // Importação (ClickUp → COP)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Configurações do sistema
+// ---------------------------------------------------------------------------
+
+// Serviços prestados pela agência — cadastro configurável pelo Admin.
+// Usado na ficha do cliente como "serviços utilizados" (substitui o antigo
+// enum fixo de plataformas).
+export const agencyServices = pgTable("agency_services", {
+  id: id(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  order: integer("order").notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+// Chave-valor de configurações e feature flags (ex.: copiloto, google_drive,
+// google_meet, opções de filtros do dashboard). Só OWNER/ADMIN alteram.
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedById: text("updated_by_id").references(() => users.id),
+  updatedAt: updatedAt(),
+});
+
 export const importLogs = pgTable("import_logs", {
   id: id(),
   source: text("source").notNull().default("CLICKUP"),
@@ -1428,6 +1454,8 @@ export type FormSubmission = typeof formSubmissions.$inferSelect;
 export type TaskTemplate = typeof taskTemplates.$inferSelect;
 export type ClientMeeting = typeof clientMeetings.$inferSelect;
 export type ImportLog = typeof importLogs.$inferSelect;
+export type AgencyService = typeof agencyServices.$inferSelect;
+export type AppSetting = typeof appSettings.$inferSelect;
 
 export type RoleName = (typeof ROLE_NAMES)[number];
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];

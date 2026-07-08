@@ -1255,6 +1255,179 @@ export const configOptionsRelations = relations(configOptions, ({ one }) => ({
   }),
 }));
 
+
+// ---------------------------------------------------------------------------
+// Co-piloto do Gestor — sugestões com aprovação obrigatória + escuta WhatsApp
+// (integração futura, por usuário, com consentimento — nunca automação oculta).
+// Nenhuma ação é executada em nome do gestor sem aprovação explícita.
+// ---------------------------------------------------------------------------
+
+export const COPILOT_SUGGESTION_TYPES = [
+  "ENTRAR_EM_CONTATO_COM_CLIENTE",
+  "REVISAR_CLIENTE_CRITICO",
+  "COBRAR_RESPOSTA_INTERNA",
+  "PRIORIZAR_TAREFA",
+  "CRIAR_TAREFA",
+  "ALTERAR_STATUS_CLIENTE",
+  "ALTERAR_SAUDE_CLIENTE",
+  "GERAR_RESUMO",
+  "PREPARAR_RELATORIO",
+  "RESPONDER_DUVIDA",
+  "QUEBRAR_OBJECAO",
+  "ACOMPANHAR_GRUPO",
+  "OUTRO",
+] as const;
+export const COPILOT_SUGGESTION_STATUSES = [
+  "PENDENTE",
+  "APROVADA",
+  "REJEITADA",
+  "EXECUTADA",
+  "CANCELADA",
+] as const;
+// REGRAS = motor determinístico interno; IA = modelo de linguagem (fase futura)
+export const COPILOT_SOURCES = ["REGRAS", "IA", "MANUAL"] as const;
+
+export const copilotSuggestions = pgTable(
+  "copilot_suggestions",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    taskId: text("task_id"),
+    digitalAssetId: text("digital_asset_id"),
+    type: text("type", { enum: COPILOT_SUGGESTION_TYPES }).notNull().default("OUTRO"),
+    title: text("title").notNull(),
+    description: text("description"),
+    suggestedAction: text("suggested_action").notNull(),
+    priority: text("priority", { enum: TASK_PRIORITIES }).notNull().default("MEDIA"),
+    status: text("status", { enum: COPILOT_SUGGESTION_STATUSES }).notNull().default("PENDENTE"),
+    source: text("source", { enum: COPILOT_SOURCES }).notNull().default("REGRAS"),
+    // resumo objetivo da justificativa — nunca chain-of-thought
+    aiReasoningSummary: text("ai_reasoning_summary"),
+    // chave de idempotência (type:entidade) — evita sugerir a mesma coisa 2x
+    dedupeKey: text("dedupe_key"),
+    resolvedById: text("resolved_by_id").references(() => users.id),
+    resolvedAt: timestamp("resolved_at", { mode: "date" }),
+    executedTaskId: text("executed_task_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("copilot_suggestions_user_idx").on(t.userId, t.status),
+    index("copilot_suggestions_dedupe_idx").on(t.dedupeKey),
+  ],
+);
+
+export const WHATSAPP_STATUSES = [
+  "NAO_CONECTADO",
+  "CONECTANDO",
+  "CONECTADO",
+  "ERRO",
+  "DESCONECTADO",
+] as const;
+export const CONVERSATION_TYPES = ["GRUPO", "CONTATO"] as const;
+export const CONVERSATION_SENTIMENTS = ["POSITIVO", "NEUTRO", "NEGATIVO"] as const;
+
+// Conexão WhatsApp por usuário — apenas via provedor oficial/autorizado (fase
+// futura). Sem scraping, sem burlar termos de plataforma. Conexão é voluntária.
+export const whatsappConnections = pgTable("whatsapp_connections", {
+  id: id(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("NAO_DEFINIDO"), // ex.: cloud_api
+  phoneNumber: text("phone_number"),
+  status: text("status", { enum: WHATSAPP_STATUSES }).notNull().default("NAO_CONECTADO"),
+  connectedAt: timestamp("connected_at", { mode: "date" }),
+  disconnectedAt: timestamp("disconnected_at", { mode: "date" }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+// Grupos/contatos que o usuário ESCOLHEU monitorar (consentimento LGPD).
+// connectionId nulo = conversa de simulação manual (sem integração).
+export const monitoredConversations = pgTable(
+  "monitored_conversations",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    connectionId: text("connection_id").references(() => whatsappConnections.id, {
+      onDelete: "set null",
+    }),
+    type: text("type", { enum: CONVERSATION_TYPES }).notNull().default("GRUPO"),
+    externalConversationId: text("external_conversation_id"),
+    displayName: text("display_name").notNull(),
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("monitored_conversations_user_idx").on(t.userId)],
+);
+
+// Resumos de conversas — apenas síntese objetiva (pontos, objeções, dúvidas,
+// pendências). Nunca armazenar credenciais nem transcrição integral sensível.
+export const conversationSummaries = pgTable(
+  "conversation_summaries",
+  {
+    id: id(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => monitoredConversations.id, { onDelete: "cascade" }),
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    summary: text("summary").notNull(),
+    keyPoints: jsonb("key_points").$type<string[]>().notNull().default([]),
+    objections: jsonb("objections").$type<string[]>().notNull().default([]),
+    doubts: jsonb("doubts").$type<string[]>().notNull().default([]),
+    pendingActions: jsonb("pending_actions").$type<string[]>().notNull().default([]),
+    sentiment: text("sentiment", { enum: CONVERSATION_SENTIMENTS }).notNull().default("NEUTRO"),
+    priority: text("priority", { enum: TASK_PRIORITIES }).notNull().default("MEDIA"),
+    source: text("source").notNull().default("SIMULACAO"), // SIMULACAO | INTEGRACAO
+    createdById: text("created_by_id").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("conversation_summaries_conv_idx").on(t.conversationId)],
+);
+
+export const copilotSuggestionsRelations = relations(copilotSuggestions, ({ one }) => ({
+  user: one(users, { fields: [copilotSuggestions.userId], references: [users.id] }),
+  client: one(clients, { fields: [copilotSuggestions.clientId], references: [clients.id] }),
+  resolvedBy: one(users, {
+    fields: [copilotSuggestions.resolvedById],
+    references: [users.id],
+    relationName: "copilotResolvedBy",
+  }),
+}));
+
+export const whatsappConnectionsRelations = relations(whatsappConnections, ({ one, many }) => ({
+  user: one(users, { fields: [whatsappConnections.userId], references: [users.id] }),
+  conversations: many(monitoredConversations),
+}));
+
+export const monitoredConversationsRelations = relations(monitoredConversations, ({ one, many }) => ({
+  user: one(users, { fields: [monitoredConversations.userId], references: [users.id] }),
+  connection: one(whatsappConnections, {
+    fields: [monitoredConversations.connectionId],
+    references: [whatsappConnections.id],
+  }),
+  client: one(clients, { fields: [monitoredConversations.clientId], references: [clients.id] }),
+  summaries: many(conversationSummaries),
+}));
+
+export const conversationSummariesRelations = relations(conversationSummaries, ({ one }) => ({
+  conversation: one(monitoredConversations, {
+    fields: [conversationSummaries.conversationId],
+    references: [monitoredConversations.id],
+  }),
+  client: one(clients, { fields: [conversationSummaries.clientId], references: [clients.id] }),
+}));
+
 // Dashboard personalizável por usuário: quais métricas aparecem, em que ordem,
 // layout (nº de colunas), filtros padrão e alertas visíveis.
 export const userDashboardConfigs = pgTable("user_dashboard_configs", {
@@ -1591,6 +1764,12 @@ export type DigitalAssetComment = typeof digitalAssetComments.$inferSelect;
 export type DigitalAssetStatusHistoryEntry = typeof digitalAssetStatusHistory.$inferSelect;
 export type DigitalAssetAuditLog = typeof digitalAssetAuditLogs.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
+export type CopilotSuggestion = typeof copilotSuggestions.$inferSelect;
+export type CopilotSuggestionType = (typeof COPILOT_SUGGESTION_TYPES)[number];
+export type CopilotSuggestionStatus = (typeof COPILOT_SUGGESTION_STATUSES)[number];
+export type WhatsappConnection = typeof whatsappConnections.$inferSelect;
+export type MonitoredConversation = typeof monitoredConversations.$inferSelect;
+export type ConversationSummary = typeof conversationSummaries.$inferSelect;
 export type GoalTarget = typeof goalTargets.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type ActivityLog = typeof activityLogs.$inferSelect;

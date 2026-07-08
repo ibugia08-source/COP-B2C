@@ -12,6 +12,7 @@ type NavDef = NavItem & { permission?: PermissionKey };
 
 const NAV: NavDef[] = [
   { href: "/", label: "Dashboard", icon: "▦" },
+  { href: "/copiloto", label: "Co-piloto", icon: "🧭", permission: "tasks.view" },
   { href: "/clientes", label: "Clientes", icon: "👥", permission: "clients.view" },
   { href: "/operacao", label: "Operação", icon: "🔄", permission: "clients.view" },
   { href: "/tarefas", label: "Tarefas", icon: "☑", permission: "tasks.view" },

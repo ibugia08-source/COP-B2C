@@ -257,8 +257,18 @@ export const DOCUMENT_TYPES = [
   "BRIEFING",
   "RELATORIO",
   "PLAYBOOK",
+  "PDF",
+  "DOCX",
+  "GOOGLE_DOC",
+  "GOOGLE_SHEET",
+  "GOOGLE_SLIDES",
+  "DRIVE_FOLDER",
+  "LINK_EXTERNO",
+  "IMAGEM",
   "OUTRO",
 ] as const;
+// Origem do documento: markdown interno, upload de arquivo, Google Drive, link externo
+export const DOCUMENT_SOURCES = ["INTERNAL", "UPLOAD", "GOOGLE_DRIVE", "EXTERNAL_LINK"] as const;
 export const TEMPLATE_ROLES = [
   "GESTOR",
   "ESTRATEGISTA",
@@ -955,11 +965,22 @@ export const documents = pgTable(
   {
     id: id(),
     title: text("title").notNull(),
-    content: text("content"), // markdown
+    description: text("description"),
+    content: text("content"), // markdown (origem INTERNAL)
     type: text("type", { enum: DOCUMENT_TYPES }).notNull().default("WIKI"),
+    sourceType: text("source_type", { enum: DOCUMENT_SOURCES }).notNull().default("INTERNAL"),
+    // Arquivo enviado (UPLOAD) ou link externo (EXTERNAL_LINK)
+    fileUrl: text("file_url"),
+    storagePath: text("storage_path"), // caminho interno do arquivo enviado
+    mimeType: text("mime_type"),
+    // Google Drive (GOOGLE_DRIVE) — apenas metadados/link, nunca o conteúdo
+    googleDriveFileId: text("google_drive_file_id"),
+    googleDriveUrl: text("google_drive_url"),
     category: text("category"), // ex.: estrategia, funil, processo, wiki
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
     taskId: text("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    // vínculo opcional a um ativo digital (sem FK no banco, igual a tasks.digitalAssetId)
+    digitalAssetId: text("digital_asset_id"),
     isArchived: boolean("is_archived").notNull().default(false),
     visibleToRoles: jsonb("visible_to_roles")
       .$type<string[]>()
@@ -1355,6 +1376,7 @@ export const creativeRequestsRelations = relations(creativeRequests, ({ one }) =
 export const documentsRelations = relations(documents, ({ one }) => ({
   client: one(clients, { fields: [documents.clientId], references: [clients.id] }),
   task: one(tasks, { fields: [documents.taskId], references: [tasks.id] }),
+  digitalAsset: one(digitalAssets, { fields: [documents.digitalAssetId], references: [digitalAssets.id] }),
   createdBy: one(users, { fields: [documents.createdById], references: [users.id] }),
 }));
 

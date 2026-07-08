@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/primitives";
 import { ClientQuickActions } from "./quick-actions";
 import { OperationalProfileForm } from "./profile-form";
+import { DOC_SOURCE_LABELS, DOC_TYPE_LABELS } from "../../documentos/ui";
 
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -299,16 +300,29 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
 
   const documentos = client.documents.length ? (
     <div className="space-y-2">
-      {client.documents.map((d) => (
-        <Link
-          key={d.id}
-          href={`/documentos/${d.id}`}
-          className="block rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 transition hover:border-zinc-600"
-        >
-          <p className="text-sm font-medium">{d.title}</p>
-          <p className="text-xs text-zinc-500">{d.type} · atualizado em {formatDate(d.updatedAt)}</p>
-        </Link>
-      ))}
+      {canCreateTask && (
+        <div className="mb-1">
+          <Button size="sm" href={`/documentos?novo=1&cliente=${client.id}`}>+ Novo documento para este cliente</Button>
+        </div>
+      )}
+      {client.documents.map((d) => {
+        const isExternal = d.sourceType !== "INTERNAL" && !!d.fileUrl;
+        return (
+          <div key={d.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 transition hover:border-zinc-600">
+            <Link href={`/documentos/${d.id}`} className="min-w-0">
+              <p className="truncate text-sm font-medium text-zinc-100">{d.title}</p>
+              <p className="text-xs text-zinc-500">
+                {DOC_TYPE_LABELS[d.type] ?? d.type} · {DOC_SOURCE_LABELS[d.sourceType] ?? d.sourceType} · {formatDate(d.updatedAt)}
+              </p>
+            </Link>
+            {isExternal && (
+              <a href={d.fileUrl!} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-emerald-400 hover:underline">
+                abrir ↗
+              </a>
+            )}
+          </div>
+        );
+      })}
     </div>
   ) : (
     <EmptyState icon="📄" title="Nenhum documento vinculado" action={<Button size="sm" href={`/documentos?novo=1&cliente=${client.id}`}>+ Novo documento</Button>} />

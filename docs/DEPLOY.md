@@ -84,3 +84,16 @@ gerar links automaticamente no futuro, configure na Vercel e ligue a flag
 
 Sem essas variáveis, o botão "Gerar link Meet" fica desabilitado com aviso — o
 sistema não quebra.
+
+## Integração Google Drive (opcional — documentos)
+
+O módulo Documentos funciona 100% sem o Drive: dá para colar links do Drive/Docs
+manualmente, fazer upload de arquivos e cadastrar links externos. Para habilitar a
+seleção de arquivos direto do Drive (fase futura), use as **mesmas** variáveis
+`GOOGLE_*` acima (a conta robô precisa de acesso ao Drive da agência) e clique em
+"Conectar Google Drive" em **Configurações → Integrações**. Enquanto as credenciais
+não existirem, a área mostra "Não conectado / Configuração pendente" e o botão
+"Selecionar arquivo do Drive" fica desabilitado — nada quebra.
+
+> Uploads de arquivos gravam em disco local; na Vercel (filesystem efêmero) o upload
+> fica bloqueado com aviso — use link externo/Drive ou configure Vercel Blob/S3.

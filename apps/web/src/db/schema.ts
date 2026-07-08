@@ -1143,6 +1143,23 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: updatedAt(),
 });
 
+// Dashboard personalizável por usuário: quais métricas aparecem, em que ordem,
+// layout (nº de colunas), filtros padrão e alertas visíveis.
+export const userDashboardConfigs = pgTable("user_dashboard_configs", {
+  id: id(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  visibleMetrics: jsonb("visible_metrics").$type<string[]>().notNull().default([]),
+  metricOrder: jsonb("metric_order").$type<string[]>().notNull().default([]),
+  layoutConfig: jsonb("layout_config").$type<{ columns?: number }>().notNull().default({}),
+  defaultFilters: jsonb("default_filters").$type<Record<string, string>>().notNull().default({}),
+  visibleAlerts: jsonb("visible_alerts").$type<string[]>().notNull().default([]),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const importLogs = pgTable("import_logs", {
   id: id(),
   source: text("source").notNull().default("CLICKUP"),
@@ -1456,6 +1473,7 @@ export type ClientMeeting = typeof clientMeetings.$inferSelect;
 export type ImportLog = typeof importLogs.$inferSelect;
 export type AgencyService = typeof agencyServices.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
+export type UserDashboardConfig = typeof userDashboardConfigs.$inferSelect;
 
 export type RoleName = (typeof ROLE_NAMES)[number];
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];

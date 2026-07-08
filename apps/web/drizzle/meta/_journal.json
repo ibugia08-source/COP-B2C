@@ -15,6 +15,13 @@
       "when": 1783483509872,
       "tag": "0001_services-settings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783485731889,
+      "tag": "0002_user-dashboard-config",
+      "breakpoints": true
     }
   ]
 }

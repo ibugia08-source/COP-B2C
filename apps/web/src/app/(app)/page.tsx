@@ -3,12 +3,21 @@ import { db } from "@/db";
 import { clients, users } from "@/db/schema";
 import { hasPermission, requireSession } from "@/lib/auth/guard";
 import { getDashboardData, type DashboardFilters } from "@/lib/dashboard";
+import { resolveDashboard } from "@/lib/dashboard-config";
+import { METRIC_BY_KEY, METRIC_CATALOG, type MetricKey } from "@/lib/dashboard-metrics";
 import { ASSET_STATUS_META, CLIENT_STATUS_META, TASK_STATUS_META } from "@/lib/labels";
 import { Card, EmptyState, StatCard, Table, Td, Th } from "@/components/ui/primitives";
+import { DashboardControls } from "./dashboard-controls";
 import { DashboardFilterBar } from "./dashboard-filters";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
+
+const COLS_CLASS: Record<number, string> = {
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-2 sm:grid-cols-3",
+  4: "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4",
+};
 
 function BarList({
   title,
@@ -50,70 +59,86 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const canClients = hasPermission(session, "clients.view");
   const canTasks = hasPermission(session, "tasks.view");
   const canAssets = hasPermission(session, "digital_assets.view");
-  const canAudit = hasPermission(session, "digital_assets.view_audit_logs");
+  const isAdmin = session.roles.some((r) => r === "OWNER" || r === "ADMIN");
 
+  const dash = await resolveDashboard(session);
+
+  // filtros: URL tem prioridade; senão usa os filtros padrão salvos pelo usuário
   const filters: DashboardFilters = {
-    empresa: str(sp.empresa),
-    gestor: str(sp.gestor),
-    nicho: str(sp.nicho),
+    empresa: str(sp.empresa) ?? dash.filters.empresa,
+    gestor: str(sp.gestor) ?? dash.filters.gestor,
+    nicho: str(sp.nicho) ?? dash.filters.nicho,
   };
 
   const [data, allUsers, niches] = await Promise.all([
-    getDashboardData(filters),
+    getDashboardData(filters, session.userId),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)).orderBy(asc(users.name)),
     db.selectDistinct({ niche: clients.niche }).from(clients),
   ]);
 
+  // métricas que o usuário tem permissão de ver (catálogo completo filtrado)
+  const availableMetrics = METRIC_CATALOG.filter(
+    (m) => !m.permission || hasPermission(session, m.permission),
+  ).map((m) => m.key);
+
+  const gridClass = COLS_CLASS[dash.columns] ?? COLS_CLASS[4];
+
   return (
     <div>
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Olá, {session.name.split(" ")[0]}. Visão operacional da agência.
-        </p>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            Olá, {session.name.split(" ")[0]}. Sua visão operacional
+            {dash.personalized ? " personalizada" : ""}.
+          </p>
+        </div>
+        <DashboardControls
+          visible={dash.metrics}
+          columns={dash.columns}
+          available={availableMetrics}
+          isAdmin={isAdmin}
+        />
       </header>
 
       <DashboardFilterBar users={allUsers} niches={niches.map((n) => n.niche).filter((n): n is string => !!n)} />
 
-      {canClients && (
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Total de clientes" value={data.clients.total} href="/clientes" />
-          <StatCard label="Ativos" value={data.clients.ativos} tone="text-emerald-400" href="/clientes?status=ATIVO" />
-          <StatCard label="Críticos" value={data.clients.criticos} tone="text-red-400" href="/clientes?saude=CRITICO" />
-          <StatCard label="Em observação" value={data.clients.observacao} tone="text-amber-400" href="/clientes?saude=OBSERVACAO" />
-          <StatCard label="Perdidos no mês" value={data.clients.perdidosNoMes} tone="text-zinc-400" href="/clientes?status=PERDIDO" />
-          <StatCard label="Ads pausado" value={data.clients.adsPausado} tone="text-amber-400" href="/clientes?ads=PAUSADO" hint="alerta operacional" />
+      {/* Métricas personalizadas do usuário */}
+      {availableMetrics.length === 0 ? (
+        <EmptyState
+          icon="🔒"
+          title="Sem métricas disponíveis"
+          description="Seu papel não tem acesso a métricas do dashboard. Fale com um administrador."
+        />
+      ) : dash.metrics.length === 0 ? (
+        <EmptyState
+          icon="📊"
+          title="Nenhuma métrica selecionada"
+          description="Use “+ Adicionar métrica” para escolher o que acompanhar aqui."
+        />
+      ) : (
+        <div className={`mb-6 grid gap-3 ${gridClass}`}>
+          {dash.metrics.map((key: MetricKey) => {
+            const def = METRIC_BY_KEY[key];
+            return (
+              <StatCard
+                key={key}
+                label={def.label}
+                value={data.metrics[key] ?? 0}
+                tone={def.tone}
+                href={def.href}
+                hint={def.hint}
+              />
+            );
+          })}
         </div>
       )}
 
-      {canTasks && (
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Tarefas atrasadas" value={data.tasks.overdue} tone="text-red-400" href="/tarefas?visao=atrasadas" />
-          <StatCard label="Tarefas sem responsável" value={data.tasks.unassigned} tone="text-amber-400" href="/tarefas?visao=sem-responsavel" />
-          <StatCard label="Tarefas de criativo abertas" value={data.creatives.open} tone="text-amber-400" href="/tarefas?tipo=CRIATIVO&status=__abertas__" />
-          <StatCard label="Criativos atrasados" value={data.creatives.overdue} tone="text-red-400" href="/tarefas?tipo=CRIATIVO&prazo=atrasadas" />
-        </div>
-      )}
-
-      {canAssets && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
-          <StatCard label="Ativos digitais" value={data.assets.total} tone="text-sky-400" href="/ativos" />
-          <StatCard label="Bloqueados" value={data.assets.bloqueados} tone="text-red-400" href="/ativos?status=BLOQUEADA" />
-          <StatCard label="Prontos para uso" value={data.assets.prontos} tone="text-emerald-400" href="/ativos?status=PRONTA_PARA_USO" />
-          <StatCard label="Precisam de docs" value={data.assets.precisaDocumentos} tone="text-amber-400" href="/ativos?status=PRECISA_DE_DOCUMENTOS" />
-          <StatCard label="Sendo esquentados" value={data.assets.esquentando} tone="text-amber-400" href="/ativos?status=SENDO_ESQUENTADA" />
-          <StatCard label="Revisões pendentes" value={data.assets.revisaoPendente} tone="text-purple-400" href="/ativos?revisao=pendente" />
-          {canAudit && (
-            <StatCard label="Segredos revelados (7d)" value={data.assets.segredosRevelados7d} tone="text-zinc-300" hint="auditoria" />
-          )}
-        </div>
-      )}
-
+      {/* Gráficos analíticos (permanecem fixos, sem "Clientes por nicho") */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {canClients && (
           <>
             <BarList title="Clientes por status" data={data.clients.byStatus} meta={CLIENT_STATUS_META} />
-            <BarList title="Clientes por nicho" data={data.clients.byNiche} />
             <BarList title="Clientes por gestor" data={data.clients.byGestor} />
           </>
         )}

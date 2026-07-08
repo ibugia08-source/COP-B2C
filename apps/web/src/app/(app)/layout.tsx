@@ -5,7 +5,7 @@ import { notifications } from "@/db/schema";
 import { logout } from "@/lib/auth/actions";
 import { requireSession, sessionPermissions } from "@/lib/auth/guard";
 import type { PermissionKey } from "@/lib/auth/permissions";
-import { AppNav, Breadcrumbs, CreateMenu, GlobalSearch, type NavItem } from "@/components/shell";
+import { AppNav, Breadcrumbs, GlobalSearch, type NavItem } from "@/components/shell";
 import { UserAvatar } from "@/components/ui/primitives";
 
 type NavDef = NavItem & { permission?: PermissionKey };
@@ -24,23 +24,12 @@ const NAV: NavDef[] = [
   { href: "/configuracoes", label: "Configurações", icon: "⚙", permission: "settings.view" },
 ];
 
-const CREATE_OPTIONS: { label: string; href: string; permission?: PermissionKey }[] = [
-  { label: "Novo cliente", href: "/clientes/novo", permission: "clients.create" },
-  { label: "Nova tarefa", href: "/tarefas?nova=1", permission: "tasks.create" },
-  { label: "Nova tarefa de criativo", href: "/tarefas?nova=1&tipo=CRIATIVO", permission: "tasks.create" },
-  { label: "Novo ativo digital", href: "/ativos?novo=1", permission: "digital_assets.create" },
-  { label: "Novo documento", href: "/documentos?novo=1" },
-];
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
   const perms = sessionPermissions(session);
   const visibleNav = NAV.filter((i) => !i.permission || perms.has(i.permission)).map(
     ({ href, label, icon }) => ({ href, label, icon }),
   );
-  const createOptions = CREATE_OPTIONS.filter(
-    (o) => !o.permission || perms.has(o.permission),
-  ).map(({ label, href }) => ({ label, href }));
 
   const [{ n: unread }] = await db
     .select({ n: count() })
@@ -84,7 +73,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Breadcrumbs />
           <div className="flex shrink-0 items-center gap-3">
             <GlobalSearch />
-            <CreateMenu options={createOptions} />
             <Link
               href="/notificacoes"
               className="relative rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"

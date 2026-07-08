@@ -1,11 +1,12 @@
 import { db } from "@/db";
 import type { RoleName } from "@/db/schema";
-import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { hasPermission, requireAdmin } from "@/lib/auth/guard";
 import { PageHeader } from "@/components/ui/primitives";
 import { MemberForm, MemberRow, PendingRow } from "./ui";
 
 export default async function EquipePage() {
-  const session = await requirePermission("team.view");
+  // Módulo Equipe é restrito a OWNER/ADMIN (verificação de papel no servidor).
+  const session = await requireAdmin();
   const canCreate = hasPermission(session, "team.create");
   const canUpdate = hasPermission(session, "team.update");
   const canDeactivate = hasPermission(session, "team.deactivate");

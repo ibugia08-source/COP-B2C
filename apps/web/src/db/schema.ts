@@ -237,9 +237,11 @@ export const GOAL_SCOPES = ["AGENCIA", "GESTOR", "CLIENTE"] as const;
 export const GOAL_STATUSES = [
   "PLANEJADA",
   "EM_EXECUCAO",
+  "EM_RISCO",
   "FINALIZANDO",
   "FINALIZADA",
   "CONCLUIDA",
+  "CANCELADA",
 ] as const;
 export const GOAL_CATEGORIES = [
   "CLIENTES",

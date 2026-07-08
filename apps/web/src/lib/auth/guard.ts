@@ -28,6 +28,28 @@ export async function checkPermission(
   return { ok: true, session };
 }
 
+/** OWNER ou ADMIN — usado por módulos restritos a administradores (ex.: Equipe). */
+export function isAdmin(session: SessionPayload): boolean {
+  return session.roles.some((r) => r === "OWNER" || r === "ADMIN");
+}
+
+/** Exige sessão + papel administrativo; senão redireciona para /acesso-negado. */
+export async function requireAdmin(): Promise<SessionPayload> {
+  const session = await requireSession();
+  if (!isAdmin(session)) redirect("/acesso-negado");
+  return session;
+}
+
+/** Versão para server actions/APIs: exige papel administrativo, sem redirecionar. */
+export async function checkAdmin(): Promise<
+  { ok: true; session: SessionPayload } | { ok: false; error: string }
+> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  if (!isAdmin(session)) return { ok: false, error: "Apenas administradores acessam este recurso." };
+  return { ok: true, session };
+}
+
 export function sessionPermissions(session: SessionPayload): Set<PermissionKey> {
   const keys = new Set<PermissionKey>();
   for (const role of session.roles) {

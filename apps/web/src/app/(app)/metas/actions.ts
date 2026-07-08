@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { GOAL_CATEGORIES, GOAL_SCOPES, GOAL_STATUSES, goals } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
+import { notifyGoal } from "@/lib/goals/reminders";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -72,9 +73,31 @@ export async function saveGoal(
   };
 
   if (goalId) {
+    const existing = await db.query.goals.findFirst({ where: eq(goals.id, goalId) });
     await db.update(goals).set(values).where(eq(goals.id, goalId));
+    // notifica conclusão quando a meta passa a CONCLUIDA
+    if (values.status === "CONCLUIDA" && existing && existing.status !== "CONCLUIDA") {
+      await notifyGoal(
+        { id: goalId, ownerId: values.ownerId },
+        {
+          title: `Meta concluída 🎉 ${d.title}`,
+          body: "Parabéns! Esta meta foi marcada como concluída.",
+          type: "INFO",
+        },
+      );
+    }
   } else {
-    await db.insert(goals).values(values);
+    const [goal] = await db.insert(goals).values(values).returning();
+    await notifyGoal(
+      { id: goal.id, ownerId: goal.ownerId },
+      {
+        title: `Nova meta: ${d.title}`,
+        body: d.periodEnd
+          ? `Prazo até ${d.periodEnd}. Acompanhe o progresso em Metas.`
+          : "Uma nova meta foi criada. Acompanhe o progresso em Metas.",
+        type: "INFO",
+      },
+    );
   }
   await logActivity({
     userId: auth.session.userId,
@@ -84,6 +107,7 @@ export async function saveGoal(
     metadata: { title: d.title },
   });
   revalidatePath("/metas");
+  revalidatePath("/notificacoes");
   return { success: goalId ? "Meta atualizada." : "Meta criada." };
 }
 

@@ -1,14 +1,24 @@
-import { asc, eq } from "drizzle-orm";
+import Link from "next/link";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, users } from "@/db/schema";
+import { clients, notifications, users } from "@/db/schema";
 import { hasPermission, requireSession } from "@/lib/auth/guard";
 import { getDashboardData, type DashboardFilters } from "@/lib/dashboard";
 import { resolveDashboard } from "@/lib/dashboard-config";
+import { syncGoalReminders } from "@/lib/goals/reminders";
 import { METRIC_BY_KEY, METRIC_CATALOG, type MetricKey } from "@/lib/dashboard-metrics";
-import { ASSET_STATUS_META, CLIENT_STATUS_META, TASK_STATUS_META } from "@/lib/labels";
-import { Card, EmptyState, StatCard, Table, Td, Th } from "@/components/ui/primitives";
+import { ASSET_STATUS_META, CLIENT_STATUS_META, formatDate, TASK_STATUS_META } from "@/lib/labels";
+import { Badge, Card, EmptyState, StatCard, Table, Td, Th } from "@/components/ui/primitives";
 import { DashboardControls } from "./dashboard-controls";
 import { DashboardFilterBar } from "./dashboard-filters";
+
+const NOTIF_TONES: Record<string, "blue" | "amber" | "red" | "green" | "zinc"> = {
+  INFO: "blue",
+  ALERTA: "amber",
+  COBRANCA: "red",
+  TAREFA: "green",
+  SISTEMA: "zinc",
+};
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -63,6 +73,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const dash = await resolveDashboard(session);
 
+  // gera lembretes de metas próximas do prazo/atrasadas antes de ler as notificações
+  await syncGoalReminders();
+
   // filtros: URL tem prioridade; senão usa os filtros padrão salvos pelo usuário
   const filters: DashboardFilters = {
     empresa: str(sp.empresa) ?? dash.filters.empresa,
@@ -70,10 +83,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     nicho: str(sp.nicho) ?? dash.filters.nicho,
   };
 
-  const [data, allUsers, niches] = await Promise.all([
+  const [data, allUsers, niches, reminders] = await Promise.all([
     getDashboardData(filters, session.userId),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)).orderBy(asc(users.name)),
     db.selectDistinct({ niche: clients.niche }).from(clients),
+    db.query.notifications.findMany({
+      where: and(eq(notifications.userId, session.userId), isNull(notifications.readAt)),
+      orderBy: [desc(notifications.createdAt)],
+      limit: 6,
+    }),
   ]);
 
   // métricas que o usuário tem permissão de ver (catálogo completo filtrado)
@@ -102,6 +120,41 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </header>
 
       <DashboardFilterBar users={allUsers} niches={niches.map((n) => n.niche).filter((n): n is string => !!n)} />
+
+      {/* Lembretes e avisos (inclui metas próximas do prazo/atrasadas) */}
+      {reminders.length > 0 && (
+        <Card className="mb-6 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase text-zinc-500">
+              🔔 Lembretes e avisos
+              <span className="rounded-full bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{reminders.length}</span>
+            </h3>
+            <Link href="/notificacoes" className="text-xs text-emerald-400 hover:underline">ver todas →</Link>
+          </div>
+          <ul className="space-y-2">
+            {reminders.map((n) => {
+              const target = n.entityType === "goal" ? "/metas" : "/notificacoes";
+              return (
+                <li key={n.id}>
+                  <Link
+                    href={target}
+                    className="flex items-start justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 transition hover:border-zinc-600"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-zinc-100">{n.title}</span>
+                      {n.body && <span className="block truncate text-xs text-zinc-500">{n.body}</span>}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
+                      <Badge tone={NOTIF_TONES[n.type] ?? "zinc"}>{n.type}</Badge>
+                      {formatDate(n.createdAt)}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
 
       {/* Métricas personalizadas do usuário */}
       {availableMetrics.length === 0 ? (

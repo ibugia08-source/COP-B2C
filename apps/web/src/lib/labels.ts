@@ -201,9 +201,11 @@ export const ASSET_COMMENT_TYPE_META: Record<string, Meta> = {
 export const GOAL_STATUS_META: Record<string, Meta> = {
   PLANEJADA: { label: "Planejada", tone: "zinc" },
   EM_EXECUCAO: { label: "Em execução", tone: "blue" },
+  EM_RISCO: { label: "Em risco", tone: "amber" },
   FINALIZANDO: { label: "Finalizando", tone: "amber" },
   FINALIZADA: { label: "Finalizada", tone: "green" },
   CONCLUIDA: { label: "Concluída", tone: "green" },
+  CANCELADA: { label: "Cancelada", tone: "red" },
 };
 
 export const AGENCY_BRAND_META: Record<string, Meta> = {

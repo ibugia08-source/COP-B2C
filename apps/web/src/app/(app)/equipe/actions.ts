@@ -6,12 +6,30 @@ import { z } from "zod";
 import { db } from "@/db";
 import { ROLE_NAMES, roles, teamMembers, userRoles, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { checkPermission } from "@/lib/auth/guard";
+import { checkPermission, isAdmin } from "@/lib/auth/guard";
+import type { SessionPayload } from "@/lib/auth/session";
 import { hashPassword } from "@/lib/auth/password";
-import { PRIVILEGED_ROLES } from "@/lib/auth/permissions";
+import { PRIVILEGED_ROLES, type PermissionKey } from "@/lib/auth/permissions";
 import { notifyUser } from "@/lib/notify";
 
 export type ActionState = { error?: string; success?: string };
+
+/**
+ * Guarda do módulo Equipe: exige a permissão específica E papel administrativo
+ * (OWNER/ADMIN). Dupla verificação no backend — nenhuma action vaza dados de
+ * equipe para papéis não administrativos, mesmo que uma permissão seja concedida
+ * por engano a outro papel.
+ */
+async function guardTeam(
+  permission: PermissionKey,
+): Promise<{ ok: true; session: SessionPayload } | { ok: false; error: string }> {
+  const auth = await checkPermission(permission);
+  if (!auth.ok) return auth;
+  if (!isAdmin(auth.session)) {
+    return { ok: false, error: "Apenas OWNER/ADMIN acessam o módulo Equipe." };
+  }
+  return auth;
+}
 
 const createMemberSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto"),
@@ -48,7 +66,7 @@ export async function createTeamMember(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const auth = await checkPermission("team.create");
+  const auth = await guardTeam("team.create");
   if (!auth.ok) return { error: auth.error };
 
   const parsed = createMemberSchema.safeParse({
@@ -109,7 +127,7 @@ const roleListSchema = z.array(z.enum(ROLE_NAMES)).min(1, "Selecione pelo menos 
 
 /** Aprova um cadastro pendente, definindo o nível de acesso (papéis). */
 export async function approveUser(userId: string, roleNames: string[]): Promise<ActionState> {
-  const auth = await checkPermission("team.approve");
+  const auth = await guardTeam("team.approve");
   if (!auth.ok) return { error: auth.error };
 
   const parsed = roleListSchema.safeParse(roleNames);
@@ -155,7 +173,7 @@ export async function approveUser(userId: string, roleNames: string[]): Promise<
 }
 
 export async function rejectUser(userId: string): Promise<ActionState> {
-  const auth = await checkPermission("team.approve");
+  const auth = await guardTeam("team.approve");
   if (!auth.ok) return { error: auth.error };
 
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
@@ -181,7 +199,7 @@ export async function rejectUser(userId: string): Promise<ActionState> {
 
 /** Atualiza o nível de acesso (papéis) de um usuário já existente. */
 export async function updateUserRoles(userId: string, roleNames: string[]): Promise<ActionState> {
-  const auth = await checkPermission("team.update");
+  const auth = await guardTeam("team.update");
   if (!auth.ok) return { error: auth.error };
 
   const parsed = roleListSchema.safeParse(roleNames);
@@ -223,7 +241,7 @@ export async function updateUserRoles(userId: string, roleNames: string[]): Prom
 }
 
 export async function toggleMemberActive(userId: string): Promise<ActionState> {
-  const auth = await checkPermission("team.deactivate");
+  const auth = await guardTeam("team.deactivate");
   if (!auth.ok) return { error: auth.error };
 
   if (userId === auth.session.userId) {

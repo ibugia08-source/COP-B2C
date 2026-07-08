@@ -1,7 +1,8 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { goals, users } from "@/db/schema";
-import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { hasPermission, isAdmin, requirePermission } from "@/lib/auth/guard";
+import { syncGoalReminders } from "@/lib/goals/reminders";
 import { formatDate, GOAL_STATUS_META } from "@/lib/labels";
 import { Badge, Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui/primitives";
 import { GOAL_CATEGORY_LABELS, GoalFormButton, GoalProgressControls } from "./ui";
@@ -24,9 +25,18 @@ export default async function MetasPage() {
   const canCreate = hasPermission(session, "goals.create");
   const canUpdate = hasPermission(session, "goals.update");
   const canDelete = hasPermission(session, "goals.delete");
+  const admin = isAdmin(session);
+
+  // gera lembretes de metas próximas do prazo/atrasadas (idempotente)
+  await syncGoalReminders();
+
+  // Admin vê todas as metas; usuário comum vê apenas as suas ou as gerais (AGENCIA).
+  const visibility = admin
+    ? undefined
+    : or(eq(goals.ownerId, session.userId), eq(goals.scope, "AGENCIA"));
 
   const [rows, allUsers] = await Promise.all([
-    db.query.goals.findMany({ with: { owner: true }, orderBy: [desc(goals.createdAt)] }),
+    db.query.goals.findMany({ where: visibility, with: { owner: true }, orderBy: [desc(goals.createdAt)] }),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)).orderBy(asc(users.name)),
   ]);
 

@@ -68,3 +68,19 @@ antes de uso real.
   (credenciais criptografadas, comentários, auditoria) funciona normalmente.
 - **Migrations**: `npm run db:generate` gera SQL a partir do schema; o baseline
   Postgres está em `apps/web/drizzle/0000_baseline-pg.sql`.
+
+## Integração Google Meet / Calendar (opcional — reuniões)
+
+O módulo de Reuniões funciona 100% manualmente (cola-se o link do Meet). Para
+gerar links automaticamente no futuro, configure na Vercel e ligue a flag
+"Google Meet" em Configurações → Serviços & Módulos:
+
+| Variável | Descrição |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Client ID do OAuth (Google Cloud Console) |
+| `GOOGLE_CLIENT_SECRET` | Client Secret do OAuth |
+| `GOOGLE_REDIRECT_URI` | ex.: `https://SEU_DOMINIO/api/google/callback` |
+| `GOOGLE_REFRESH_TOKEN` | refresh token da conta robô da agência (Calendar API) |
+
+Sem essas variáveis, o botão "Gerar link Meet" fica desabilitado com aviso — o
+sistema não quebra.

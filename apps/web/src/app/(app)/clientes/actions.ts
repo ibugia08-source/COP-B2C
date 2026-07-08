@@ -273,22 +273,41 @@ export async function markClientLost(
   return { success: "Cliente marcado como perdido." };
 }
 
-export async function registerMeeting(
-  clientId: string,
-  title: string,
-  meetingDate: string,
-  summary: string,
-): Promise<ActionState> {
+export type MeetingInput = {
+  title: string;
+  meetingDate: string;
+  meetingType: string;
+  status: string;
+  participants?: string;
+  responsibleId?: string;
+  meetLink?: string;
+  summary?: string;
+  nextSteps?: string;
+};
+
+export async function registerMeeting(clientId: string, input: MeetingInput): Promise<ActionState> {
   const auth = await checkPermission("clients.update");
   if (!auth.ok) return { error: auth.error };
-  if (!title.trim()) return { error: "Informe o título da reunião." };
-  if (!meetingDate) return { error: "Informe a data da reunião." };
+  if (!input.title.trim()) return { error: "Informe o título da reunião." };
+  if (!input.meetingDate) return { error: "Informe a data/hora da reunião." };
+  if (input.meetLink && !/^https?:\/\//i.test(input.meetLink.trim())) {
+    return { error: "O link da reunião deve começar com http(s)://" };
+  }
+  const { MEETING_STATUSES, MEETING_TYPES } = await import("@/db/schema");
+  const type = (MEETING_TYPES as readonly string[]).includes(input.meetingType) ? input.meetingType : "ACOMPANHAMENTO";
+  const status = (MEETING_STATUSES as readonly string[]).includes(input.status) ? input.status : "AGENDADA";
 
   await db.insert(clientMeetings).values({
     clientId,
-    title: title.trim(),
-    meetingDate: new Date(meetingDate),
-    summary: summary.trim() || null,
+    title: input.title.trim(),
+    meetingDate: new Date(input.meetingDate),
+    meetingType: type as (typeof MEETING_TYPES)[number],
+    status: status as (typeof MEETING_STATUSES)[number],
+    participants: input.participants?.trim() || null,
+    responsibleId: input.responsibleId || null,
+    meetLink: input.meetLink?.trim() || null,
+    summary: input.summary?.trim() || null,
+    nextSteps: input.nextSteps?.trim() || null,
     createdById: auth.session.userId,
   });
   await logActivity({
@@ -296,11 +315,54 @@ export async function registerMeeting(
     action: "client.meetingRegistered",
     entityType: "client",
     entityId: clientId,
-    metadata: { title: title.trim(), meetingDate },
+    metadata: { title: input.title.trim(), meetingDate: input.meetingDate, type },
   });
 
   revalidatePath(`/clientes/${clientId}`);
   return { success: "Reunião registrada." };
+}
+
+/** Cria uma tarefa de follow-up vinculada ao cliente a partir de uma reunião. */
+export async function createMeetingFollowup(meetingId: string): Promise<ActionState> {
+  const auth = await checkPermission("tasks.create");
+  if (!auth.ok) return { error: auth.error };
+  const { clientMeetings: cm, tasks } = await import("@/db/schema");
+  const meeting = await db.query.clientMeetings.findFirst({ where: eq(cm.id, meetingId) });
+  if (!meeting) return { error: "Reunião não encontrada." };
+
+  await db.insert(tasks).values({
+    title: `Follow-up: ${meeting.title}`,
+    description: meeting.nextSteps || "Próximos passos da reunião.",
+    type: "OPERACIONAL",
+    status: "A_FAZER",
+    priority: "MEDIA",
+    clientId: meeting.clientId,
+    assignedToId: meeting.responsibleId ?? auth.session.userId,
+    createdById: auth.session.userId,
+    dueDate: new Date(Date.now() + 3 * 86400_000),
+  });
+  await logActivity({
+    userId: auth.session.userId,
+    action: "client.meetingFollowupCreated",
+    entityType: "client",
+    entityId: meeting.clientId,
+    metadata: { meetingId, title: meeting.title },
+  });
+  revalidatePath(`/clientes/${meeting.clientId}`);
+  revalidatePath("/tarefas");
+  return { success: "Tarefa de follow-up criada." };
+}
+
+/** Tenta gerar um link do Google Meet (opcional; não bloqueia uso manual). */
+export async function generateMeetLink(title: string, meetingDate: string): Promise<{ error?: string; url?: string }> {
+  const auth = await checkPermission("clients.update");
+  if (!auth.ok) return { error: auth.error };
+  const { createGoogleMeetLink } = await import("@/lib/google-meet");
+  const result = await createGoogleMeetLink({
+    title: title || "Reunião",
+    startsAt: meetingDate ? new Date(meetingDate) : new Date(),
+  });
+  return result.ok ? { url: result.url } : { error: result.error };
 }
 
 export async function saveOperationalProfile(

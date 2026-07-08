@@ -685,9 +685,22 @@ async function seed() {
   await db
     .insert(agencyServices)
     .values(
-      ["Meta Ads", "Google Ads", "Social Media", "CRM", "IA", "SEO", "Google Meu Negócio"].map(
-        (name, i) => ({ name, order: i }),
-      ),
+      (
+        [
+          ["Meta Ads", "Tráfego", "blue"],
+          ["Google Ads", "Tráfego", "red"],
+          ["Social Media", "Social", "purple"],
+          ["Criativos", "Criação", "amber"],
+          ["CRM/IA", "Tecnologia", "cyan"],
+          ["Google Meu Negócio", "Tráfego", "green"],
+          ["SEO", "Tráfego", "green"],
+          ["Landing Page", "Criação", "amber"],
+          ["Consultoria Comercial", "Comercial", "zinc"],
+          ["WhatsApp/Automação", "Tecnologia", "cyan"],
+          ["Relatórios", "Operacional", "blue"],
+          ["Cliente Oculto", "Operacional", "zinc"],
+        ] as const
+      ).map(([name, category, color], i) => ({ name, category, color, order: i })),
     )
     .onConflictDoNothing();
   await db

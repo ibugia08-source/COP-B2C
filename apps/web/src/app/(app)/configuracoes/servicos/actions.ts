@@ -11,9 +11,13 @@ import { setFeatureFlag, type FeatureFlags } from "@/lib/settings";
 
 export type ActionState = { error?: string; success?: string };
 
+const TONES = ["green", "amber", "red", "blue", "purple", "zinc", "cyan"];
+
 const serviceSchema = z.object({
   name: z.string().trim().min(2, "Nome do serviço muito curto").max(60, "Nome muito longo"),
   description: z.string().trim().optional(),
+  category: z.string().trim().optional(),
+  color: z.string().trim().optional(),
 });
 
 export async function saveService(
@@ -27,8 +31,11 @@ export async function saveService(
   const parsed = serviceSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
+    category: formData.get("category") || undefined,
+    color: formData.get("color") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+  const color = parsed.data.color && TONES.includes(parsed.data.color) ? parsed.data.color : "blue";
 
   const duplicate = await db.query.agencyServices.findFirst({
     where: eq(agencyServices.name, parsed.data.name),
@@ -40,13 +47,20 @@ export async function saveService(
   if (serviceId) {
     await db
       .update(agencyServices)
-      .set({ name: parsed.data.name, description: parsed.data.description ?? null })
+      .set({
+        name: parsed.data.name,
+        description: parsed.data.description ?? null,
+        category: parsed.data.category ?? null,
+        color,
+      })
       .where(eq(agencyServices.id, serviceId));
   } else {
     const count = await db.$count(agencyServices);
     await db.insert(agencyServices).values({
       name: parsed.data.name,
       description: parsed.data.description ?? null,
+      category: parsed.data.category ?? null,
+      color,
       order: count,
     });
   }

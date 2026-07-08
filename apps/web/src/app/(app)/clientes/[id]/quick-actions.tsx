@@ -6,20 +6,17 @@ import type { AdsStatus, Client } from "@/db/schema";
 import { HEALTH_META } from "@/lib/labels";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal } from "@/components/ui/overlay";
-import { changeClientHealth, markClientLost, registerMeeting, toggleAdsStatus } from "../actions";
+import { changeClientHealth, markClientLost, toggleAdsStatus } from "../actions";
 
 export function ClientQuickActions({ client, canMoveStatus }: { client: Client; canMoveStatus: boolean }) {
   const router = useRouter();
-  const [modal, setModal] = useState<"saude" | "reuniao" | "perdido" | "ads" | null>(null);
+  const [modal, setModal] = useState<"saude" | "perdido" | "ads" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   // campos dos modais
   const [health, setHealth] = useState(client.healthStatus);
   const [healthReason, setHealthReason] = useState("");
-  const [meetingTitle, setMeetingTitle] = useState("Reunião mensal de acompanhamento");
-  const [meetingDate, setMeetingDate] = useState("");
-  const [meetingSummary, setMeetingSummary] = useState("");
   const [churnReason, setChurnReason] = useState("");
   const [churnDate, setChurnDate] = useState("");
 
@@ -44,9 +41,6 @@ export function ClientQuickActions({ client, canMoveStatus }: { client: Client; 
       </Button>
       <Button size="sm" variant="secondary" href={`/tarefas?nova=1&tipo=CRIATIVO&cliente=${client.id}`}>
         + Criativo
-      </Button>
-      <Button size="sm" variant="secondary" onClick={() => setModal("reuniao")}>
-        Registrar reunião
       </Button>
       <Button size="sm" variant="secondary" onClick={() => { setError(null); setModal("saude"); }}>
         Alterar saúde
@@ -85,35 +79,6 @@ export function ClientQuickActions({ client, canMoveStatus }: { client: Client; 
               onClick={() => run(() => changeClientHealth(client.id, health, healthReason))}
             >
               {pending ? "Salvando..." : "Salvar saúde"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Reunião */}
-      <Modal open={modal === "reuniao"} onClose={() => setModal(null)} title="Registrar reunião">
-        <div className="space-y-4">
-          <Field label="Título">
-            <Input value={meetingTitle} onChange={(e) => setMeetingTitle(e.target.value)} />
-          </Field>
-          <Field label="Data">
-            <Input type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
-          </Field>
-          <Field label="Resumo">
-            <Textarea
-              value={meetingSummary}
-              onChange={(e) => setMeetingSummary(e.target.value)}
-              placeholder="Principais pontos e próximos passos"
-            />
-          </Field>
-          {error && <Alert>{error}</Alert>}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setModal(null)}>Cancelar</Button>
-            <Button
-              disabled={pending}
-              onClick={() => run(() => registerMeeting(client.id, meetingTitle, meetingDate, meetingSummary))}
-            >
-              {pending ? "Salvando..." : "Registrar"}
             </Button>
           </div>
         </div>

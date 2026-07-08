@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { agencyServices } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { FLAG_LABELS, getFeatureFlags, type FeatureFlags } from "@/lib/settings";
+import { TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Badge, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui/primitives";
 import { FlagToggle, ServiceFormButton, ToggleServiceButton } from "./ui";
 
@@ -31,15 +32,19 @@ export default async function ServicosPage() {
           <EmptyState icon="🧩" title="Nenhum serviço cadastrado" description="Cadastre os serviços que a agência presta — eles aparecem na aba Operação da ficha do cliente." />
         ) : (
           <Table
-            minWidth="500px"
-            head={<><Th>Serviço</Th><Th>Status</Th><Th className="text-right">Ações</Th></>}
+            minWidth="560px"
+            head={<><Th>Serviço</Th><Th>Categoria</Th><Th>Status</Th><Th className="text-right">Ações</Th></>}
           >
             {services.map((s) => (
               <tr key={s.id} className={`hover:bg-zinc-900/60 ${s.isActive ? "" : "opacity-50"}`}>
                 <Td>
-                  <p className="font-medium text-zinc-100">{s.name}</p>
+                  <p className="flex items-center gap-2 font-medium text-zinc-100">
+                    <span className={`inline-block h-2.5 w-2.5 rounded-full border ${TONE_CLASSES[(s.color as Tone) ?? "blue"] ?? ""}`} />
+                    {s.name}
+                  </p>
                   {s.description && <p className="text-xs text-zinc-500">{s.description}</p>}
                 </Td>
+                <Td className="text-zinc-400">{s.category ?? "—"}</Td>
                 <Td>
                   <Badge tone={s.isActive ? "green" : "zinc"}>{s.isActive ? "ATIVO" : "INATIVO"}</Badge>
                 </Td>

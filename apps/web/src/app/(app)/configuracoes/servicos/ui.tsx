@@ -3,9 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useState, useTransition } from "react";
 import type { AgencyService } from "@/db/schema";
-import { Alert, Button, Field, Input } from "@/components/ui/primitives";
+import { TONE_CLASSES, type Tone } from "@/lib/labels";
+import { Alert, Button, Field, Input, Select } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { saveService, toggleFlag, toggleService, type ActionState } from "./actions";
+
+const TONES: Tone[] = ["green", "amber", "red", "blue", "purple", "zinc", "cyan"];
 
 export function ServiceFormButton({ service, canEdit }: { service?: AgencyService; canEdit: boolean }) {
   const [open, setOpen] = useState(false);
@@ -37,6 +40,24 @@ export function ServiceFormButton({ service, canEdit }: { service?: AgencyServic
           <Field label="Descrição">
             <Input name="description" defaultValue={service?.description ?? ""} />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Categoria">
+              <Input name="category" defaultValue={service?.category ?? ""} placeholder="Ex.: Tráfego, Social, Criação" />
+            </Field>
+            <Field label="Cor">
+              <Select name="color" defaultValue={service?.color ?? "blue"}>
+                {TONES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <div className="flex items-center gap-1 text-xs text-zinc-500">
+            Prévia da cor:
+            {TONES.map((t) => (
+              <span key={t} className={`inline-block h-3 w-3 rounded-full border ${TONE_CLASSES[t]}`} title={t} />
+            ))}
+          </div>
           {state.error && <Alert>{state.error}</Alert>}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" type="button" onClick={() => setOpen(false)}>Cancelar</Button>

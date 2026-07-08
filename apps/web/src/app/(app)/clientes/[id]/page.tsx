@@ -20,7 +20,9 @@ import {
   TASK_TYPE_META,
 } from "@/lib/labels";
 import { getActiveServices } from "@/lib/settings";
+import { isGoogleMeetEnabled } from "@/lib/google-meet";
 import { getClientTimeline } from "@/lib/timeline";
+import { ClientMeetings } from "./meetings";
 import { Tabs } from "@/components/ui/overlay";
 import {
   Alert,
@@ -57,7 +59,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       mainResponsible: true,
       operationalProfile: true,
       contacts: true,
-      meetings: { orderBy: (m, { desc }) => [desc(m.meetingDate)] },
+      meetings: { orderBy: (m, { desc }) => [desc(m.meetingDate)], with: { responsible: true } },
       tasks: { orderBy: (t, { desc }) => [desc(t.updatedAt)], with: { assignedTo: true } },
       digitalAssets: {
         orderBy: (a, { asc }) => [asc(a.title)],
@@ -72,9 +74,16 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   const canCreateAsset = hasPermission(session, "digital_assets.create");
   const canUpdate = hasPermission(session, "clients.update");
   const canMoveStatus = hasPermission(session, "clients.moveStatus");
-  const [timeline, services] = await Promise.all([
+  const canCreateTask = hasPermission(session, "tasks.create");
+  const [timeline, services, meetUsers, meetEnabled] = await Promise.all([
     getClientTimeline(client.id),
     getActiveServices(),
+    db.query.users.findMany({
+      where: (u, { eq: eq_ }) => eq_(u.isActive, true),
+      columns: { id: true, name: true },
+      orderBy: (u, { asc }) => [asc(u.name)],
+    }),
+    isGoogleMeetEnabled(),
   ]);
 
   // Pendências (regras de negócio)
@@ -269,20 +278,26 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
     <EmptyState icon="📄" title="Nenhum documento vinculado" action={<Button size="sm" href={`/documentos?novo=1&cliente=${client.id}`}>+ Novo documento</Button>} />
   );
 
-  const reunioes = client.meetings.length ? (
-    <div className="space-y-2">
-      {client.meetings.map((m) => (
-        <div key={m.id} className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">{m.title}</p>
-            <span className="text-xs text-zinc-500">{formatDate(m.meetingDate)}</span>
-          </div>
-          {m.summary && <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-400">{m.summary}</p>}
-        </div>
-      ))}
-    </div>
-  ) : (
-    <EmptyState icon="🗓️" title="Nenhuma reunião registrada" description="Use a ação rápida “Registrar reunião” no topo da página." />
+  const reunioes = (
+    <ClientMeetings
+      clientId={client.id}
+      canManage={canUpdate}
+      canCreateTask={canCreateTask}
+      meetEnabled={meetEnabled}
+      users={meetUsers}
+      meetings={client.meetings.map((m) => ({
+        id: m.id,
+        title: m.title,
+        meetingDate: m.meetingDate.toISOString(),
+        meetingType: m.meetingType,
+        status: m.status,
+        participants: m.participants,
+        responsibleName: m.responsible?.name ?? null,
+        meetLink: m.meetLink,
+        summary: m.summary,
+        nextSteps: m.nextSteps,
+      }))}
+    />
   );
 
   const historico = timeline.length ? (

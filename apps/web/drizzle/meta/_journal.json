@@ -29,6 +29,13 @@
       "when": 1783487375942,
       "tag": "0003_config-options",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783488623776,
+      "tag": "0004_meetings-services",
+      "breakpoints": true
     }
   ]
 }

@@ -1097,6 +1097,16 @@ export const taskTemplates = pgTable("task_templates", {
 // Reuniões com cliente
 // ---------------------------------------------------------------------------
 
+export const MEETING_TYPES = [
+  "ONBOARDING",
+  "ACOMPANHAMENTO",
+  "ALINHAMENTO",
+  "APRESENTACAO",
+  "RENOVACAO",
+  "OUTRO",
+] as const;
+export const MEETING_STATUSES = ["AGENDADA", "REALIZADA", "CANCELADA", "REMARCADA"] as const;
+
 export const clientMeetings = pgTable(
   "client_meetings",
   {
@@ -1105,10 +1115,18 @@ export const clientMeetings = pgTable(
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    // meetingDate guarda data + hora
     meetingDate: timestamp("meeting_date", { mode: "date" }).notNull(),
-    summary: text("summary"),
+    meetingType: text("meeting_type", { enum: MEETING_TYPES }).notNull().default("ACOMPANHAMENTO"),
+    status: text("status", { enum: MEETING_STATUSES }).notNull().default("AGENDADA"),
+    participants: text("participants"), // lista livre de participantes
+    responsibleId: text("responsible_id").references(() => users.id),
+    meetLink: text("meet_link"), // URL do Google Meet ou outro
+    summary: text("summary"), // notas
+    nextSteps: text("next_steps"), // próximos passos (viram tarefas de follow-up)
     createdById: text("created_by_id").references(() => users.id),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   (t) => [index("client_meetings_client_idx").on(t.clientId)],
 );
@@ -1128,6 +1146,8 @@ export const agencyServices = pgTable("agency_services", {
   id: id(),
   name: text("name").notNull().unique(),
   description: text("description"),
+  category: text("category"), // ex.: Tráfego, Social, Criação, Tecnologia
+  color: text("color"), // nome de tom (emerald, amber, ...)
   isActive: boolean("is_active").notNull().default(true),
   order: integer("order").notNull().default(0),
   createdAt: createdAt(),
@@ -1289,7 +1309,16 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
 
 export const clientMeetingsRelations = relations(clientMeetings, ({ one }) => ({
   client: one(clients, { fields: [clientMeetings.clientId], references: [clients.id] }),
-  createdBy: one(users, { fields: [clientMeetings.createdById], references: [users.id] }),
+  createdBy: one(users, {
+    fields: [clientMeetings.createdById],
+    references: [users.id],
+    relationName: "meetingCreatedBy",
+  }),
+  responsible: one(users, {
+    fields: [clientMeetings.responsibleId],
+    references: [users.id],
+    relationName: "meetingResponsible",
+  }),
 }));
 
 export const creativeRequestsRelations = relations(creativeRequests, ({ one }) => ({

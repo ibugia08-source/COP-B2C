@@ -24,6 +24,30 @@ export const SUGGESTION_STATUS_META: Record<string, { label: string; tone: Tone 
   CANCELADA: { label: "Cancelada", tone: "zinc" },
 };
 
+export const ACTION_TYPE_LABELS: Record<string, string> = {
+  CREATE_TASK: "Criar tarefa",
+  UPDATE_TASK_STATUS: "Alterar status da tarefa",
+  UPDATE_TASK_PRIORITY: "Alterar prioridade da tarefa",
+  UPDATE_CLIENT_HEALTH: "Alterar saúde do cliente",
+  UPDATE_CLIENT_STATUS: "Alterar etapa do cliente",
+  CREATE_CLIENT_COMMENT: "Comentar no cliente",
+  CREATE_TASK_COMMENT: "Comentar na tarefa",
+  CREATE_REMINDER: "Criar lembrete",
+  CREATE_MEETING: "Agendar reunião",
+  GENERATE_REPORT: "Gerar relatório",
+  PREPARE_WHATSAPP_MESSAGE: "Preparar mensagem (WhatsApp)",
+  SEND_WHATSAPP_MESSAGE_FUTURE: "Enviar WhatsApp (futuro)",
+  LINK_CONVERSATION_TO_CLIENT: "Vincular conversa ao cliente",
+};
+
+export const ACTION_STATUS_META: Record<string, { label: string; tone: Tone }> = {
+  PENDENTE: { label: "Aguardando aprovação", tone: "amber" },
+  APROVADA: { label: "Aprovada", tone: "blue" },
+  EXECUTADA: { label: "Executada", tone: "green" },
+  FALHOU: { label: "Falhou", tone: "red" },
+  CANCELADA: { label: "Cancelada", tone: "zinc" },
+};
+
 export const SENTIMENT_META: Record<string, { label: string; tone: Tone }> = {
   POSITIVO: { label: "Positivo", tone: "green" },
   NEUTRO: { label: "Neutro", tone: "zinc" },

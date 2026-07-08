@@ -8,12 +8,58 @@ import { SUGGESTION_STATUS_META, SUGGESTION_TYPE_LABELS } from "@/lib/copilot/la
 import { syncCopilotSuggestions } from "@/lib/copilot/suggestions";
 import { formatDate, HEALTH_META, PIPELINE_STAGE_META, PRIORITY_META } from "@/lib/labels";
 import { Alert, Badge, Card, EmptyState, PageHeader, StatCard, StatusBadge } from "@/components/ui/primitives";
-import { SuggestionCard, type SuggestionView } from "./ui";
+import { SuggestionCard, type ActionView, type SuggestionView } from "./ui";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
 
 const PRIO_RANK: Record<string, number> = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 };
+
+// campo de texto editável do payload, por tipo (espelha copiloto/actions.ts)
+const EDITABLE_FIELD: Record<string, string> = {
+  PREPARE_WHATSAPP_MESSAGE: "message",
+  SEND_WHATSAPP_MESSAGE_FUTURE: "message",
+  CREATE_TASK_COMMENT: "body",
+  CREATE_CLIENT_COMMENT: "comment",
+  CREATE_REMINDER: "body",
+  CREATE_TASK: "description",
+};
+
+// descrição humana do que a ação fará quando aprovada
+function describeAction(type: string, p: Record<string, unknown>): string {
+  switch (type) {
+    case "CREATE_TASK":
+      return `Criar a tarefa "${p.title}" (prioridade ${p.priority ?? "MEDIA"}, prazo ${p.dueDays ?? 2} dia(s)).`;
+    case "UPDATE_TASK_STATUS":
+      return `Mover a tarefa para o status ${p.status}.`;
+    case "UPDATE_TASK_PRIORITY":
+      return `Alterar a prioridade da tarefa para ${p.priority}.`;
+    case "UPDATE_CLIENT_HEALTH":
+      return `Alterar a saúde do cliente para ${p.healthStatus}${p.reason ? ` — motivo: ${p.reason}` : ""}.`;
+    case "UPDATE_CLIENT_STATUS":
+      return `Mover o cliente para a etapa ${p.pipelineStage}.`;
+    case "CREATE_CLIENT_COMMENT":
+      return "Registrar o comentário abaixo na timeline do cliente.";
+    case "CREATE_TASK_COMMENT":
+      return "Registrar o comentário abaixo na tarefa.";
+    case "CREATE_REMINDER":
+      return `Criar o lembrete "${p.title}" nas suas notificações.`;
+    case "CREATE_MEETING":
+      return `Agendar a reunião "${p.title}" na ficha do cliente.`;
+    case "GENERATE_REPORT":
+      return p.kind === "PLANO_ACAO"
+        ? "Gerar um plano de ação (documento) com os dados da plataforma, vinculado ao cliente."
+        : "Gerar um resumo operacional (documento) com os dados da plataforma, vinculado ao cliente.";
+    case "PREPARE_WHATSAPP_MESSAGE":
+      return "Preparar a mensagem abaixo para você revisar e enviar manualmente (nada é enviado pelo sistema).";
+    case "SEND_WHATSAPP_MESSAGE_FUTURE":
+      return "Enviar mensagem pelo WhatsApp — indisponível até a integração oficial.";
+    case "LINK_CONVERSATION_TO_CLIENT":
+      return "Vincular a conversa monitorada (e seus resumos) ao cliente.";
+    default:
+      return "Ação do Co-piloto.";
+  }
+}
 
 export default async function CopilotoPage({ searchParams }: { searchParams: Promise<Search> }) {
   const session = await requirePermission("tasks.view");
@@ -37,7 +83,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
   const allSuggestions = await db.query.copilotSuggestions.findMany({
     where: eq(copilotSuggestions.userId, targetUserId),
-    with: { client: { columns: { name: true } } },
+    with: { client: { columns: { name: true } }, actions: true },
     orderBy: [desc(copilotSuggestions.createdAt)],
     limit: 100,
   });
@@ -55,6 +101,20 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
     taskId: s.taskId,
     executedTaskId: s.executedTaskId,
     createdAt: s.createdAt.toISOString(),
+    actions: s.actions.map((a): ActionView => {
+      const payload = (a.payload ?? {}) as Record<string, unknown>;
+      const field = EDITABLE_FIELD[a.actionType];
+      return {
+        id: a.id,
+        actionType: a.actionType,
+        status: a.status,
+        summary: describeAction(a.actionType, payload),
+        editableText: field && typeof payload[field] === "string" ? (payload[field] as string) : null,
+        errorMessage: a.errorMessage,
+        resultSummary: a.resultSummary,
+        resultRef: a.resultRef,
+      };
+    }),
   });
   const pendentes = allSuggestions
     .filter((s) => s.status === "PENDENTE")
@@ -165,6 +225,13 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
                   {a.clientName && <span className="text-zinc-500"> — {a.clientName}</span>}
                 </p>
               ))}
+              {ctx.assetsNeedingDocs.map((a) => (
+                <p key={a.id}>
+                  📄 Precisa de documentos:{" "}
+                  <Link href={`/ativos/${a.id}`} className="text-zinc-200 hover:text-emerald-300">{a.title}</Link>
+                  {a.clientName && <span className="text-zinc-500"> — {a.clientName}</span>}
+                </p>
+              ))}
               {ctx.goalsAlerts.map((g) => (
                 <p key={g.id}>
                   {g.overdue ? "⏰ Meta vencida:" : "🎯 Meta perto do prazo:"}{" "}
@@ -181,7 +248,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
                   </span>
                 </p>
               ))}
-              {ctx.blockedDigitalAssets.length === 0 && ctx.goalsAlerts.length === 0 && ctx.upcomingMeetings.length === 0 && (
+              {ctx.blockedDigitalAssets.length === 0 && ctx.assetsNeedingDocs.length === 0 && ctx.goalsAlerts.length === 0 && ctx.upcomingMeetings.length === 0 && (
                 <p className="text-zinc-500">Nenhum alerta operacional agora.</p>
               )}
             </div>
@@ -243,6 +310,21 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
               </ul>
             )}
           </Card>
+
+          {/* Documentos vinculados recentes */}
+          {ctx.recentDocuments.length > 0 && (
+            <Card className="p-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">📄 Documentos recentes da carteira</h3>
+              <ul className="space-y-1 text-sm">
+                {ctx.recentDocuments.map((d) => (
+                  <li key={d.id}>
+                    <Link href={`/documentos/${d.id}`} className="text-zinc-200 hover:text-emerald-300">{d.title}</Link>
+                    {d.clientName && <span className="text-xs text-zinc-500"> — {d.clientName}</span>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           {/* Atividade recente */}
           <Card className="p-4">

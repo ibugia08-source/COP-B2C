@@ -5,6 +5,7 @@ import {
   clientMeetings,
   clients,
   digitalAssets,
+  documents,
   goals,
   tasks,
   users,
@@ -26,6 +27,7 @@ export type ContextClient = {
   status: string;
   pipelineStage: string;
   niche: string | null;
+  servicesUsed: string[];
 };
 export type ContextTask = {
   id: string;
@@ -42,6 +44,8 @@ export type ContextMeeting = { id: string; title: string; meetingDate: Date; cli
 export type ContextGoalAlert = { id: string; title: string; periodEnd: Date; overdue: boolean };
 export type ContextActivity = { id: string; action: string; entityId: string | null; userName: string | null; createdAt: Date };
 
+export type ContextDocument = { id: string; title: string; clientId: string | null; clientName: string | null };
+
 export type ManagerDailyContext = {
   userId: string;
   date: Date;
@@ -53,8 +57,10 @@ export type ManagerDailyContext = {
   pendingRequests: ContextTask[]; // solicitações abertas feitas por outros para o gestor
   waitingTeamTasks: ContextTask[]; // tarefas paradas aguardando resposta da equipe
   blockedDigitalAssets: ContextAsset[];
+  assetsNeedingDocs: ContextAsset[];
   upcomingMeetings: ContextMeeting[];
   goalsAlerts: ContextGoalAlert[];
+  recentDocuments: ContextDocument[];
   recentActivity: ContextActivity[];
   suggestedPriorities: string[];
 };
@@ -78,9 +84,18 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
       not(eq(clients.status, "PERDIDO")),
     ),
     columns: { id: true, name: true, healthStatus: true, status: true, pipelineStage: true, niche: true },
+    with: { operationalProfile: { columns: { platforms: true } } },
     orderBy: (c, { asc }) => [asc(c.name)],
   });
-  const assignedClients: ContextClient[] = clientRows;
+  const assignedClients: ContextClient[] = clientRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    healthStatus: c.healthStatus,
+    status: c.status,
+    pipelineStage: c.pipelineStage,
+    niche: c.niche,
+    servicesUsed: c.operationalProfile?.platforms ?? [],
+  }));
   const clientIds = assignedClients.map((c) => c.id);
   const clientName = new Map(assignedClients.map((c) => [c.id, c.name]));
 
@@ -120,24 +135,26 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
     .filter((t) => t.status === "AGUARDANDO_EQUIPE" || t.status === "AGUARDANDO_CLIENTE")
     .map(toTask);
 
-  // Ativos bloqueados relevantes (do gestor ou de clientes da carteira)
-  const blockedRows = await db.query.digitalAssets.findMany({
+  // Ativos com problema relevantes (do gestor ou de clientes da carteira):
+  // bloqueados e precisando de documentos
+  const problemAssetRows = await db.query.digitalAssets.findMany({
     where: and(
-      eq(digitalAssets.status, "BLOQUEADA"),
+      inArray(digitalAssets.status, ["BLOQUEADA", "PRECISA_DE_DOCUMENTOS"]),
       clientIds.length
         ? or(eq(digitalAssets.assignedToId, userId), inArray(digitalAssets.clientId, clientIds))
         : eq(digitalAssets.assignedToId, userId),
     ),
-    columns: { id: true, title: true, clientId: true, archivedAt: true },
+    columns: { id: true, title: true, clientId: true, status: true, archivedAt: true },
   });
-  const blockedDigitalAssets: ContextAsset[] = blockedRows
-    .filter((a) => !a.archivedAt)
-    .map((a) => ({
-      id: a.id,
-      title: a.title,
-      clientId: a.clientId,
-      clientName: a.clientId ? (clientName.get(a.clientId) ?? null) : null,
-    }));
+  const toAsset = (a: (typeof problemAssetRows)[number]): ContextAsset => ({
+    id: a.id,
+    title: a.title,
+    clientId: a.clientId,
+    clientName: a.clientId ? (clientName.get(a.clientId) ?? null) : null,
+  });
+  const activeProblemAssets = problemAssetRows.filter((a) => !a.archivedAt);
+  const blockedDigitalAssets = activeProblemAssets.filter((a) => a.status === "BLOQUEADA").map(toAsset);
+  const assetsNeedingDocs = activeProblemAssets.filter((a) => a.status === "PRECISA_DE_DOCUMENTOS").map(toAsset);
 
   // Reuniões próximas (7 dias) — do gestor ou da carteira
   const meetingRows = await db.query.clientMeetings.findMany({
@@ -172,6 +189,23 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
   const goalsAlerts: ContextGoalAlert[] = goalRows
     .filter((g) => g.periodEnd && g.periodEnd < new Date(now.getTime() + 3 * DAY))
     .map((g) => ({ id: g.id, title: g.title, periodEnd: g.periodEnd!, overdue: g.periodEnd! < now }));
+
+  // Documentos vinculados aos clientes da carteira (mais recentes)
+  const recentDocuments: ContextDocument[] = clientIds.length
+    ? (
+        await db.query.documents.findMany({
+          where: and(inArray(documents.clientId, clientIds), eq(documents.isArchived, false)),
+          columns: { id: true, title: true, clientId: true },
+          orderBy: [desc(documents.updatedAt)],
+          limit: 5,
+        })
+      ).map((d) => ({
+        id: d.id,
+        title: d.title,
+        clientId: d.clientId,
+        clientName: d.clientId ? (clientName.get(d.clientId) ?? null) : null,
+      }))
+    : [];
 
   // Atividade recente na carteira
   const recentActivity: ContextActivity[] = clientIds.length
@@ -223,8 +257,10 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
     pendingRequests,
     waitingTeamTasks,
     blockedDigitalAssets,
+    assetsNeedingDocs,
     upcomingMeetings,
     goalsAlerts,
+    recentDocuments,
     recentActivity,
     suggestedPriorities: suggestedPriorities.slice(0, 6),
   };

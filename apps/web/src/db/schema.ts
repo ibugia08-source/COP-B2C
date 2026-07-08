@@ -1320,6 +1320,54 @@ export const copilotSuggestions = pgTable(
   ],
 );
 
+// Ações estruturadas anexadas a sugestões — o que o sistema fará QUANDO (e só
+// quando) o gestor aprovar. Execução valida permissão + payload e gera log.
+export const COPILOT_ACTION_TYPES = [
+  "CREATE_TASK",
+  "UPDATE_TASK_STATUS",
+  "UPDATE_TASK_PRIORITY",
+  "UPDATE_CLIENT_HEALTH",
+  "UPDATE_CLIENT_STATUS",
+  "CREATE_CLIENT_COMMENT",
+  "CREATE_TASK_COMMENT",
+  "CREATE_REMINDER",
+  "CREATE_MEETING",
+  "GENERATE_REPORT",
+  "PREPARE_WHATSAPP_MESSAGE",
+  "SEND_WHATSAPP_MESSAGE_FUTURE",
+  "LINK_CONVERSATION_TO_CLIENT",
+] as const;
+export const COPILOT_ACTION_STATUSES = [
+  "PENDENTE",
+  "APROVADA",
+  "EXECUTADA",
+  "FALHOU",
+  "CANCELADA",
+] as const;
+
+export const copilotActions = pgTable(
+  "copilot_actions",
+  {
+    id: id(),
+    suggestionId: text("suggestion_id")
+      .notNull()
+      .references(() => copilotSuggestions.id, { onDelete: "cascade" }),
+    actionType: text("action_type", { enum: COPILOT_ACTION_TYPES }).notNull(),
+    targetType: text("target_type"), // client | task | digitalAsset | conversation | user
+    targetId: text("target_id"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    status: text("status", { enum: COPILOT_ACTION_STATUSES }).notNull().default("PENDENTE"),
+    approvedById: text("approved_by_id").references(() => users.id),
+    executedAt: timestamp("executed_at", { mode: "date" }),
+    errorMessage: text("error_message"),
+    resultSummary: text("result_summary"),
+    resultRef: text("result_ref"), // caminho interno do resultado (ex.: /tarefas/<id>)
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("copilot_actions_suggestion_idx").on(t.suggestionId, t.status)],
+);
+
 export const WHATSAPP_STATUSES = [
   "NAO_CONECTADO",
   "CONECTANDO",
@@ -1395,7 +1443,7 @@ export const conversationSummaries = pgTable(
   (t) => [index("conversation_summaries_conv_idx").on(t.conversationId)],
 );
 
-export const copilotSuggestionsRelations = relations(copilotSuggestions, ({ one }) => ({
+export const copilotSuggestionsRelations = relations(copilotSuggestions, ({ one, many }) => ({
   user: one(users, { fields: [copilotSuggestions.userId], references: [users.id] }),
   client: one(clients, { fields: [copilotSuggestions.clientId], references: [clients.id] }),
   resolvedBy: one(users, {
@@ -1403,6 +1451,15 @@ export const copilotSuggestionsRelations = relations(copilotSuggestions, ({ one 
     references: [users.id],
     relationName: "copilotResolvedBy",
   }),
+  actions: many(copilotActions),
+}));
+
+export const copilotActionsRelations = relations(copilotActions, ({ one }) => ({
+  suggestion: one(copilotSuggestions, {
+    fields: [copilotActions.suggestionId],
+    references: [copilotSuggestions.id],
+  }),
+  approvedBy: one(users, { fields: [copilotActions.approvedById], references: [users.id] }),
 }));
 
 export const whatsappConnectionsRelations = relations(whatsappConnections, ({ one, many }) => ({
@@ -1767,6 +1824,9 @@ export type Goal = typeof goals.$inferSelect;
 export type CopilotSuggestion = typeof copilotSuggestions.$inferSelect;
 export type CopilotSuggestionType = (typeof COPILOT_SUGGESTION_TYPES)[number];
 export type CopilotSuggestionStatus = (typeof COPILOT_SUGGESTION_STATUSES)[number];
+export type CopilotAction = typeof copilotActions.$inferSelect;
+export type CopilotActionType = (typeof COPILOT_ACTION_TYPES)[number];
+export type CopilotActionStatus = (typeof COPILOT_ACTION_STATUSES)[number];
 export type WhatsappConnection = typeof whatsappConnections.$inferSelect;
 export type MonitoredConversation = typeof monitoredConversations.$inferSelect;
 export type ConversationSummary = typeof conversationSummaries.$inferSelect;

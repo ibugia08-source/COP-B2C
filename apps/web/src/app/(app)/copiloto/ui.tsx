@@ -3,11 +3,30 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { SUGGESTION_TYPE_LABELS } from "@/lib/copilot/labels";
+import { ACTION_STATUS_META, ACTION_TYPE_LABELS, SUGGESTION_TYPE_LABELS } from "@/lib/copilot/labels";
 import { PRIORITY_META } from "@/lib/labels";
 import { Alert, Badge, Button, Field, StatusBadge, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
-import { approveSuggestion, rejectSuggestion, suggestionToTask, type ActionState } from "./actions";
+import {
+  approveAndExecuteAction,
+  approveSuggestion,
+  cancelCopilotAction,
+  rejectSuggestion,
+  suggestionToTask,
+  updateActionText,
+  type ActionState,
+} from "./actions";
+
+export type ActionView = {
+  id: string;
+  actionType: string;
+  status: string;
+  summary: string; // descrição humana do que será feito
+  editableText: string | null; // texto editável do payload (mensagem/comentário/descrição)
+  errorMessage: string | null;
+  resultSummary: string | null;
+  resultRef: string | null;
+};
 
 export type SuggestionView = {
   id: string;
@@ -23,6 +42,7 @@ export type SuggestionView = {
   taskId: string | null;
   executedTaskId: string | null;
   createdAt: string; // ISO
+  actions: ActionView[];
 };
 
 function useAction() {
@@ -44,6 +64,78 @@ function useAction() {
     });
   };
   return { pending, error, notice, run };
+}
+
+/** Bloco de ação estruturada: revisar → editar → aprovar e executar → resultado/erro. */
+function ActionBlock({ action: a }: { action: ActionView }) {
+  const { pending, error, notice, run } = useAction();
+  const [editOpen, setEditOpen] = useState(false);
+  const [text, setText] = useState(a.editableText ?? "");
+  const canDecide = ["PENDENTE", "APROVADA", "FALHOU"].includes(a.status);
+
+  return (
+    <div className="mt-2 rounded-lg border border-emerald-900/50 bg-emerald-950/10 p-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase text-emerald-300">
+          ⚙ {ACTION_TYPE_LABELS[a.actionType] ?? a.actionType}
+        </span>
+        <StatusBadge value={a.status} meta={ACTION_STATUS_META} />
+      </div>
+      <p className="mt-1 text-sm text-zinc-200">{a.summary}</p>
+      {a.editableText != null && a.status !== "EXECUTADA" && a.status !== "CANCELADA" && (
+        <pre className="mt-1.5 whitespace-pre-wrap rounded bg-zinc-950/60 p-2 font-sans text-xs text-zinc-300">{a.editableText}</pre>
+      )}
+
+      {a.status === "FALHOU" && a.errorMessage && (
+        <div className="mt-2"><Alert>{a.errorMessage}</Alert></div>
+      )}
+      {a.status === "EXECUTADA" && (
+        <p className="mt-1.5 text-xs text-emerald-400">
+          ✓ {a.resultSummary ?? "Executada."}{" "}
+          {a.resultRef && (
+            <Link href={a.resultRef} className="underline hover:text-emerald-300">ver resultado →</Link>
+          )}
+        </p>
+      )}
+
+      {canDecide && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <Button size="sm" disabled={pending} onClick={() => run(() => approveAndExecuteAction(a.id))}>
+            {pending ? "Executando..." : a.status === "FALHOU" ? "↻ Tentar novamente" : "✓ Aprovar e executar"}
+          </Button>
+          {a.editableText != null && (
+            <Button size="sm" variant="secondary" disabled={pending} onClick={() => { setText(a.editableText ?? ""); setEditOpen(true); }}>
+              Editar
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => cancelCopilotAction(a.id))}>
+            Cancelar ação
+          </Button>
+        </div>
+      )}
+
+      {notice && <div className="mt-2"><Alert tone="green">{notice}</Alert></div>}
+      {error && <div className="mt-2"><Alert>{error}</Alert></div>}
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Editar — ${ACTION_TYPE_LABELS[a.actionType] ?? a.actionType}`}>
+        <div className="space-y-4">
+          <Field label="Texto (revise antes de aprovar)">
+            <Textarea value={text} onChange={(e) => setText(e.target.value)} className="min-h-32" />
+          </Field>
+          {error && <Alert>{error}</Alert>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button
+              disabled={pending || text.trim().length < 3}
+              onClick={() => run(() => updateActionText(a.id, text), () => setEditOpen(false))}
+            >
+              {pending ? "Salvando..." : "Salvar edição"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
 }
 
 /** Card de sugestão com fluxo de aprovação: aprovar / rejeitar / editar / virar tarefa. */
@@ -92,11 +184,14 @@ export function SuggestionCard({ suggestion: s, readOnly }: { suggestion: Sugges
         </p>
       )}
 
+      {/* Ações estruturadas: o que será executado no sistema após aprovação */}
+      {!readOnly && s.actions.map((a) => <ActionBlock key={a.id} action={a} />)}
+
       {!readOnly && (isPending || isApproved) && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {isPending && (
             <>
-              <Button size="sm" disabled={pending} onClick={() => run(() => approveSuggestion(s.id))}>
+              <Button size="sm" variant={s.actions.length ? "secondary" : "primary"} disabled={pending} onClick={() => run(() => approveSuggestion(s.id))}>
                 ✓ Aprovar
               </Button>
               <Button size="sm" variant="secondary" disabled={pending} onClick={() => { setEditedAction(s.suggestedAction); setEditOpen(true); }}>
@@ -107,9 +202,11 @@ export function SuggestionCard({ suggestion: s, readOnly }: { suggestion: Sugges
               </Button>
             </>
           )}
-          <Button size="sm" variant={isApproved ? "primary" : "secondary"} disabled={pending} onClick={() => run(() => suggestionToTask(s.id))}>
-            ☑ Transformar em tarefa
-          </Button>
+          {s.actions.length === 0 && (
+            <Button size="sm" variant={isApproved ? "primary" : "secondary"} disabled={pending} onClick={() => run(() => suggestionToTask(s.id))}>
+              ☑ Transformar em tarefa
+            </Button>
+          )}
         </div>
       )}
       {s.status === "EXECUTADA" && s.executedTaskId && (

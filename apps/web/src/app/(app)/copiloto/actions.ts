@@ -5,15 +5,18 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   conversationSummaries,
+  copilotActions,
   copilotSuggestions,
   monitoredConversations,
   tasks,
   whatsappConnections,
+  type CopilotAction,
   type CopilotSuggestion,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission, isAdmin } from "@/lib/auth/guard";
 import type { SessionPayload } from "@/lib/auth/session";
+import { executeCopilotAction } from "@/lib/copilot/executor";
 import { summarizeConversation } from "@/lib/copilot/summarize";
 
 export type ActionState = { error?: string; success?: string; taskId?: string };
@@ -162,6 +165,163 @@ export async function suggestionToTask(suggestionId: string): Promise<ActionStat
 }
 
 // ---------------------------------------------------------------------------
+// Ações estruturadas (CopilotAction) — fluxo: revisar → editar → aprovar →
+// executar → log. Nada roda sem aprovação explícita.
+// ---------------------------------------------------------------------------
+
+async function guardAction(
+  actionId: string,
+): Promise<
+  | { ok: true; session: SessionPayload; action: CopilotAction; suggestion: CopilotSuggestion }
+  | { ok: false; error: string }
+> {
+  const auth = await checkPermission("tasks.view");
+  if (!auth.ok) return auth;
+  const action = await db.query.copilotActions.findFirst({
+    where: eq(copilotActions.id, actionId),
+    with: { suggestion: true },
+  });
+  if (!action) return { ok: false, error: "Ação não encontrada." };
+  const suggestion = action.suggestion as CopilotSuggestion;
+  if (suggestion.userId !== auth.session.userId && !isAdmin(auth.session)) {
+    return { ok: false, error: "Você só pode decidir sobre as ações do seu próprio Co-piloto." };
+  }
+  return { ok: true, session: auth.session, action, suggestion };
+}
+
+/**
+ * Aprova E executa uma ação estruturada (passo único, disparado pelo gestor).
+ * Sucesso → EXECUTADA (+resultado); falha → FALHOU com erro claro (pode tentar
+ * de novo). A sugestão-mãe acompanha o desfecho.
+ */
+export async function approveAndExecuteAction(actionId: string): Promise<ActionState> {
+  const auth = await guardAction(actionId);
+  if (!auth.ok) return { error: auth.error };
+  const { action, suggestion, session } = auth;
+  if (!["PENDENTE", "APROVADA", "FALHOU"].includes(action.status)) {
+    return { error: "Esta ação já foi executada ou cancelada." };
+  }
+  if (suggestion.status === "REJEITADA" || suggestion.status === "CANCELADA") {
+    return { error: "A sugestão desta ação foi descartada." };
+  }
+
+  // registro da aprovação (antes da execução)
+  await db
+    .update(copilotActions)
+    .set({ status: "APROVADA", approvedById: session.userId, updatedAt: new Date() })
+    .where(eq(copilotActions.id, actionId));
+  await logActivity({
+    userId: session.userId,
+    action: "copilot.actionApproved",
+    entityType: "copilotAction",
+    entityId: actionId,
+    metadata: { actionType: action.actionType, suggestionId: suggestion.id },
+  });
+
+  const result = await executeCopilotAction(action, suggestion, session);
+
+  if (!result.ok) {
+    await db
+      .update(copilotActions)
+      .set({ status: "FALHOU", errorMessage: result.error, updatedAt: new Date() })
+      .where(eq(copilotActions.id, actionId));
+    await logActivity({
+      userId: session.userId,
+      action: "copilot.actionFailed",
+      entityType: "copilotAction",
+      entityId: actionId,
+      metadata: { actionType: action.actionType, error: result.error },
+    });
+    revalidateCopilot();
+    return { error: result.error };
+  }
+
+  await db
+    .update(copilotActions)
+    .set({
+      status: "EXECUTADA",
+      executedAt: new Date(),
+      resultSummary: result.resultSummary,
+      resultRef: result.resultRef ?? null,
+      errorMessage: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(copilotActions.id, actionId));
+  await db
+    .update(copilotSuggestions)
+    .set({ status: "EXECUTADA", resolvedById: session.userId, resolvedAt: new Date() })
+    .where(eq(copilotSuggestions.id, suggestion.id));
+  await logActivity({
+    userId: session.userId,
+    action: "copilot.actionExecuted",
+    entityType: "copilotAction",
+    entityId: actionId,
+    metadata: { actionType: action.actionType, suggestionId: suggestion.id, resultRef: result.resultRef },
+  });
+  revalidateCopilot();
+  return { success: result.resultSummary };
+}
+
+/** Cancela uma ação pendente (nada é executado). */
+export async function cancelCopilotAction(actionId: string): Promise<ActionState> {
+  const auth = await guardAction(actionId);
+  if (!auth.ok) return { error: auth.error };
+  if (!["PENDENTE", "APROVADA", "FALHOU"].includes(auth.action.status)) {
+    return { error: "Esta ação já foi executada ou cancelada." };
+  }
+  await db
+    .update(copilotActions)
+    .set({ status: "CANCELADA", updatedAt: new Date() })
+    .where(eq(copilotActions.id, actionId));
+  await logActivity({
+    userId: auth.session.userId,
+    action: "copilot.actionCancelled",
+    entityType: "copilotAction",
+    entityId: actionId,
+    metadata: { actionType: auth.action.actionType },
+  });
+  revalidateCopilot();
+  return { success: "Ação cancelada — nada foi alterado no sistema." };
+}
+
+// campo de texto editável do payload, por tipo de ação
+const EDITABLE_FIELD: Record<string, string> = {
+  PREPARE_WHATSAPP_MESSAGE: "message",
+  SEND_WHATSAPP_MESSAGE_FUTURE: "message",
+  CREATE_TASK_COMMENT: "body",
+  CREATE_CLIENT_COMMENT: "comment",
+  CREATE_REMINDER: "body",
+  CREATE_TASK: "description",
+};
+
+/** Edita o texto principal do payload antes da aprovação. */
+export async function updateActionText(actionId: string, text: string): Promise<ActionState> {
+  const auth = await guardAction(actionId);
+  if (!auth.ok) return { error: auth.error };
+  if (!["PENDENTE", "FALHOU"].includes(auth.action.status)) {
+    return { error: "Apenas ações pendentes podem ser editadas." };
+  }
+  const field = EDITABLE_FIELD[auth.action.actionType];
+  if (!field) return { error: "Esta ação não tem texto editável." };
+  const clean = text.trim();
+  if (clean.length < 3) return { error: "Texto muito curto." };
+
+  await db
+    .update(copilotActions)
+    .set({ payload: { ...auth.action.payload, [field]: clean }, updatedAt: new Date() })
+    .where(eq(copilotActions.id, actionId));
+  await logActivity({
+    userId: auth.session.userId,
+    action: "copilot.actionEdited",
+    entityType: "copilotAction",
+    entityId: actionId,
+    metadata: { actionType: auth.action.actionType, field },
+  });
+  revalidateCopilot();
+  return { success: "Ação atualizada — revise e aprove quando quiser." };
+}
+
+// ---------------------------------------------------------------------------
 // WhatsApp (integração futura) + escuta simulada
 // ---------------------------------------------------------------------------
 
@@ -290,38 +450,96 @@ export async function simulateConversationSummary(
     createdById: auth.session.userId,
   });
 
-  // objeções/dúvidas viram sugestões de resposta — sempre com aprovação prévia
-  const newSuggestions: (typeof copilotSuggestions.$inferInsert)[] = [];
+  // objeções/dúvidas viram sugestões de resposta com a MENSAGEM PREPARADA como
+  // ação estruturada — o gestor edita/aprova antes de qualquer envio
+  const newSuggestions: { row: typeof copilotSuggestions.$inferInsert; action?: Omit<typeof copilotActions.$inferInsert, "suggestionId"> }[] = [];
   if (digest.objections.length) {
     newSuggestions.push({
-      userId: auth.session.userId,
-      clientId: clientId || null,
-      type: "QUEBRAR_OBJECAO",
-      title: "Responder objeção identificada na conversa",
-      description: `Objeção: "${digest.objections[0]}"`,
-      suggestedAction:
-        "Rascunhar resposta reconhecendo a preocupação, apresentando dados/resultados recentes e propondo próximo passo concreto. Revisar antes de enviar.",
-      priority: digest.priority,
-      status: "PENDENTE",
-      source: "REGRAS",
-      aiReasoningSummary: "O resumo da conversa identificou objeção do cliente; responder rápido e com dados reduz risco de churn.",
+      row: {
+        userId: auth.session.userId,
+        clientId: clientId || null,
+        type: "QUEBRAR_OBJECAO",
+        title: "Responder objeção identificada na conversa",
+        description: `Objeção: "${digest.objections[0]}"`,
+        suggestedAction: "Revisar a resposta preparada (reconhece a preocupação, traz dados e propõe próximo passo) e enviar manualmente.",
+        priority: digest.priority,
+        status: "PENDENTE",
+        source: "REGRAS",
+        aiReasoningSummary: "O resumo da conversa identificou objeção do cliente; responder rápido e com dados reduz risco de churn.",
+      },
+      action: {
+        actionType: "PREPARE_WHATSAPP_MESSAGE",
+        targetType: "conversation",
+        targetId: convId,
+        payload: {
+          clientId: clientId || null,
+          message: `Entendo totalmente a sua preocupação — obrigado por trazer isso. Quero te mostrar os números do período e o que já estamos ajustando para melhorar o resultado. Posso te mandar um resumo ainda hoje e marcarmos 15 minutos para revisar juntos?`,
+        },
+        status: "PENDENTE",
+      },
     });
   }
   if (digest.doubts.length) {
     newSuggestions.push({
-      userId: auth.session.userId,
-      clientId: clientId || null,
-      type: "RESPONDER_DUVIDA",
-      title: "Responder dúvida em aberto na conversa",
-      description: `Dúvida: "${digest.doubts[0]}"`,
-      suggestedAction: "Preparar resposta objetiva para a dúvida e registrar na conversa/ficha do cliente. Revisar antes de enviar.",
-      priority: "MEDIA",
-      status: "PENDENTE",
-      source: "REGRAS",
-      aiReasoningSummary: "Há pergunta do cliente sem resposta registrada; dúvidas paradas geram insatisfação.",
+      row: {
+        userId: auth.session.userId,
+        clientId: clientId || null,
+        type: "RESPONDER_DUVIDA",
+        title: "Responder dúvida em aberto na conversa",
+        description: `Dúvida: "${digest.doubts[0]}"`,
+        suggestedAction: "Revisar a resposta preparada para a dúvida e enviar manualmente; registrar na ficha se relevante.",
+        priority: "MEDIA",
+        status: "PENDENTE",
+        source: "REGRAS",
+        aiReasoningSummary: "Há pergunta do cliente sem resposta registrada; dúvidas paradas geram insatisfação.",
+      },
+      action: {
+        actionType: "PREPARE_WHATSAPP_MESSAGE",
+        targetType: "conversation",
+        targetId: convId,
+        payload: {
+          clientId: clientId || null,
+          message: `Ótima pergunta! Deixa eu te explicar direitinho: [complete aqui a resposta]. Qualquer coisa me chama que eu detalho com prints/exemplos.`,
+        },
+        status: "PENDENTE",
+      },
     });
   }
-  if (newSuggestions.length) await db.insert(copilotSuggestions).values(newSuggestions);
+  // conversa ainda sem cliente + cliente informado → sugerir o vínculo
+  if (clientId) {
+    const conv = await db.query.monitoredConversations.findFirst({
+      where: eq(monitoredConversations.id, convId!),
+      columns: { clientId: true, displayName: true },
+    });
+    if (conv && !conv.clientId) {
+      newSuggestions.push({
+        row: {
+          userId: auth.session.userId,
+          clientId,
+          type: "ACOMPANHAR_GRUPO",
+          title: `Vincular conversa "${conv.displayName}" ao cliente`,
+          suggestedAction: "Vincular esta conversa (e seus resumos) ao cliente para centralizar o histórico.",
+          priority: "BAIXA",
+          status: "PENDENTE",
+          source: "REGRAS",
+          aiReasoningSummary: "Você gerou um resumo desta conversa para um cliente, mas a conversa ainda não está vinculada a ele.",
+        },
+        action: {
+          actionType: "LINK_CONVERSATION_TO_CLIENT",
+          targetType: "conversation",
+          targetId: convId,
+          payload: { conversationId: convId, clientId },
+          status: "PENDENTE",
+        },
+      });
+    }
+  }
+  for (const item of newSuggestions) {
+    const [created] = await db.insert(copilotSuggestions).values(item.row).returning({ id: copilotSuggestions.id });
+    if (item.action) {
+      await db.insert(copilotActions).values({ ...item.action, suggestionId: created.id });
+    }
+  }
 
   await logActivity({
     userId: auth.session.userId,

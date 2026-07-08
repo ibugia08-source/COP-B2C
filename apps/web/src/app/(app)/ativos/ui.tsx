@@ -115,6 +115,8 @@ export function AssetFormButton({
   clients,
   users,
   defaultClientId,
+  defaultStatus,
+  defaultGroupId,
   autoOpen,
   canCreateSecrets,
 }: {
@@ -123,6 +125,8 @@ export function AssetFormButton({
   clients: Option[];
   users: Option[];
   defaultClientId?: string;
+  defaultStatus?: string;
+  defaultGroupId?: string;
   autoOpen?: boolean;
   canCreateSecrets: boolean;
 }) {
@@ -178,7 +182,7 @@ export function AssetFormButton({
               </Select>
             </Field>
             <Field label="Grupo *">
-              <Select name="groupId" required defaultValue={asset?.groupId ?? ""}>
+              <Select name="groupId" required defaultValue={asset?.groupId ?? defaultGroupId ?? ""}>
                 <option value="">Selecione...</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>{g.name}</option>
@@ -194,7 +198,7 @@ export function AssetFormButton({
               </Select>
             </Field>
             <Field label="Status">
-              <Select name="status" defaultValue={asset?.status ?? "NAO_INFORMADO"}>
+              <Select name="status" defaultValue={asset?.status ?? defaultStatus ?? "NAO_INFORMADO"}>
                 {Object.entries(ASSET_STATUS_META).map(([v, m]) => (
                   <option key={v} value={v}>{m.label}</option>
                 ))}
@@ -374,6 +378,7 @@ export function AssetFilters({
         </select>
         <select className={selectClass} value={sel("responsavel")} onChange={(e) => setParam("responsavel", e.target.value)}>
           <option value="">Responsável: todos</option>
+          <option value="__none__">Sem responsável</option>
           {users.map((u) => (
             <option key={u.id} value={u.id}>{u.name}</option>
           ))}
@@ -392,6 +397,7 @@ export function AssetFilters({
         {chip("🔥 Sendo esquentados", "status", "SENDO_ESQUENTADA")}
         {chip("📄 Precisam de documentos", "status", "PRECISA_DE_DOCUMENTOS")}
         {chip("⏰ Revisão pendente", "revisao", "pendente")}
+        {chip("👤 Sem responsável", "responsavel", "__none__")}
       </div>
     </div>
   );

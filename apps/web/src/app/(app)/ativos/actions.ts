@@ -27,10 +27,17 @@ import { logActivity } from "@/lib/activity";
 import { writeAssetAudit } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
 import { RESTRICTED_SECRET_TYPES_FOR_SOCIAL, roleHasPermission } from "@/lib/auth/permissions";
+import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
 import { encryptSecret, decryptSecret, maskSecret } from "@/lib/crypto";
 import { notifyRole, notifyUser } from "@/lib/notify";
 
 export type ActionState = { error?: string; success?: string; assetId?: string };
+
+/** Status válido = enum do sistema OU coluna criada pelo admin no Kanban de ativos. */
+async function isValidAssetStatus(status: string): Promise<boolean> {
+  if ((ASSET_STATUSES as readonly string[]).includes(status)) return true;
+  return isValidOptionValue("digital_assets", "status", status);
+}
 
 const UPLOADS_DIR = join(process.cwd(), "uploads", "ativos");
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -420,27 +427,42 @@ export async function duplicateAsset(assetId: string, copySecrets: boolean): Pro
 // Status (com motivo + histórico + automações)
 // ---------------------------------------------------------------------------
 
+export type StatusChangeResult = ActionState & { requires?: "BLOQUEADA" };
+
 export async function changeAssetStatus(
   assetId: string,
-  newStatus: AssetStatus,
+  newStatus: string,
   reason: string,
-): Promise<ActionState> {
+  extras?: { nextReviewDays?: number },
+): Promise<StatusChangeResult> {
   const auth = await checkPermission("digital_assets.update");
   if (!auth.ok) return { error: auth.error };
-  if (!ASSET_STATUSES.includes(newStatus)) return { error: "Status inválido." };
+  if (!(await isValidAssetStatus(newStatus))) return { error: "Status inválido." };
 
   const existing = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!existing) return { error: "Ativo não encontrado." };
   if (existing.status === newStatus) return { error: "O ativo já está neste status." };
 
-  await db
-    .update(digitalAssets)
-    .set({ status: newStatus, updatedById: auth.session.userId })
-    .where(eq(digitalAssets.id, assetId));
+  // Regra: bloquear exige motivo (registrado no histórico + comentário)
+  if (newStatus === "BLOQUEADA" && reason.trim().length < 3) {
+    return { requires: "BLOQUEADA", error: "Marcar como BLOQUEADA exige um motivo (mínimo 3 caracteres)." };
+  }
+
+  // Regra: ao esquentar, definir próxima revisão (padrão 7 dias se não informado)
+  const set: Partial<typeof digitalAssets.$inferInsert> = {
+    status: newStatus as AssetStatus,
+    updatedById: auth.session.userId,
+  };
+  if (newStatus === "SENDO_ESQUENTADA") {
+    const days = extras?.nextReviewDays && extras.nextReviewDays > 0 ? extras.nextReviewDays : 7;
+    set.nextReviewAt = new Date(Date.now() + days * 86400_000);
+  }
+
+  await db.update(digitalAssets).set(set).where(eq(digitalAssets.id, assetId));
   await db.insert(digitalAssetStatusHistory).values({
     assetId,
     oldStatus: existing.status,
-    newStatus,
+    newStatus: newStatus as AssetStatus,
     reason: reason.trim() || null,
     changedById: auth.session.userId,
   });
@@ -465,10 +487,98 @@ export async function changeAssetStatus(
       metadata: { title: existing.title, from: existing.status, to: newStatus },
     });
   }
-  await runStatusAutomations(existing, newStatus, auth.session.userId);
+  // automações só disparam para status conhecidos do sistema
+  if ((ASSET_STATUSES as readonly string[]).includes(newStatus)) {
+    await runStatusAutomations(existing, newStatus as AssetStatus, auth.session.userId);
+  }
 
   revalidateAsset(assetId, existing.clientId);
   return { success: "Status atualizado." };
+}
+
+/** Criação rápida direto de uma coluna do Kanban (por status ou por grupo). */
+export async function quickCreateAsset(
+  title: string,
+  opts: { status?: string; groupId?: string; clientId?: string | null },
+): Promise<ActionState> {
+  const auth = await checkPermission("digital_assets.create");
+  if (!auth.ok) return { error: auth.error };
+  const clean = title.trim();
+  if (clean.length < 2) return { error: "Título muito curto." };
+
+  // grupo: informado, ou o primeiro ativo (todo ativo precisa de um grupo)
+  let groupId = opts.groupId;
+  if (!groupId) {
+    const first = await db.query.digitalAssetGroups.findFirst({
+      where: eq(digitalAssetGroups.status, "ATIVO"),
+      orderBy: (g, { asc }) => [asc(g.order), asc(g.name)],
+    });
+    if (!first) return { error: "Crie um grupo de ativos antes de adicionar pelo Kanban." };
+    groupId = first.id;
+  }
+
+  const status = opts.status || (await resolveDefaultValue("digital_assets", "status", "NAO_INFORMADO"));
+  if (!(await isValidAssetStatus(status))) return { error: "Status inválido." };
+
+  const [asset] = await db
+    .insert(digitalAssets)
+    .values({
+      groupId,
+      clientId: opts.clientId || null,
+      title: clean,
+      status: status as AssetStatus,
+      createdById: auth.session.userId,
+      updatedById: auth.session.userId,
+    })
+    .returning();
+
+  await writeAssetAudit({
+    assetId: asset.id,
+    userId: auth.session.userId,
+    action: "ASSET_CREATED",
+    metadata: { title: asset.title, quick: true },
+  });
+  if (asset.clientId) {
+    await logActivity({
+      userId: auth.session.userId,
+      action: "asset.created",
+      entityType: "client",
+      entityId: asset.clientId,
+      metadata: { title: asset.title, assetId: asset.id },
+    });
+  }
+  if (asset.status === "BLOQUEADA" || asset.status === "PRECISA_DE_DOCUMENTOS") {
+    await runStatusAutomations(asset, asset.status, auth.session.userId);
+  }
+
+  revalidateAsset(asset.id, asset.clientId);
+  return { success: "Ativo criado.", assetId: asset.id };
+}
+
+/** Move um ativo entre grupos (Kanban agrupado por grupo). */
+export async function moveAssetToGroup(assetId: string, groupId: string): Promise<ActionState> {
+  const auth = await checkPermission("digital_assets.update");
+  if (!auth.ok) return { error: auth.error };
+  const [asset, group] = await Promise.all([
+    db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) }),
+    db.query.digitalAssetGroups.findFirst({ where: eq(digitalAssetGroups.id, groupId) }),
+  ]);
+  if (!asset) return { error: "Ativo não encontrado." };
+  if (!group) return { error: "Grupo não encontrado." };
+  if (asset.groupId === groupId) return { success: "O ativo já está neste grupo." };
+
+  await db
+    .update(digitalAssets)
+    .set({ groupId, updatedById: auth.session.userId })
+    .where(eq(digitalAssets.id, assetId));
+  await writeAssetAudit({
+    assetId,
+    userId: auth.session.userId,
+    action: "ASSET_UPDATED",
+    metadata: { movedToGroup: group.name },
+  });
+  revalidateAsset(assetId, asset.clientId);
+  return { success: "Ativo movido de grupo." };
 }
 
 export async function markAssetChecked(assetId: string, nextReviewDays: number): Promise<ActionState> {

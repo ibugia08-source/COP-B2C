@@ -77,7 +77,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   const canUpdate = hasPermission(session, "clients.update");
   const canMoveStatus = hasPermission(session, "clients.moveStatus");
   const canCreateTask = hasPermission(session, "tasks.create");
-  const [timeline, services, meetUsers, meetEnabled, taskStatusMetaResolved] = await Promise.all([
+  const [timeline, services, meetUsers, meetEnabled, taskStatusMetaResolved, assetStatusMetaResolved] = await Promise.all([
     getClientTimeline(client.id),
     getActiveServices(),
     db.query.users.findMany({
@@ -87,8 +87,10 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
     }),
     isGoogleMeetEnabled(),
     resolveMeta("tasks", "status"),
+    resolveMeta("digital_assets", "status"),
   ]);
   const taskStatusMeta = { ...TASK_STATUS_META, ...taskStatusMetaResolved };
+  const assetStatusMeta = { ...ASSET_STATUS_META, ...assetStatusMetaResolved };
 
   // Pendências (regras de negócio)
   const pendencias: string[] = [];
@@ -278,7 +280,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
             </Td>
             <Td className="text-zinc-400">{ASSET_TYPE_LABEL[a.assetType]}</Td>
             <Td className="text-zinc-400">{ASSET_PLATFORM_LABEL[a.platform]}</Td>
-            <Td><StatusBadge value={a.status} meta={ASSET_STATUS_META} /></Td>
+            <Td><StatusBadge value={a.status} meta={assetStatusMeta} /></Td>
             <Td>{a.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={a.assignedTo.name} size="sm" />{a.assignedTo.name.split(" ")[0]}</span> : "—"}</Td>
             <Td className={a.nextReviewAt && a.nextReviewAt < now ? "text-purple-400" : "text-zinc-400"}>
               {formatDate(a.nextReviewAt)}

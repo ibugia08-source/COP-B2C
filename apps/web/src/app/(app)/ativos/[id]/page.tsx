@@ -4,6 +4,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssetGroups, digitalAssets, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { resolveOptions } from "@/lib/config-options";
 import {
   ASSET_COMMENT_TYPE_META,
   ASSET_PLATFORM_LABEL,
@@ -12,6 +13,7 @@ import {
   ASSET_TYPE_LABEL,
   formatDate,
   TASK_STATUS_META,
+  type Tone,
 } from "@/lib/labels";
 import { Tabs } from "@/components/ui/overlay";
 import {
@@ -116,11 +118,17 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
   const now = new Date();
   const reviewPending = asset.nextReviewAt && asset.nextReviewAt < now;
 
-  const [groups, allClients, allUsers] = await Promise.all([
+  const [groups, allClients, allUsers, statusOptionsAll] = await Promise.all([
     db.query.digitalAssetGroups.findMany({ where: eq(digitalAssetGroups.status, "ATIVO"), orderBy: [asc(digitalAssetGroups.name)] }),
     db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)).orderBy(asc(users.name)),
+    resolveOptions("digital_assets", "status"),
   ]);
+
+  // meta de status (built-in + colunas custom do admin) para badges e select
+  const statusMeta: Record<string, { label: string; tone: Tone }> = { ...ASSET_STATUS_META };
+  for (const o of statusOptionsAll) statusMeta[o.value] = { label: o.label, tone: o.color };
+  const statusOptions = statusOptionsAll.filter((o) => o.isActive).map((o) => ({ value: o.value, label: o.label }));
 
   // ---------------- abas ----------------
 
@@ -138,7 +146,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         </Row>
         <Row label="Tipo">{ASSET_TYPE_LABEL[asset.assetType]}</Row>
         <Row label="Plataforma">{ASSET_PLATFORM_LABEL[asset.platform]}</Row>
-        <Row label="Status"><StatusBadge value={asset.status} meta={ASSET_STATUS_META} /></Row>
+        <Row label="Status"><StatusBadge value={asset.status} meta={statusMeta} /></Row>
         <Row label="Prioridade"><StatusBadge value={asset.priority} meta={ASSET_PRIORITY_META} /></Row>
         <Row label="Responsável">{asset.assignedTo?.name ?? "—"}</Row>
         <Row label="Dono">{asset.ownerUser?.name ?? "—"}</Row>
@@ -260,8 +268,8 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
     >
       {asset.statusHistory.map((h) => (
         <tr key={h.id} className="hover:bg-zinc-900/60">
-          <Td><StatusBadge value={h.oldStatus} meta={ASSET_STATUS_META} /></Td>
-          <Td><StatusBadge value={h.newStatus} meta={ASSET_STATUS_META} /></Td>
+          <Td><StatusBadge value={h.oldStatus} meta={statusMeta} /></Td>
+          <Td><StatusBadge value={h.newStatus} meta={statusMeta} /></Td>
           <Td className="text-zinc-400">{h.reason ?? "—"}</Td>
           <Td className="text-zinc-400">{h.changedBy?.name ?? "—"}</Td>
           <Td className="text-zinc-400">{formatDate(h.createdAt)}</Td>
@@ -307,7 +315,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold">{asset.title}</h1>
-            <StatusBadge value={asset.status} meta={ASSET_STATUS_META} />
+            <StatusBadge value={asset.status} meta={statusMeta} />
             {reviewPending && <Badge tone="amber">⏰ revisão pendente</Badge>}
             {asset.archivedAt && <Badge tone="zinc">arquivado</Badge>}
           </div>
@@ -338,6 +346,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         <AssetHeaderControls
           assetId={asset.id}
           status={asset.status}
+          statusOptions={statusOptions}
           isArchived={!!asset.archivedAt}
           canUpdate={can.update}
           canArchive={can.archive}

@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { SECRET_TYPES, type AssetStatus } from "@/db/schema";
-import { ASSET_STATUS_META, SECRET_TYPE_LABEL } from "@/lib/labels";
+import { SECRET_TYPES } from "@/db/schema";
+import { SECRET_TYPE_LABEL } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal } from "@/components/ui/overlay";
 import {
@@ -43,16 +43,20 @@ function useAction() {
 // Status + checagem + arquivar + duplicar
 // ---------------------------------------------------------------------------
 
+type StatusOption = { value: string; label: string };
+
 export function AssetHeaderControls({
   assetId,
   status,
+  statusOptions,
   isArchived,
   canUpdate,
   canArchive,
   canCreate,
 }: {
   assetId: string;
-  status: AssetStatus;
+  status: string;
+  statusOptions: StatusOption[];
   isArchived: boolean;
   canUpdate: boolean;
   canArchive: boolean;
@@ -62,9 +66,12 @@ export function AssetHeaderControls({
   const [statusModal, setStatusModal] = useState(false);
   const [duplicateModal, setDuplicateModal] = useState(false);
   const [archiveModal, setArchiveModal] = useState(false);
-  const [newStatus, setNewStatus] = useState<AssetStatus>(status);
+  const [newStatus, setNewStatus] = useState<string>(status);
   const [reason, setReason] = useState("");
+  const [reviewDays, setReviewDays] = useState("7");
   const [copySecrets, setCopySecrets] = useState(false);
+
+  const blockingReason = newStatus === "BLOQUEADA" && reason.trim().length < 3;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -93,21 +100,33 @@ export function AssetHeaderControls({
       <Modal open={statusModal} onClose={() => setStatusModal(false)} title="Alterar status do ativo">
         <div className="space-y-4">
           <Field label="Novo status">
-            <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value as AssetStatus)}>
-              {Object.entries(ASSET_STATUS_META).map(([v, m]) => (
-                <option key={v} value={v}>{m.label}</option>
+            <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
+              {!statusOptions.some((o) => o.value === newStatus) && <option value={newStatus}>{newStatus}</option>}
+              {statusOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Motivo">
+          {newStatus === "SENDO_ESQUENTADA" && (
+            <Field label="Próxima revisão (dias)">
+              <Input type="number" min="1" value={reviewDays} onChange={(e) => setReviewDays(e.target.value)} />
+            </Field>
+          )}
+          <Field label={newStatus === "BLOQUEADA" ? "Motivo do bloqueio *" : "Motivo"}>
             <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Por que o status mudou?" />
           </Field>
+          {blockingReason && <p className="text-[11px] text-amber-500">Bloquear exige um motivo (mínimo 3 caracteres).</p>}
           {error && <Alert>{error}</Alert>}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setStatusModal(false)}>Cancelar</Button>
             <Button
-              disabled={pending}
-              onClick={() => run(() => changeAssetStatus(assetId, newStatus, reason), () => setStatusModal(false))}
+              disabled={pending || blockingReason}
+              onClick={() =>
+                run(
+                  () => changeAssetStatus(assetId, newStatus, reason, { nextReviewDays: Number(reviewDays) }),
+                  () => setStatusModal(false),
+                )
+              }
             >
               {pending ? "Salvando..." : "Alterar status"}
             </Button>

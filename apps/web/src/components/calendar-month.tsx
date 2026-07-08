@@ -19,11 +19,17 @@ export function CalendarMonth({
   month,
   buildHref,
   items,
+  taskLegend = "tarefa/demanda",
+  meetingLegend = "reunião",
+  emptyLabel = "Nada com prazo neste mês",
 }: {
   year: number;
   month: number; // 0-indexado
   buildHref: (patch: Record<string, string | null>) => string;
   items: CalendarItem[];
+  taskLegend?: string;
+  meetingLegend?: string;
+  emptyLabel?: string;
 }) {
   const now = new Date();
   const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
@@ -65,8 +71,8 @@ export function CalendarMonth({
           </Link>
         )}
         <span className="ml-auto flex items-center gap-3 text-[11px] text-zinc-500">
-          <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-sky-500" />tarefa/demanda</span>
-          <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-purple-500" />reunião</span>
+          <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-sky-500" />{taskLegend}</span>
+          <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-purple-500" />{meetingLegend}</span>
         </span>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-zinc-500">
@@ -113,7 +119,7 @@ export function CalendarMonth({
       </div>
       {items.length === 0 && (
         <div className="mt-4">
-          <EmptyState icon="🗓️" title="Nada com prazo neste mês" />
+          <EmptyState icon="🗓️" title={emptyLabel} />
         </div>
       )}
     </div>

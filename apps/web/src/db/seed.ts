@@ -31,6 +31,7 @@ import {
 import { PERMISSION_KEYS, ROLE_PERMISSIONS } from "../lib/auth/permissions";
 import { hashPassword } from "../lib/auth/password";
 import { encryptSecret, maskSecret } from "../lib/crypto";
+import { materializeAllGroups } from "../lib/config-options";
 
 async function seed() {
   console.log("🌱 Seed COP B2C (v3 — Banco de Ativos Digitais)...");
@@ -762,6 +763,8 @@ async function seed() {
       },
     ])
     .onConflictDoNothing();
+
+  await materializeAllGroups();
 
   console.log("✅ Seed v3 concluído.");
   console.log("   Login de teste: owner@b2cgestao.com.br / cop123456 (todos os usuários usam cop123456)");

@@ -17,11 +17,13 @@ type UserOption = { id: string; name: string };
 export function ClientForm({
   client,
   users,
+  niches,
   action,
   submitLabel,
 }: {
   client?: Client;
   users: UserOption[];
+  niches: string[];
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
 }) {
@@ -64,7 +66,12 @@ export function ClientForm({
           </Select>
         </Field>
         <Field label="Nicho" htmlFor="niche">
-          <Input id="niche" name="niche" defaultValue={client?.niche ?? ""} placeholder="Ex.: Odontologia" />
+          <Input id="niche" name="niche" list="niche-options" defaultValue={client?.niche ?? ""} placeholder="Ex.: Odontologia" />
+          <datalist id="niche-options">
+            {niches.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
         </Field>
         <Field label="Cidade" htmlFor="city">
           <Input id="city" name="city" defaultValue={client?.city ?? ""} />

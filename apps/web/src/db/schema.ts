@@ -1143,6 +1143,56 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: updatedAt(),
 });
 
+// Taxonomias configuráveis pelo Admin (status, opções de filtro, cores, ordem).
+// Grupos do sistema (isSystem) têm valores travados na lógica — só rótulo/cor/
+// ordem/ativo são editáveis. Grupos livres (nicho, tags) aceitam novos valores.
+export const configOptionGroups = pgTable(
+  "config_option_groups",
+  {
+    id: id(),
+    moduleKey: text("module_key").notNull(), // clients, tasks, operation, digital_assets, goals
+    groupKey: text("group_key").notNull(), // status, health, niche, ...
+    name: text("name").notNull(),
+    description: text("description"),
+    isSystem: boolean("is_system").notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("config_group_module_key_idx").on(t.moduleKey, t.groupKey)],
+);
+
+export const configOptions = pgTable(
+  "config_options",
+  {
+    id: id(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => configOptionGroups.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    value: text("value").notNull(),
+    color: text("color"), // nome de tom (emerald, amber, red, blue, purple, zinc, cyan)
+    order: integer("order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    isDefault: boolean("is_default").notNull().default(false),
+    // isSystem: valor travado (enum de negócio) — não pode ser removido, só editado
+    isSystem: boolean("is_system").notNull().default(false),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("config_options_group_idx").on(t.groupId)],
+);
+
+export const configOptionGroupsRelations = relations(configOptionGroups, ({ many }) => ({
+  options: many(configOptions),
+}));
+export const configOptionsRelations = relations(configOptions, ({ one }) => ({
+  group: one(configOptionGroups, {
+    fields: [configOptions.groupId],
+    references: [configOptionGroups.id],
+  }),
+}));
+
 // Dashboard personalizável por usuário: quais métricas aparecem, em que ordem,
 // layout (nº de colunas), filtros padrão e alertas visíveis.
 export const userDashboardConfigs = pgTable("user_dashboard_configs", {
@@ -1474,6 +1524,8 @@ export type ImportLog = typeof importLogs.$inferSelect;
 export type AgencyService = typeof agencyServices.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type UserDashboardConfig = typeof userDashboardConfigs.$inferSelect;
+export type ConfigOptionGroup = typeof configOptionGroups.$inferSelect;
+export type ConfigOption = typeof configOptions.$inferSelect;
 
 export type RoleName = (typeof ROLE_NAMES)[number];
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];

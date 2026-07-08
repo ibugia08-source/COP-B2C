@@ -20,6 +20,7 @@ import {
   UserAvatar,
 } from "@/components/ui/primitives";
 import { AssetFilters, AssetFormButton, GroupFormButton } from "./ui";
+import { ModuleConfig } from "../module-config";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -126,7 +127,8 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
         title="Banco de Ativos Digitais"
         description="Central de contas, perfis, acessos, contas de anúncio e ativos digitais da operação."
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ModuleConfig moduleKey="digital_assets" moduleLabel="Banco de Ativos Digitais" />
             <GroupFormButton clients={allClients} canManage={canManageGroups} />
             {canCreate && (
               <AssetFormButton

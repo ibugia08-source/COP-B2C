@@ -13,6 +13,7 @@ import {
 import { Button, EmptyState, PageHeader, StatusBadge, Table, Td, Th } from "@/components/ui/primitives";
 import { OperationKanban, type KanbanClient } from "./kanban";
 import { OperationFilters } from "./ui-filters";
+import { ModuleConfig } from "../module-config";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -89,7 +90,8 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
         title="Operação"
         description="Pipeline do ciclo de vida do cliente — tarefas internas ficam no módulo Tarefas."
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <ModuleConfig moduleKey="operation" moduleLabel="Operação" />
             <Button variant={viewList ? "secondary" : "primary"} size="sm" href="/operacao">
               Kanban
             </Button>

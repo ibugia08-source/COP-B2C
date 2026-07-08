@@ -31,6 +31,8 @@ import {
   UserAvatar,
 } from "@/components/ui/primitives";
 import { ClientFilters } from "./ui-filters";
+import { ModuleConfig } from "../module-config";
+import { resolveOptions } from "@/lib/config-options";
 
 type Search = Record<string, string | string[] | undefined>;
 
@@ -86,7 +88,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
       with: { strategist: true, trafficManager1: true, mainResponsible: true },
     }),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
-    db.selectDistinct({ niche: clients.niche }).from(clients),
+    resolveOptions("clients", "niche", { activeOnly: true }),
     Promise.all([
       db.select({ n: count() }).from(clients),
       db.select({ n: count() }).from(clients).where(eq(clients.status, "ATIVO")),
@@ -104,7 +106,12 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
       <PageHeader
         title="Clientes"
         description="Carteira completa da agência — separada das tarefas internas."
-        actions={canCreate && <Button href="/clientes/novo">+ Novo cliente</Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            <ModuleConfig moduleKey="clients" moduleLabel="Clientes" />
+            {canCreate && <Button href="/clientes/novo">+ Novo cliente</Button>}
+          </div>
+        }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
@@ -118,7 +125,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
 
       <ClientFilters
         users={allUsers}
-        niches={niches.map((n) => n.niche).filter((n): n is string => !!n)}
+        niches={niches.map((n) => n.value)}
         statuses={[...CLIENT_STATUSES]}
         healths={[...HEALTH_STATUSES]}
         adsStatuses={[...ADS_STATUSES]}

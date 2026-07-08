@@ -17,6 +17,7 @@ import {
   UserAvatar,
 } from "@/components/ui/primitives";
 import { TaskCreateButton, TaskFilters, TasksKanban, type KanbanTask } from "./ui";
+import { ModuleConfig } from "../module-config";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -114,6 +115,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
         description="Central de tarefas da operação — diárias, semanais, projetos e rotinas."
         actions={
           <div className="flex items-center gap-2">
+            <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" />
             <Link
               href="/tarefas/templates"
               className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"

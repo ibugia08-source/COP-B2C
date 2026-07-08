@@ -11,14 +11,15 @@ O 404 da Vercel acontece porque o app está em `apps/web`, não na raiz do repo.
 2. Em **Root Directory**, defina: `apps/web`.
 3. Framework Preset: **Next.js** (detectado automaticamente). Salve.
 
-## 2. Criar o banco Postgres
+## 2. Banco Postgres
 
-Opção A — **Vercel Postgres**: aba **Storage → Create Database → Postgres**.
-Ele cria a variável `DATABASE_URL` (e afins) automaticamente no projeto.
+O app usa **postgres.js**, compatível com **Supabase**, Neon ou Vercel Postgres.
 
-Opção B — **Neon** (neon.tech, plano free): crie um projeto e copie a
-**connection string pooled** (algo como
-`postgresql://usuario:senha@ep-xxxx-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require`).
+Com Supabase, há duas URLs (Settings → Database):
+- **Session / porta 5432** — use para `db:push` e `db:seed` (comandos de DDL).
+- **Transaction pooler / porta 6543** — use no runtime da Vercel (serverless).
+
+O banco já foi criado e populado neste projeto (tabelas + seed aplicados).
 
 ## 3. Variáveis de ambiente na Vercel
 
@@ -26,9 +27,13 @@ Em **Settings → Environment Variables**, adicione (Production + Preview):
 
 | Nome | Valor |
 |---|---|
-| `DATABASE_URL` | connection string do Postgres (com `?sslmode=require`) |
-| `AUTH_SECRET` | gere com `openssl rand -base64 48` |
-| `VAULT_ENCRYPTION_KEY` | gere com `openssl rand -hex 32` (32 bytes = 64 chars) |
+| `DATABASE_URL` | URL do **pooler de transação** (Supabase porta 6543) com `?sslmode=require` |
+| `AUTH_SECRET` | o mesmo valor usado no seed (veja abaixo) |
+| `VAULT_ENCRYPTION_KEY` | **o mesmo** usado no seed — obrigatório para decriptar os segredos |
+
+> A `VAULT_ENCRYPTION_KEY` na Vercel precisa ser **idêntica** à usada quando o
+> `db:seed` rodou, senão os segredos do Banco de Ativos não descriptografam.
+> Os valores gerados nesta configuração foram entregues no chat — guarde-os.
 
 > ⚠️ Guarde `VAULT_ENCRYPTION_KEY` em local seguro. Perdê-la = perder todos os
 > segredos criptografados do Banco de Ativos Digitais.

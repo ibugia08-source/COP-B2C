@@ -178,7 +178,7 @@ export function BulkBar({
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 max-lg:bottom-[calc(4.75rem+env(safe-area-inset-bottom))]">
       <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900 px-3 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.16)]">
         <span className="flex items-center gap-2 pr-1 text-sm">
           <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-xs font-bold text-white">

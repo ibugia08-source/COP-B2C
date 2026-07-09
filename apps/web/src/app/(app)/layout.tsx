@@ -5,7 +5,7 @@ import { notifications } from "@/db/schema";
 import { logout } from "@/lib/auth/actions";
 import { requireSession, sessionPermissions } from "@/lib/auth/guard";
 import type { PermissionKey } from "@/lib/auth/permissions";
-import { AppNav, Breadcrumbs, GlobalSearch, type NavGroup, type NavItem } from "@/components/shell";
+import { AppNav, Breadcrumbs, GlobalSearch, MobileBottomNav, type NavGroup, type NavItem } from "@/components/shell";
 import { UserAvatar } from "@/components/ui/primitives";
 
 type NavDef = NavItem & { permission?: PermissionKey };
@@ -56,13 +56,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .from(notifications)
     .where(and(eq(notifications.userId, session.userId), isNull(notifications.readAt)));
 
+  // Navegação mobile: 4 primários na bottom bar + o restante na folha "Mais"
+  const flatNav = navGroups.flatMap((g) => g.items);
+  const PRIMARY_HREFS = ["/", "/operacao", "/tarefas", "/clientes"];
+  const mobilePrimary = PRIMARY_HREFS.map((h) => flatNav.find((i) => i.href === h)).filter(
+    (i): i is NavItem => !!i,
+  );
+  const mobileMore = flatNav.filter((i) => !PRIMARY_HREFS.includes(i.href));
+
   return (
     <div className="flex min-h-screen bg-zinc-950">
-      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 max-lg:w-16">
-        <div className="flex h-14 items-center border-b border-zinc-800 px-4 max-lg:justify-center max-lg:px-2">
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 lg:flex">
+        <div className="flex h-14 items-center border-b border-zinc-800 px-4">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight" title="COP B2C">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white shadow-sm">B</span>
-            <span className="text-base max-lg:hidden">
+            <span className="text-base">
               COP <span className="text-emerald-700">B2C</span>
             </span>
           </Link>
@@ -89,8 +97,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-zinc-800 bg-zinc-950/80 px-6 backdrop-blur max-md:px-4">
-          <Breadcrumbs />
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/80 px-6 backdrop-blur max-md:px-4">
+          <Link href="/" className="flex shrink-0 items-center gap-2 lg:hidden" title="COP B2C" aria-label="Início">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white shadow-sm">B</span>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <Breadcrumbs />
+          </div>
           <div className="flex shrink-0 items-center gap-2">
             <GlobalSearch />
             <Link
@@ -108,8 +121,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </Link>
           </div>
         </header>
-        <main className="mx-auto min-w-0 w-full max-w-[1400px] flex-1 p-6 max-md:p-4">{children}</main>
+        <main className="mx-auto min-w-0 w-full max-w-[1400px] flex-1 overflow-x-hidden p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] max-md:p-4 max-md:pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+          {children}
+        </main>
       </div>
+
+      <MobileBottomNav
+        primary={mobilePrimary}
+        more={mobileMore}
+        userName={session.name}
+        roles={session.roles.join(", ")}
+        logoutAction={logout}
+      />
     </div>
   );
 }

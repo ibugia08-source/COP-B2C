@@ -190,6 +190,28 @@ textarea:focus-visible {
   animation: cop-shimmer 1.4s infinite;
 }
 
+/* --- Mobile: app-like, sem overflow horizontal acidental --------------- */
+/* Rolagem horizontal (tabelas/kanban) com inércia e sem barra pesada */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Alvos de toque confortáveis em telas de toque (sem inflar UI de mouse) */
+@media (pointer: coarse) {
+  nav a,
+  .tap-target {
+    min-height: 44px;
+  }
+}
+
+/* Áreas seguras do iPhone (notch / barra inferior) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.h-safe-bottom {
+  height: env(safe-area-inset-bottom);
+}
+
 /* Respeita quem prefere menos movimento */
 @media (prefers-reduced-motion: reduce) {
   *,

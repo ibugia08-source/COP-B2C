@@ -5,6 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
+  ADS_STATUSES,
+  AGENCY_BRANDS,
+  BUSINESS_MODELS,
+  CLIENT_STATUSES,
+  clientHealthLogs,
   clientMeetings,
   clientOperationalProfiles,
   clients,
@@ -18,6 +23,7 @@ import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
 import { emitEvent } from "@/lib/automations/engine";
 import { isValidOptionValue } from "@/lib/config-options";
+import { cascadeSafeDelete } from "@/lib/safe-delete";
 import { clientFormSchema, operationalProfileSchema } from "@/lib/validations/client";
 
 export type ActionState = { error?: string; success?: string };
@@ -431,4 +437,152 @@ export async function saveOperationalProfile(
 
   revalidatePath(`/clientes/${clientId}`);
   return { success: "Perfil operacional salvo." };
+}
+
+// ---------------------------------------------------------------------------
+// Edição inline e ações em massa na LISTA de clientes
+// ---------------------------------------------------------------------------
+
+export type BulkResult = { ok: number; fail: number; error?: string; success?: string };
+
+const CLIENT_FIELD_ENUM: Record<string, readonly string[]> = {
+  agencyBrand: AGENCY_BRANDS,
+  businessModel: BUSINESS_MODELS,
+  status: CLIENT_STATUSES,
+  healthStatus: HEALTH_STATUSES,
+  adsStatus: ADS_STATUSES,
+};
+const EDITABLE_FIELDS = new Set([
+  "agencyBrand",
+  "businessModel",
+  "niche",
+  "status",
+  "healthStatus",
+  "adsStatus",
+  "trafficManager1Id",
+]);
+
+async function applyClientField(
+  ids: string[],
+  field: string,
+  value: string,
+  userId: string,
+): Promise<BulkResult> {
+  if (!EDITABLE_FIELDS.has(field)) return { ok: 0, fail: 0, error: "Campo não editável." };
+  // Regras que exigem fluxo próprio (motivo) — bloqueadas na edição rápida
+  if (field === "status" && value === "PERDIDO") {
+    return { ok: 0, fail: 0, error: "Para marcar como PERDIDO use a ação de churn na ficha do cliente." };
+  }
+  if (field === "healthStatus" && value === "CRITICO") {
+    return { ok: 0, fail: 0, error: "Saúde CRÍTICA exige um motivo — altere na ficha do cliente." };
+  }
+  const enumValues = CLIENT_FIELD_ENUM[field];
+  if (enumValues && (!value || !enumValues.includes(value))) {
+    return { ok: 0, fail: 0, error: "Valor inválido." };
+  }
+  // gestor e nicho aceitam vazio (= remover)
+  const dbValue = field === "trafficManager1Id" || field === "niche" ? value || null : value;
+
+  let ok = 0;
+  const touched: string[] = [];
+  for (const id of ids) {
+    const existing = await db.query.clients.findFirst({ where: eq(clients.id, id) });
+    if (!existing) continue;
+    await db.update(clients).set({ [field]: dbValue } as Partial<typeof clients.$inferInsert>).where(eq(clients.id, id));
+    if (field === "healthStatus" && existing.healthStatus !== dbValue) {
+      await db.insert(clientHealthLogs).values({
+        clientId: id,
+        previousStatus: existing.healthStatus as HealthStatus,
+        newStatus: dbValue as HealthStatus,
+        reason: "Alteração rápida na lista",
+        changedById: userId,
+      });
+    }
+    touched.push(id);
+    ok++;
+  }
+  await logActivity({
+    userId,
+    action: ids.length > 1 ? "client.bulkFieldEdited" : "client.fieldEdited",
+    entityType: "client",
+    entityId: ids.length === 1 ? ids[0] : null,
+    metadata: { field, count: ok },
+  });
+  revalidatePath("/clientes");
+  revalidatePath("/operacao");
+  for (const id of touched) revalidatePath(`/clientes/${id}`);
+  return { ok, fail: ids.length - ok, success: `${ok} cliente(s) atualizado(s).` };
+}
+
+/** Edição inline de um campo do cliente direto na linha da lista. */
+export async function updateClientField(
+  clientId: string,
+  field: string,
+  value: string,
+): Promise<ActionState> {
+  const auth = await checkPermission("clients.update");
+  if (!auth.ok) return { error: auth.error };
+  const r = await applyClientField([clientId], field, value, auth.session.userId);
+  return r.error ? { error: r.error } : { success: "Atualizado." };
+}
+
+async function bulkField(ids: string[], field: string, value: string): Promise<BulkResult> {
+  const auth = await checkPermission("clients.update");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  return applyClientField(ids, field, value, auth.session.userId);
+}
+
+// Wrappers (ids, value) para a barra de ações em massa
+export async function bulkClientEmpresa(ids: string[], v: string): Promise<BulkResult> {
+  return bulkField(ids, "agencyBrand", v);
+}
+export async function bulkClientModelo(ids: string[], v: string): Promise<BulkResult> {
+  return bulkField(ids, "businessModel", v);
+}
+export async function bulkClientStatus(ids: string[], v: string): Promise<BulkResult> {
+  return bulkField(ids, "status", v);
+}
+export async function bulkClientSaude(ids: string[], v: string): Promise<BulkResult> {
+  return bulkField(ids, "healthStatus", v);
+}
+export async function bulkClientAds(ids: string[], v: string): Promise<BulkResult> {
+  return bulkField(ids, "adsStatus", v);
+}
+export async function bulkClientGestor(ids: string[], v: string): Promise<BulkResult> {
+  return bulkField(ids, "trafficManager1Id", v);
+}
+
+/** Exclui um cliente pela lista (FK-safe). */
+export async function deleteClientRow(clientId: string): Promise<ActionState> {
+  const auth = await checkPermission("clients.delete");
+  if (!auth.ok) return { error: auth.error };
+  const c = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
+  if (!c) return { error: "Cliente não encontrado." };
+  try {
+    await cascadeSafeDelete("clients", clientId);
+  } catch {
+    return { error: "Não foi possível excluir com segurança. Marque como perdido/pausado." };
+  }
+  await logActivity({ userId: auth.session.userId, action: "client.deleted", entityType: "client", entityId: clientId, metadata: { name: c.name } });
+  revalidatePath("/clientes");
+  revalidatePath("/operacao");
+  return { success: "Cliente excluído." };
+}
+
+export async function bulkDeleteClientsList(ids: string[]): Promise<BulkResult> {
+  const auth = await checkPermission("clients.delete");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  let ok = 0;
+  for (const id of ids) {
+    try {
+      await cascadeSafeDelete("clients", id);
+      ok++;
+    } catch {
+      /* pula os que não podem ser removidos com segurança */
+    }
+  }
+  await logActivity({ userId: auth.session.userId, action: "client.bulkDeleted", entityType: "client", metadata: { count: ok } });
+  revalidatePath("/clientes");
+  revalidatePath("/operacao");
+  return { ok, fail: ids.length - ok, success: `${ok} cliente(s) excluído(s).${ids.length - ok ? ` ${ids.length - ok} não puderam ser removidos.` : ""}` };
 }

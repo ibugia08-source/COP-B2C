@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { and, asc, count, desc, eq, like, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -16,21 +15,11 @@ import {
   AGENCY_BRAND_META,
   BUSINESS_MODEL_LABEL,
   CLIENT_STATUS_META,
-  formatDate,
   HEALTH_META,
 } from "@/lib/labels";
-import {
-  Button,
-  EmptyState,
-  PageHeader,
-  StatCard,
-  StatusBadge,
-  Table,
-  Td,
-  Th,
-  UserAvatar,
-} from "@/components/ui/primitives";
+import { Button, EmptyState, PageHeader, StatCard } from "@/components/ui/primitives";
 import { ClientFilters } from "./ui-filters";
+import { ClientsList, type ClientRow } from "./list";
 import { ModuleConfig } from "../module-config";
 import { resolveOptions } from "@/lib/config-options";
 
@@ -100,6 +89,34 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
   ]);
   const [total, ativos, observacao, criticos, perdidos, adsPausado] = totals.map((t) => t[0].n);
   const canCreate = hasPermission(session, "clients.create");
+  const canUpdate = hasPermission(session, "clients.update");
+  const canDelete = hasPermission(session, "clients.delete");
+
+  // Dados e opções para a lista interativa (edição inline + seleção em massa)
+  const listRows: ClientRow[] = rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    city: c.city,
+    state: c.state,
+    agencyBrand: c.agencyBrand,
+    niche: c.niche,
+    businessModel: c.businessModel,
+    status: c.status,
+    healthStatus: c.healthStatus,
+    adsStatus: c.adsStatus,
+    gestor1Id: c.trafficManager1Id,
+    gestor1Name: c.trafficManager1?.name ?? null,
+    startDate: c.startDate ? c.startDate.toISOString() : null,
+  }));
+  const listOptions = {
+    brands: AGENCY_BRANDS.map((v) => ({ value: v, label: AGENCY_BRAND_META[v]?.label ?? v })),
+    models: BUSINESS_MODELS.map((v) => ({ value: v, label: BUSINESS_MODEL_LABEL[v] ?? v })),
+    niches: niches.map((n) => ({ value: n.value, label: n.label })),
+    statuses: CLIENT_STATUSES.filter((v) => v !== "PERDIDO").map((v) => ({ value: v, label: CLIENT_STATUS_META[v]?.label ?? v })),
+    healths: HEALTH_STATUSES.filter((v) => v !== "CRITICO").map((v) => ({ value: v, label: HEALTH_META[v]?.label ?? v })),
+    adsStatuses: ADS_STATUSES.map((v) => ({ value: v, label: ADS_META[v]?.label ?? v })),
+    users: allUsers.map((u) => ({ value: u.id, label: u.name })),
+  };
 
   return (
     <div>
@@ -145,55 +162,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
           action={canCreate && <Button href="/clientes/novo">+ Novo cliente</Button>}
         />
       ) : (
-        <Table
-          minWidth="900px"
-          head={
-            <>
-              <Th>Cliente</Th>
-              <Th>Empresa</Th>
-              <Th>Nicho</Th>
-              <Th>Modelo</Th>
-              <Th>Status</Th>
-              <Th>Saúde</Th>
-              <Th>Ads</Th>
-              <Th>Gestor 1</Th>
-              <Th>Entrada</Th>
-            </>
-          }
-        >
-          {rows.map((c) => (
-            <tr key={c.id} className="transition hover:bg-zinc-900/60">
-              <Td>
-                <Link href={`/clientes/${c.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
-                  {c.name}
-                </Link>
-                {c.city && (
-                  <p className="text-xs text-zinc-500">
-                    {c.city}
-                    {c.state ? `/${c.state}` : ""}
-                  </p>
-                )}
-              </Td>
-              <Td><StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} /></Td>
-              <Td className="text-zinc-400">{c.niche ?? "—"}</Td>
-              <Td className="text-zinc-400">{BUSINESS_MODEL_LABEL[c.businessModel]}</Td>
-              <Td><StatusBadge value={c.status} meta={CLIENT_STATUS_META} /></Td>
-              <Td><StatusBadge value={c.healthStatus} meta={HEALTH_META} /></Td>
-              <Td><StatusBadge value={c.adsStatus} meta={ADS_META} /></Td>
-              <Td>
-                {c.trafficManager1 ? (
-                  <span className="flex items-center gap-1.5">
-                    <UserAvatar name={c.trafficManager1.name} size="sm" />
-                    <span className="text-xs text-zinc-400">{c.trafficManager1.name.split(" ")[0]}</span>
-                  </span>
-                ) : (
-                  <span className="text-xs text-amber-500" title="Cliente sem gestor definido">sem gestor</span>
-                )}
-              </Td>
-              <Td className="text-zinc-400">{formatDate(c.startDate)}</Td>
-            </tr>
-          ))}
-        </Table>
+        <ClientsList rows={listRows} options={listOptions} canUpdate={canUpdate} canDelete={canDelete} />
       )}
     </div>
   );

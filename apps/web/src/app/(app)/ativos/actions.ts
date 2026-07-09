@@ -877,3 +877,73 @@ export async function addAssetComment(
   revalidateAsset(assetId);
   return { success: "Comentário adicionado." };
 }
+
+// ---------------------------------------------------------------------------
+// Exclusão e ações em massa de ativos (seleção no Kanban/Lista)
+// ---------------------------------------------------------------------------
+
+export type BulkResult = { ok: number; fail: number; error?: string; success?: string };
+
+/** Exclui um ativo definitivamente. Filhos (segredos, anexos, comentários,
+ *  histórico, auditoria) saem por CASCADE. Guardado por digital_assets.delete. */
+export async function deleteAsset(assetId: string): Promise<ActionState> {
+  const auth = await checkPermission("digital_assets.delete");
+  if (!auth.ok) return { error: auth.error };
+  const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
+  if (!asset) return { error: "Ativo não encontrado." };
+  // A auditoria do ativo tem FK CASCADE — sai junto. Registro em ActivityLog.
+  await db.delete(digitalAssets).where(eq(digitalAssets.id, assetId));
+  await logActivity({
+    userId: auth.session.userId,
+    action: "asset.deleted",
+    entityType: "digitalAsset",
+    entityId: assetId,
+    metadata: { title: asset.title },
+  });
+  revalidateAsset(undefined, asset.clientId);
+  return { success: "Ativo excluído." };
+}
+
+export async function bulkDeleteAssets(ids: string[]): Promise<BulkResult> {
+  const auth = await checkPermission("digital_assets.delete");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  let ok = 0;
+  for (const id of ids) {
+    const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, id) });
+    if (!asset) continue;
+    await db.delete(digitalAssets).where(eq(digitalAssets.id, id));
+    ok++;
+  }
+  await logActivity({ userId: auth.session.userId, action: "asset.bulkDeleted", entityType: "digitalAsset", metadata: { count: ok } });
+  revalidatePath("/ativos");
+  return { ok, fail: ids.length - ok, success: `${ok} ativo(s) excluído(s).` };
+}
+
+/** Move vários ativos para um status (reusa as regras de changeAssetStatus). */
+export async function bulkMoveAssets(ids: string[], status: string): Promise<BulkResult> {
+  const auth = await checkPermission("digital_assets.update");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  let ok = 0;
+  for (const id of ids) {
+    const result = await changeAssetStatus(id, status, "Alteração em massa");
+    if (result.success) ok++;
+  }
+  revalidatePath("/ativos");
+  return { ok, fail: ids.length - ok, success: `${ok} ativo(s) movido(s).` };
+}
+
+/** Edição em massa: define responsável dos ativos selecionados. */
+export async function bulkAssignAssets(ids: string[], userId: string | null): Promise<BulkResult> {
+  const auth = await checkPermission("digital_assets.update");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  let ok = 0;
+  for (const id of ids) {
+    const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, id) });
+    if (!asset) continue;
+    await db.update(digitalAssets).set({ assignedToId: userId || null, updatedById: auth.session.userId }).where(eq(digitalAssets.id, id));
+    ok++;
+  }
+  await logActivity({ userId: auth.session.userId, action: "asset.bulkAssigned", entityType: "digitalAsset", metadata: { count: ok } });
+  revalidatePath("/ativos");
+  return { ok, fail: ids.length - ok, success: `${ok} ativo(s) atualizado(s).` };
+}

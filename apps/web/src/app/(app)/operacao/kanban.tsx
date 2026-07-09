@@ -6,7 +6,8 @@ import { useState, useTransition } from "react";
 import { ADS_META, AGENCY_BRAND_META, formatDate, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
-import { moveClientStage } from "./actions";
+import { CardTrash, SelectCircle } from "@/components/bulk-select";
+import { deleteClient, moveClientStage } from "./actions";
 
 export type StageOption = { value: string; label: string; color: Tone };
 
@@ -31,11 +32,13 @@ export function OperationKanban({
   columns,
   canMove,
   canCreate,
+  canDelete,
 }: {
   clients: KanbanClient[];
   columns: StageOption[];
   canMove: boolean;
   canCreate: boolean;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
@@ -147,6 +150,10 @@ export function OperationKanban({
                       canMove ? "cursor-grab active:cursor-grabbing" : ""
                     } ${dragId === c.id ? "opacity-50" : ""}`}
                   >
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <SelectCircle id={c.id} />
+                      {canDelete && <CardTrash id={c.id} deleteAction={deleteClient} label="cliente" />}
+                    </div>
                     <div className="flex items-start justify-between gap-2">
                       <Link
                         href={`/clientes/${c.id}`}

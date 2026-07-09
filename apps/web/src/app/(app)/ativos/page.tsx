@@ -25,6 +25,8 @@ import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { AssetKanban, type AssetCardData, type KanbanColumn } from "./kanban";
 import { AssetFilters, AssetFormButton, GroupFormButton } from "./ui";
 import { ModuleConfig } from "../module-config";
+import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
+import { bulkAssignAssets, bulkDeleteAssets, bulkMoveAssets, deleteAsset } from "./actions";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -48,6 +50,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
   const canUpdate = hasPermission(session, "digital_assets.update");
   const canManageGroups = hasPermission(session, "digital_assets.manage_groups");
   const canCreateSecrets = hasPermission(session, "digital_assets.create_secrets");
+  const canDelete = hasPermission(session, "digital_assets.delete");
 
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [isNull(digitalAssets.archivedAt)];
@@ -153,6 +156,13 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
       done: a.status === "ARQUIVADA",
     }));
 
+  const bulkMenus: BulkMenu[] = canUpdate
+    ? [
+        { label: "Mover status…", options: statusColumns.map((o) => ({ value: o.value, label: o.label })), run: bulkMoveAssets },
+        { label: "Responsável…", options: [{ value: "", label: "— Sem responsável —" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))], run: bulkAssignAssets },
+      ]
+    : [];
+
   const viewBtn = (k: string, label: string) => (
     <Link
       key={k}
@@ -215,6 +225,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
 
       {showFilters && <AssetFilters clients={allClients} groups={groupOptions} users={allUsers} />}
 
+      <SelectionProvider>
       {visao === "calendario" ? (
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -240,9 +251,10 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
         />
       ) : visao === "lista" ? (
         <Table
-          minWidth="960px"
+          minWidth="1000px"
           head={
             <>
+              <Th className="w-8"></Th>
               <Th>Ativo</Th>
               <Th>Grupo</Th>
               <Th>Cliente</Th>
@@ -252,11 +264,13 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
               <Th>Responsável</Th>
               <Th>Revisão</Th>
               <Th>Indicadores</Th>
+              {canDelete && <Th className="w-10"></Th>}
             </>
           }
         >
           {assets.map((a) => (
             <tr key={a.id} className="hover:bg-zinc-900/60">
+              <Td><SelectCircle id={a.id} /></Td>
               <Td>
                 <Link href={`/ativos/${a.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
                   {a.title}
@@ -281,6 +295,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
                   {a.attachments.length > 0 && <Badge tone="blue">📎 {a.attachments.length}</Badge>}
                 </span>
               </Td>
+              {canDelete && <Td className="text-right"><CardTrash id={a.id} deleteAction={deleteAsset} label="ativo" /></Td>}
             </tr>
           ))}
         </Table>
@@ -291,11 +306,14 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
           columns={agrupar === "status" ? statusColumns : groupColumns}
           canUpdate={canUpdate}
           canCreate={canCreate}
+          canDelete={canDelete}
           quickAddGroupId={str(sp.grupo) ?? groupOptions[0]?.id}
           quickAddStatus={defaultStatus}
           quickAddClientId={str(sp.cliente)}
         />
       )}
+        <BulkBar entityLabel="ativos" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteAssets : undefined} />
+      </SelectionProvider>
     </div>
   );
 }

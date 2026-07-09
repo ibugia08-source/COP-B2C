@@ -6,7 +6,8 @@ import { useState, useTransition } from "react";
 import { ASSET_PLATFORM_LABEL, ASSET_TYPE_LABEL, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
-import { changeAssetStatus, moveAssetToGroup, quickCreateAsset } from "./actions";
+import { CardTrash, SelectCircle } from "@/components/bulk-select";
+import { changeAssetStatus, deleteAsset, moveAssetToGroup, quickCreateAsset } from "./actions";
 
 export type KanbanColumn = { value: string; label: string; color: Tone };
 
@@ -33,6 +34,7 @@ function AssetCard({
   onDragStart,
   onDragEnd,
   dragging,
+  canDelete,
 }: {
   asset: AssetCardData;
   mode: "status" | "group";
@@ -40,6 +42,7 @@ function AssetCard({
   onDragStart: () => void;
   onDragEnd: () => void;
   dragging: boolean;
+  canDelete?: boolean;
 }) {
   return (
     <div
@@ -50,6 +53,10 @@ function AssetCard({
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-50" : ""}`}
     >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <SelectCircle id={asset.id} />
+        {canDelete && <CardTrash id={asset.id} deleteAction={deleteAsset} label="ativo" />}
+      </div>
       <div className="flex items-start justify-between gap-2">
         <Link href={`/ativos/${asset.id}`} className="text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300">
           {asset.title}
@@ -80,6 +87,7 @@ export function AssetKanban({
   columns,
   canUpdate,
   canCreate,
+  canDelete,
   quickAddGroupId,
   quickAddStatus,
   quickAddClientId,
@@ -89,6 +97,7 @@ export function AssetKanban({
   columns: KanbanColumn[];
   canUpdate: boolean;
   canCreate: boolean;
+  canDelete?: boolean;
   quickAddGroupId?: string; // grupo padrão para quick-add no modo status
   quickAddStatus?: string; // status padrão para quick-add no modo grupo
   quickAddClientId?: string;
@@ -190,6 +199,7 @@ export function AssetKanban({
                     onDragStart={() => setDragId(a.id)}
                     onDragEnd={() => setDragId(null)}
                     dragging={dragId === a.id}
+                    canDelete={canDelete}
                   />
                 ))}
                 {canCreate && col.value !== "__outros__" && (

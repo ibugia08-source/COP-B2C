@@ -487,6 +487,85 @@ export async function updateCreativeBrief(taskId: string, brief: CreativeBrief):
   return { success: "Briefing atualizado." };
 }
 
+// ---------------------------------------------------------------------------
+// Ações em massa (seleção múltipla no Kanban/Lista)
+// ---------------------------------------------------------------------------
+
+export type BulkResult = { ok: number; fail: number; error?: string; success?: string };
+
+export async function bulkDeleteTasks(ids: string[]): Promise<BulkResult> {
+  const auth = await checkPermission("tasks.delete");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  let ok = 0;
+  const clientIds = new Set<string>();
+  for (const id of ids) {
+    const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
+    if (!existing) continue;
+    await db.delete(tasks).where(eq(tasks.parentTaskId, id));
+    await db.delete(tasks).where(eq(tasks.id, id));
+    if (existing.clientId) clientIds.add(existing.clientId);
+    ok++;
+  }
+  await logActivity({
+    userId: auth.session.userId,
+    action: "task.bulkDeleted",
+    entityType: "task",
+    metadata: { count: ok },
+  });
+  revalidatePath("/tarefas");
+  for (const c of clientIds) revalidatePath(`/clientes/${c}`);
+  return { ok, fail: ids.length - ok, success: `${ok} tarefa(s) excluída(s).` };
+}
+
+export async function bulkMoveTasks(ids: string[], status: string): Promise<BulkResult> {
+  const auth = await checkPermission("tasks.update");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  if (!(await isValidTaskStatus(status)) || status === "CANCELADA") {
+    return { ok: 0, fail: 0, error: "Status inválido para mover em massa." };
+  }
+  if (status === "CONCLUIDA") {
+    const complete = await checkPermission("tasks.complete");
+    if (!complete.ok) return { ok: 0, fail: 0, error: complete.error };
+  }
+  let ok = 0;
+  for (const id of ids) {
+    const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
+    if (!existing || existing.status === status) continue;
+    await db
+      .update(tasks)
+      .set({ status: status as TaskStatus, completedAt: status === "CONCLUIDA" ? new Date() : null })
+      .where(eq(tasks.id, id));
+    ok++;
+  }
+  await logActivity({ userId: auth.session.userId, action: "task.bulkMoved", entityType: "task", metadata: { count: ok, status } });
+  revalidatePath("/tarefas");
+  return { ok, fail: ids.length - ok, success: `${ok} tarefa(s) movida(s).` };
+}
+
+export async function bulkEditTasks(
+  ids: string[],
+  patch: { assignedToId?: string | null; priority?: string },
+): Promise<BulkResult> {
+  const auth = await checkPermission("tasks.update");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  const set: Partial<typeof tasks.$inferInsert> = {};
+  if (patch.assignedToId !== undefined) set.assignedToId = patch.assignedToId || null;
+  if (patch.priority && (TASK_PRIORITIES as readonly string[]).includes(patch.priority)) {
+    set.priority = patch.priority as (typeof TASK_PRIORITIES)[number];
+  }
+  if (Object.keys(set).length === 0) return { ok: 0, fail: 0, error: "Nada para editar." };
+  let ok = 0;
+  for (const id of ids) {
+    const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
+    if (!existing) continue;
+    await db.update(tasks).set(set).where(eq(tasks.id, id));
+    ok++;
+  }
+  await logActivity({ userId: auth.session.userId, action: "task.bulkEdited", entityType: "task", metadata: { count: ok, fields: Object.keys(set) } });
+  revalidatePath("/tarefas");
+  return { ok, fail: ids.length - ok, success: `${ok} tarefa(s) atualizada(s).` };
+}
+
 export async function assignTask(taskId: string, userId: string | null): Promise<ActionState> {
   const auth = await checkPermission("tasks.assign");
   if (!auth.ok) return { error: auth.error };
@@ -511,4 +590,11 @@ export async function assignTask(taskId: string, userId: string | null): Promise
   }
   revalidateTaskPaths(taskId, existing.clientId);
   return { success: "Responsável atualizado." };
+}
+
+export async function bulkAssignTasks(ids: string[], userId: string): Promise<BulkResult> {
+  return bulkEditTasks(ids, { assignedToId: userId || null });
+}
+export async function bulkPrioritizeTasks(ids: string[], priority: string): Promise<BulkResult> {
+  return bulkEditTasks(ids, { priority });
 }

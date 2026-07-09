@@ -28,6 +28,8 @@ import {
 } from "./ui";
 import { ModuleConfig } from "../module-config";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
+import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
+import { bulkAssignTasks, bulkDeleteTasks, bulkMoveTasks, bulkPrioritizeTasks, deleteTask } from "./actions";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -51,6 +53,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const canUpdate = hasPermission(session, "tasks.update");
   const canCreate = hasPermission(session, "tasks.create");
+  const canDelete = hasPermission(session, "tasks.delete");
 
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [isNull(tasks.parentTaskId)];
@@ -184,6 +187,12 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     </Link>
   );
 
+  const bulkMenus: BulkMenu[] = [
+    { label: "Mover para…", options: statusFilterOptions.filter((o) => o.value !== "CANCELADA").map((o) => ({ value: o.value, label: o.label })), run: bulkMoveTasks },
+    { label: "Responsável…", options: [{ value: "", label: "— Sem responsável —" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))], run: bulkAssignTasks },
+    { label: "Prioridade…", options: Object.entries(PRIORITY_META).map(([v, m]) => ({ value: v, label: m.label })), run: bulkPrioritizeTasks },
+  ];
+
   const viewBtn = (key: string, label: string) => (
     <Link
       key={key}
@@ -256,12 +265,14 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
         />
       )}
 
+      <SelectionProvider>
       {visao === "kanban" ? (
         <TasksKanban
           items={kanbanItems}
           columns={kanbanColumns}
           canUpdate={canUpdate}
           canCreate={canCreate}
+          canDelete={canDelete}
           quickAddClientId={cliente !== "__none__" ? cliente : undefined}
         />
       ) : visao === "calendario" ? (
@@ -304,6 +315,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
             minWidth="860px"
             head={
               <>
+                <Th className="w-8"></Th>
                 <Th>{sortTh("titulo", "Tarefa")}</Th>
                 {col("tipo") && <Th>Tipo</Th>}
                 {col("status") && <Th>{sortTh("status", "Status")}</Th>}
@@ -313,6 +325,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                 {col("vencimento") && <Th>{sortTh("vencimento", "Vencimento")}</Th>}
                 {col("tags") && <Th>Tags</Th>}
                 {col("criador") && <Th>Criada por</Th>}
+                {canDelete && <Th className="w-10"></Th>}
               </>
             }
           >
@@ -320,6 +333,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
               const overdue = !!t.dueDate && !t.completedAt && t.dueDate < now && !["CONCLUIDA", "CANCELADA"].includes(t.status);
               return (
                 <tr key={t.id} className="hover:bg-zinc-900/60">
+                  <Td><SelectCircle id={t.id} /></Td>
                   <Td>
                     <Link href={`/tarefas/${t.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
                       {t.title}
@@ -370,6 +384,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                     </Td>
                   )}
                   {col("criador") && <Td className="text-xs text-zinc-500">{t.createdBy?.name ?? "—"}</Td>}
+                  {canDelete && <Td className="text-right"><CardTrash id={t.id} deleteAction={deleteTask} label="tarefa" /></Td>}
                 </tr>
               );
             })}
@@ -377,6 +392,8 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
           {canCreate && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
         </div>
       )}
+        <BulkBar entityLabel="tarefas" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteTasks : undefined} />
+      </SelectionProvider>
     </div>
   );
 }

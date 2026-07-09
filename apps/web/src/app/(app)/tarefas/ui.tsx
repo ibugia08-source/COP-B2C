@@ -7,7 +7,8 @@ import { useActionState } from "react";
 import { formatDate, PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
-import { changeTaskStatus, createTask, quickCreateTask, type ActionState } from "./actions";
+import { CardTrash, SelectCircle } from "@/components/bulk-select";
+import { changeTaskStatus, createTask, deleteTask, quickCreateTask, type ActionState } from "./actions";
 
 const selectClass =
   "rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-emerald-600";
@@ -362,12 +363,14 @@ export function TasksKanban({
   columns,
   canUpdate,
   canCreate,
+  canDelete,
   quickAddClientId,
 }: {
   items: KanbanTask[];
   columns: Option[];
   canUpdate: boolean;
   canCreate: boolean;
+  canDelete?: boolean;
   quickAddClientId?: string;
 }) {
   const router = useRouter();
@@ -438,10 +441,14 @@ export function TasksKanban({
                     draggable={canUpdate}
                     onDragStart={() => setDragId(t.id)}
                     onDragEnd={() => setDragId(null)}
-                    className={`rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition hover:border-zinc-600 ${
+                    className={`group rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition hover:border-zinc-600 ${
                       canUpdate ? "cursor-grab active:cursor-grabbing" : ""
                     } ${dragId === t.id ? "opacity-50" : ""}`}
                   >
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <SelectCircle id={t.id} />
+                      {canDelete && <CardTrash id={t.id} deleteAction={deleteTask} label="tarefa" />}
+                    </div>
                     <Link href={`/tarefas/${t.id}`} className="text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300">
                       {t.title}
                     </Link>

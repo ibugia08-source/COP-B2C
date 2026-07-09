@@ -17,6 +17,8 @@ import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { OperationKanban, type KanbanClient, type StageOption } from "./kanban";
 import { OperationFilters } from "./ui-filters";
 import { ModuleConfig } from "../module-config";
+import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
+import { bulkAssignClients, bulkDeleteClients, bulkMoveClients, bulkSetClientsHealth, deleteClient } from "./actions";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -28,6 +30,8 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const canMove = hasPermission(session, "clients.moveStatus");
   const canCreate = hasPermission(session, "clients.create");
+  const canDelete = hasPermission(session, "clients.delete");
+  const canUpdate = hasPermission(session, "clients.update");
 
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [];
@@ -178,6 +182,29 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     ];
   }
 
+  const bulkMenus: BulkMenu[] = [];
+  if (canMove) {
+    bulkMenus.push({
+      label: "Mover etapa…",
+      options: stageActive
+        .filter((o) => o.value !== "CLIENTE_CRITICO" && o.value !== "CLIENTE_PERDIDO")
+        .map((o) => ({ value: o.value, label: o.label })),
+      run: bulkMoveClients,
+    });
+  }
+  if (canUpdate) {
+    bulkMenus.push({
+      label: "Gestor…",
+      options: [{ value: "", label: "— Sem gestor —" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))],
+      run: bulkAssignClients,
+    });
+    bulkMenus.push({
+      label: "Saúde…",
+      options: Object.entries(HEALTH_META).filter(([v]) => v !== "CRITICO").map(([v, m]) => ({ value: v, label: m.label })),
+      run: bulkSetClientsHealth,
+    });
+  }
+
   const viewBtn = (key: string, label: string) => (
     <Link
       key={key}
@@ -235,6 +262,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
         />
       )}
 
+      <SelectionProvider>
       {visao === "calendario" ? (
         <CalendarMonth year={calYear} month={calMonth} buildHref={buildHref} items={calendarItems} />
       ) : rows.length === 0 ? (
@@ -246,9 +274,10 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       ) : visao === "lista" ? (
         <div>
           <Table
-            minWidth="800px"
+            minWidth="840px"
             head={
               <>
+                <Th className="w-8"></Th>
                 <Th>Cliente</Th>
                 <Th>Etapa</Th>
                 <Th>Saúde</Th>
@@ -257,11 +286,13 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
                 <Th>Gestor 1</Th>
                 <Th>Próximo prazo</Th>
                 <Th>Pendências</Th>
+                {canDelete && <Th className="w-10"></Th>}
               </>
             }
           >
             {kanbanClients.map((c) => (
               <tr key={c.id} className="hover:bg-zinc-900/60">
+                <Td><SelectCircle id={c.id} /></Td>
                 <Td>
                   <Link href={`/clientes/${c.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
                     {c.name}
@@ -277,6 +308,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
                   {c.nextDue ? formatDate(new Date(c.nextDue)) : "—"}
                 </Td>
                 <Td className="text-xs text-amber-400">{c.pendencias.join(" · ") || "—"}</Td>
+                {canDelete && <Td className="text-right"><CardTrash id={c.id} deleteAction={deleteClient} label="cliente" /></Td>}
               </tr>
             ))}
           </Table>
@@ -290,8 +322,10 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
           )}
         </div>
       ) : (
-        <OperationKanban clients={kanbanClients} columns={kanbanColumns} canMove={canMove} canCreate={canCreate} />
+        <OperationKanban clients={kanbanClients} columns={kanbanColumns} canMove={canMove} canCreate={canCreate} canDelete={canDelete} />
       )}
+        <BulkBar entityLabel="clientes" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteClients : undefined} />
+      </SelectionProvider>
     </div>
   );
 }

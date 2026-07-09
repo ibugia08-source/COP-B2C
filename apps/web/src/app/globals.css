@@ -1,26 +1,203 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ==========================================================================
+   COP B2C — Design tokens
+   Tema claro premium (minimalista, muito respiro, sombras quase imperceptíveis).
+   A identidade é aplicada remapeando a paleta do Tailwind v4 no @theme, então
+   as ~56 telas herdam o tema sem alterações individuais.
+   Para TROCAR A MARCA: ajuste o bloco "PALETA DA MARCA B2C" abaixo.
+   ========================================================================== */
+
+@theme {
+  /* -- PALETA DA MARCA B2C (troque aqui para rebrandizar) ------------------
+     A marca atual do produto é o verde "COP B2C". Mantido como acento,
+     usado com moderação (botões primários, links, estado ativo).            */
+  --brand: #059669; /* emerald-600 */
+  --brand-hover: #047857; /* emerald-700 */
+  --brand-strong: #065f46; /* emerald-800 */
+  --brand-tint: #ecfdf5; /* fundo suave da marca */
+  --brand-border: #a7f3d0;
+
+  /* -- Superfícies e texto (neutros claros) --------------------------------
+     Remapeamos a escala "zinc": as telas usam zinc-900/950 como superfície e
+     zinc-100/300 como texto; aqui esses nomes passam a valer claro/tinta.    */
+  --color-zinc-50: #0b0d10; /* raro: tinta forte */
+  --color-zinc-100: #171a1f; /* texto primário (quase preto) */
+  --color-zinc-200: #242830;
+  --color-zinc-300: #3a3f49; /* labels / texto secundário forte */
+  --color-zinc-400: #565c66; /* texto secundário  (~5.9:1 no branco) */
+  --color-zinc-500: #6b7280; /* texto auxiliar    (~4.9:1) */
+  --color-zinc-600: #98a0ab; /* placeholder */
+  --color-zinc-700: #e3e6ea; /* bordas de inputs/botões */
+  --color-zinc-800: #eceef2; /* bordas de cards / divisores / hover sutil */
+  --color-zinc-900: #ffffff; /* superfície: cards, inputs, sidebar */
+  --color-zinc-950: #f6f7f9; /* fundo do app / topbar (vidro) */
+
+  /* -- Acentos semânticos --------------------------------------------------
+     Os tons -300/-400 eram usados como TEXTO sobre fundo escuro; no claro
+     precisam ser mais escuros. Os tons -900/-950 eram FUNDO escuro; no claro
+     viram tinta suave. Os tons sólidos (-500..-800) seguem padrão.           */
+  --color-emerald-300: #065f46;
+  --color-emerald-400: #047857;
+  --color-emerald-900: #a7f3d0;
+  --color-emerald-950: #ecfdf5;
+
+  --color-red-300: #b91c1c;
+  --color-red-400: #dc2626;
+  --color-red-900: #fecaca;
+  --color-red-950: #fef2f2;
+
+  --color-amber-300: #b45309;
+  --color-amber-400: #d97706;
+  --color-amber-900: #fde68a;
+  --color-amber-950: #fffbeb;
+
+  --color-sky-300: #0369a1;
+  --color-sky-400: #0284c7;
+  --color-sky-900: #bae6fd;
+  --color-sky-950: #f0f9ff;
+
+  --color-purple-300: #6d28d9;
+  --color-purple-400: #7c3aed;
+  --color-purple-900: #e9d5ff;
+  --color-purple-950: #faf5ff;
+
+  --color-cyan-300: #0e7490;
+  --color-cyan-400: #0891b2;
+  --color-cyan-900: #a5f3fc;
+  --color-cyan-950: #ecfeff;
+
+  --color-rose-300: #be123c;
+  --color-rose-400: #e11d48;
+
+  /* Sombras suaves (premium, quase imperceptíveis) */
+  --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-pop: 0 8px 24px rgba(16, 24, 40, 0.1), 0 2px 6px rgba(16, 24, 40, 0.06);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ------------------------------------------------------------------------- */
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-zinc-950);
+  color: var(--color-zinc-100);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Cards e superfícies claras ganham uma sombra suave por padrão, dando
+   profundidade sem bordas pesadas. */
+.rounded-xl.border {
+  box-shadow: var(--shadow-card);
+}
+
+/* Transições suaves e consistentes nos elementos interativos */
+a,
+button,
+[role="button"],
+input,
+select,
+textarea,
+summary {
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+
+/* Feedback tátil discreto ao pressionar botões */
+button:active:not(:disabled),
+[role="button"]:active {
+  transform: translateY(0.5px) scale(0.995);
+}
+
+/* Foco visível para acessibilidade (navegação por teclado) */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 0.35rem;
+}
+/* Inputs já indicam foco pela borda — evita anel duplo */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+  border-color: var(--brand) !important;
+}
+
+/* Em tema claro, ênfase de hover que era branca vira tinta escura.
+   Regra sem @layer vence a utilitária do Tailwind — corrige ~29 usos de
+   hover:text-white de uma vez, sem tocar nas telas. */
+.hover\:text-white:hover {
+  color: var(--color-zinc-100);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+/* Scrollbar discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cfd4da transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cfd4da;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #b6bcc4;
+  background-clip: padding-box;
+}
+
+/* Skeleton de carregamento */
+@keyframes cop-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-zinc-800);
+  border-radius: 0.5rem;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: cop-shimmer 1.4s infinite;
+}
+
+/* Respeita quem prefere menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

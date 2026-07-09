@@ -2,14 +2,15 @@
 
 export type Tone = "green" | "amber" | "red" | "blue" | "purple" | "zinc" | "cyan";
 
+// Chips de status: tinta suave da cor + texto forte + borda clara (tema claro).
 export const TONE_CLASSES: Record<Tone, string> = {
-  green: "bg-emerald-950/80 text-emerald-300 border-emerald-900",
-  amber: "bg-amber-950/80 text-amber-300 border-amber-900",
-  red: "bg-red-950/80 text-red-300 border-red-900",
-  blue: "bg-sky-950/80 text-sky-300 border-sky-900",
-  purple: "bg-purple-950/80 text-purple-300 border-purple-900",
-  zinc: "bg-zinc-800 text-zinc-300 border-zinc-700",
-  cyan: "bg-cyan-950/80 text-cyan-300 border-cyan-900",
+  green: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  amber: "bg-amber-50 text-amber-700 border-amber-200",
+  red: "bg-red-50 text-red-700 border-red-200",
+  blue: "bg-sky-50 text-sky-700 border-sky-200",
+  purple: "bg-purple-50 text-purple-700 border-purple-200",
+  zinc: "bg-zinc-800 text-zinc-500 border-zinc-700",
+  cyan: "bg-cyan-50 text-cyan-700 border-cyan-200",
 };
 
 type Meta = { label: string; tone: Tone };

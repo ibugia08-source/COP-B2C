@@ -30,21 +30,21 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/40 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className={`max-h-[90vh] w-full ${wide ? "max-w-3xl" : "max-w-lg"} overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl`}
+        className={`max-h-[92vh] w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-lg"} overflow-y-auto rounded-t-2xl border border-zinc-700 bg-zinc-900 shadow-2xl sm:rounded-xl`}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
-          <h2 className="text-sm font-semibold">{title}</h2>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-5 py-3">
+          <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            className="-mr-1 rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
           >
             ✕
           </button>
@@ -114,15 +114,15 @@ export function Tabs({
             key={tab.key}
             type="button"
             onClick={() => setActive(tab.key)}
-            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm transition ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition ${
               tab.key === current?.key
-                ? "border-emerald-500 font-semibold text-white"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
+                ? "border-emerald-600 font-semibold text-zinc-100"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}
           >
             {tab.label}
             {tab.badge != null && tab.badge > 0 && (
-              <span className="ml-1.5 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
+              <span className="ml-1.5 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
                 {tab.badge}
               </span>
             )}

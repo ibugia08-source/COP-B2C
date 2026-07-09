@@ -7,22 +7,22 @@ import { TONE_CLASSES, type Tone } from "@/lib/labels";
 // ---------------------------------------------------------------------------
 
 const BUTTON_VARIANTS = {
-  primary: "bg-emerald-600 text-white hover:bg-emerald-500",
-  secondary: "border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white",
-  danger: "bg-red-700 text-white hover:bg-red-600",
-  ghost: "text-zinc-400 hover:text-white hover:bg-zinc-800",
+  primary: "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700",
+  secondary: "border border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100",
+  danger: "bg-red-600 text-white shadow-sm hover:bg-red-700",
+  ghost: "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100",
 } as const;
 
 const BUTTON_SIZES = {
-  sm: "px-2.5 py-1 text-xs",
-  md: "px-4 py-2 text-sm",
+  sm: "px-2.5 py-1.5 text-xs",
+  md: "px-3.5 py-2 text-sm",
 } as const;
 
 export function buttonClass(
   variant: keyof typeof BUTTON_VARIANTS = "primary",
   size: keyof typeof BUTTON_SIZES = "md",
 ): string {
-  return `inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]}`;
+  return `inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]}`;
 }
 
 export function Button({
@@ -52,7 +52,7 @@ export function Button({
 // ---------------------------------------------------------------------------
 
 export const fieldClass =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-500 disabled:opacity-60";
+  "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500 disabled:opacity-60";
 
 export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
   return (
@@ -100,7 +100,7 @@ export function Field({
 export function Badge({ tone = "zinc", children }: { tone?: Tone; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-medium ${TONE_CLASSES[tone]}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] font-medium ${TONE_CLASSES[tone]}`}
     >
       {children}
     </span>
@@ -151,9 +151,9 @@ export function StatCard({
   hint?: string;
 }) {
   const inner = (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition group-hover:border-zinc-600">
-      <p className="truncate text-xs text-zinc-400">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${tone}`}>{value}</p>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition group-hover:-translate-y-0.5 group-hover:border-zinc-700">
+      <p className="truncate text-xs font-medium text-zinc-500">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold tracking-tight ${tone}`}>{value}</p>
       {hint && <p className="mt-0.5 text-[11px] text-zinc-500">{hint}</p>}
     </div>
   );
@@ -176,12 +176,12 @@ export function Table({
   minWidth?: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-800">
+    <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900">
       <table className="w-full text-left text-sm" style={{ minWidth }}>
-        <thead className="border-b border-zinc-800 bg-zinc-900 text-xs uppercase text-zinc-500">
+        <thead className="border-b border-zinc-800 bg-zinc-950/60 text-xs font-medium uppercase tracking-wide text-zinc-500">
           <tr>{head}</tr>
         </thead>
-        <tbody className="divide-y divide-zinc-800/70">{children}</tbody>
+        <tbody className="divide-y divide-zinc-800">{children}</tbody>
       </table>
     </div>
   );
@@ -205,10 +205,10 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-bold">{title}</h1>
-        {description && <p className="mt-1 text-sm text-zinc-400">{description}</p>}
+    <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight text-zinc-100 sm:text-2xl">{title}</h1>
+        {description && <p className="mt-0.5 max-w-2xl text-sm text-zinc-500">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
@@ -227,11 +227,25 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 px-6 py-14 text-center">
-      <div className="text-3xl">{icon}</div>
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900 px-6 py-14 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-2xl">{icon}</div>
       <h3 className="mt-3 text-sm font-semibold text-zinc-300">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-zinc-500">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
+}
+
+// Skeleton de carregamento (usa a classe .skeleton do globals.css)
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <span className={`skeleton block ${className}`} aria-hidden />;
+}
+
+export function SkeletonCard() {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="mt-3 h-7 w-16" />
     </div>
   );
 }
@@ -281,9 +295,9 @@ export function Alert({
   children: ReactNode;
 }) {
   const cls = {
-    red: "border-red-900 bg-red-950/60 text-red-300",
-    green: "border-emerald-900 bg-emerald-950/60 text-emerald-300",
-    amber: "border-amber-900 bg-amber-950/60 text-amber-300",
+    red: "border-red-200 bg-red-50 text-red-700",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
   }[tone];
   return (
     <p role="alert" className={`rounded-lg border px-3 py-2 text-sm ${cls}`}>
@@ -300,7 +314,7 @@ export function Spinner() {
 
 export function LoadingBlock({ label = "Carregando..." }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-14 text-sm text-zinc-400">
+    <div className="flex items-center justify-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-14 text-sm text-zinc-500">
       <Spinner /> {label}
     </div>
   );

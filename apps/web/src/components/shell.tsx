@@ -5,33 +5,45 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export type NavItem = { href: string; label: string; icon: string };
+export type NavGroup = { label: string; items: NavItem[] };
 
 // ---------------------------------------------------------------------------
-// Sidebar nav (client — destaca rota ativa)
+// Sidebar nav (client — destaca rota ativa), organizada em grupos
 // ---------------------------------------------------------------------------
 
-export function AppNav({ items }: { items: NavItem[] }) {
+export function AppNav({ groups }: { groups: NavGroup[] }) {
   const pathname = usePathname();
   return (
-    <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-      {items.map((item) => {
-        const active =
-          item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-              active
-                ? "bg-emerald-950/60 font-semibold text-emerald-300"
-                : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <span className="w-4 text-center text-xs">{item.icon}</span>
-            <span className="max-lg:hidden">{item.label}</span>
-          </Link>
-        );
-      })}
+    <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
+      {groups.map((group) => (
+        <div key={group.label}>
+          <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 max-lg:hidden">
+            {group.label}
+          </p>
+          <div className="space-y-0.5">
+            {group.items.map((item) => {
+              const active =
+                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={item.label}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition max-lg:justify-center max-lg:px-0 ${
+                    active
+                      ? "bg-emerald-50 font-semibold text-emerald-700"
+                      : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900"
+                  }`}
+                >
+                  <span className="w-4 shrink-0 text-center text-sm">{item.icon}</span>
+                  <span className="max-lg:hidden">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }
@@ -110,7 +122,7 @@ export function GlobalSearch() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Buscar clientes, tarefas, docs..."
-        className="w-64 rounded-lg border border-zinc-800 bg-zinc-900 py-1.5 pl-8 pr-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-600"
+        className="w-56 rounded-lg border border-zinc-800 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:w-72 focus:border-emerald-500 xl:w-64"
       />
     </form>
   );
@@ -141,18 +153,18 @@ export function CreateMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-500"
+        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
       >
         + Novo
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-52 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl">
+        <div className="absolute right-0 top-full z-40 mt-1.5 w-52 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 py-1 shadow-[0_8px_24px_rgba(16,24,40,0.10)]">
           {options.map((opt) => (
             <Link
               key={opt.href}
               href={opt.href}
               onClick={() => setOpen(false)}
-              className="block px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              className="block px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900"
             >
               {opt.label}
             </Link>

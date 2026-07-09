@@ -11,6 +11,7 @@ export default async function EquipePage() {
   const canUpdate = hasPermission(session, "team.update");
   const canDeactivate = hasPermission(session, "team.deactivate");
   const canApprove = hasPermission(session, "team.approve");
+  const canDelete = hasPermission(session, "team.delete");
 
   const allUsers = await db.query.users.findMany({
     with: {
@@ -60,7 +61,7 @@ export default async function EquipePage() {
                 <th className="px-4 py-3">Cargo</th>
                 <th className="px-4 py-3">Nível de acesso</th>
                 <th className="px-4 py-3">Status</th>
-                {(canUpdate || canDeactivate) && <th className="px-4 py-3 text-right">Ações</th>}
+                {(canUpdate || canDeactivate || canDelete) && <th className="px-4 py-3 text-right">Ações</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/70">
@@ -74,11 +75,13 @@ export default async function EquipePage() {
                     status: member.status,
                     isActive: member.isActive,
                     position: member.teamMember?.position ?? null,
+                    phone: member.teamMember?.phone ?? null,
                     roles: member.userRoles.map((ur) => ur.role.name as RoleName),
                     isSelf: member.id === session.userId,
                   }}
                   canUpdate={canUpdate}
                   canDeactivate={canDeactivate}
+                  canDelete={canDelete}
                 />
               ))}
             </tbody>

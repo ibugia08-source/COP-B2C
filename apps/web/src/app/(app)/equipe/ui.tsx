@@ -5,18 +5,20 @@ import { useActionState, useState, useTransition } from "react";
 import { ROLE_NAMES, type RoleName } from "@/db/schema";
 import { ACCESS_LEVEL_PRESETS, ROLE_LABELS } from "@/lib/auth/permissions";
 import { Alert, Badge, Button } from "@/components/ui/primitives";
-import { Modal } from "@/components/ui/overlay";
+import { ConfirmDialog, Modal } from "@/components/ui/overlay";
 import {
   approveUser,
   createTeamMember,
+  deleteTeamMember,
   rejectUser,
   toggleMemberActive,
+  updateMemberProfile,
   updateUserRoles,
   type ActionState,
 } from "./actions";
 
 const inputClass =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-500";
+  "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500";
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   PENDENTE: { label: "Pendente", cls: "bg-amber-950 text-amber-300" },
@@ -204,6 +206,7 @@ type MemberInfo = {
   status: string;
   isActive: boolean;
   position: string | null;
+  phone: string | null;
   roles: RoleName[];
   isSelf: boolean;
 };
@@ -212,17 +215,24 @@ export function MemberRow({
   member,
   canUpdate,
   canDeactivate,
+  canDelete,
 }: {
   member: MemberInfo;
   canUpdate: boolean;
   canDeactivate: boolean;
+  canDelete: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [roles, setRoles] = useState<RoleName[]>(member.roles);
+  const [name, setName] = useState(member.name);
+  const [position, setPosition] = useState(member.position ?? "");
+  const [phone, setPhone] = useState(member.phone ?? "");
   const meta = STATUS_META[member.status] ?? STATUS_META.INATIVO;
+  const hasActions = canUpdate || canDeactivate || canDelete;
 
   function run(fn: () => Promise<ActionState>, onOk?: () => void) {
     setError(null);
@@ -234,6 +244,28 @@ export function MemberRow({
         router.refresh();
       }
     });
+  }
+
+  // Salva perfil (nome/cargo/telefone) e, em seguida, o nível de acesso.
+  function saveAll() {
+    setError(null);
+    startTransition(async () => {
+      const profile = await updateMemberProfile(member.id, { name, position, phone });
+      if (profile.error) return setError(profile.error);
+      const rolesResult = await updateUserRoles(member.id, roles);
+      if (rolesResult.error) return setError(rolesResult.error);
+      setEditOpen(false);
+      router.refresh();
+    });
+  }
+
+  function openEdit() {
+    setError(null);
+    setName(member.name);
+    setPosition(member.position ?? "");
+    setPhone(member.phone ?? "");
+    setRoles(member.roles);
+    setEditOpen(true);
   }
 
   return (
@@ -255,43 +287,84 @@ export function MemberRow({
       <td className="px-4 py-3">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${meta.cls}`}>{meta.label}</span>
       </td>
-      {(canUpdate || canDeactivate) && (
+      {hasActions && (
         <td className="px-4 py-3">
           <div className="flex items-center justify-end gap-2">
             {canUpdate && (
-              <button
-                type="button"
-                onClick={() => { setError(null); setRoles(member.roles); setEditOpen(true); }}
-                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
-              >
-                Editar nível
-              </button>
+              <Button size="sm" variant="secondary" onClick={openEdit}>
+                Editar
+              </Button>
             )}
             {canDeactivate && !member.isSelf && (
-              <button
-                type="button"
-                onClick={() => run(() => toggleMemberActive(member.id))}
+              <Button
+                size="sm"
+                variant="secondary"
                 disabled={pending}
-                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition hover:border-zinc-500 disabled:opacity-60"
+                onClick={() => run(() => toggleMemberActive(member.id))}
               >
                 {pending ? "..." : member.isActive ? "Desativar" : "Reativar"}
-              </button>
+              </Button>
+            )}
+            {canDelete && !member.isSelf && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => { setError(null); setDeleteOpen(true); }}
+                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                Excluir
+              </Button>
             )}
           </div>
-          {error && <p className="mt-1 text-right text-xs text-red-400">{error}</p>}
+          {error && !editOpen && !deleteOpen && <p className="mt-1 text-right text-xs text-red-600">{error}</p>}
 
-          <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Nível de acesso — ${member.name}`}>
-            <div className="space-y-4">
-              <RoleSelector selected={roles} onChange={setRoles} />
+          {/* Editar: nome, cargo, telefone e nível de acesso */}
+          <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Editar — ${member.name}`} wide>
+            <div className="space-y-4 text-left">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm text-zinc-300">Nome *</label>
+                  <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="Nome completo" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-zinc-300">E-mail</label>
+                  <input value={member.email} disabled className={`${inputClass} opacity-60`} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-zinc-300">Cargo</label>
+                  <input value={position} onChange={(e) => setPosition(e.target.value)} className={inputClass} placeholder="Ex.: Gestor de Tráfego" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm text-zinc-300">Telefone</label>
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} placeholder="(11) 99999-9999" />
+                </div>
+              </div>
+              <div>
+                <span className="mb-1 block text-sm text-zinc-300">Nível de acesso / permissões</span>
+                <RoleSelector selected={roles} onChange={setRoles} />
+              </div>
               {error && <Alert>{error}</Alert>}
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancelar</Button>
-                <Button disabled={pending} onClick={() => run(() => updateUserRoles(member.id, roles), () => setEditOpen(false))}>
-                  {pending ? "Salvando..." : "Salvar nível"}
+                <Button disabled={pending || name.trim().length < 2} onClick={saveAll}>
+                  {pending ? "Salvando..." : "Salvar alterações"}
                 </Button>
               </div>
             </div>
           </Modal>
+
+          {/* Excluir colaborador */}
+          <ConfirmDialog
+            open={deleteOpen}
+            onClose={() => setDeleteOpen(false)}
+            onConfirm={() => run(() => deleteTeamMember(member.id), () => setDeleteOpen(false))}
+            title={`Excluir ${member.name}?`}
+            description="O colaborador será removido do sistema permanentemente. O histórico operacional (tarefas, clientes, logs) é preservado, mas deixa de ficar atribuído a esta pessoa. Esta ação não pode ser desfeita."
+            confirmLabel="Excluir definitivamente"
+            danger
+            pending={pending}
+          />
+          {(editOpen || deleteOpen) && error && <p className="mt-1 text-right text-xs text-red-600">{error}</p>}
         </td>
       )}
     </tr>

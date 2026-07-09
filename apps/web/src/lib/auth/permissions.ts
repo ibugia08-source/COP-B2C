@@ -39,6 +39,7 @@ export const PERMISSION_KEYS = [
   "team.update",
   "team.deactivate",
   "team.approve",
+  "team.delete",
   // Metas
   "goals.view",
   "goals.create",

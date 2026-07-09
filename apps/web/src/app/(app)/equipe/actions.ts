@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
@@ -238,6 +238,123 @@ export async function updateUserRoles(userId: string, roleNames: string[]): Prom
 
   revalidatePath("/equipe");
   return { success: "Nível de acesso atualizado." };
+}
+
+const profileSchema = z.object({
+  name: z.string().trim().min(2, "Nome muito curto"),
+  position: z.string().trim().optional(),
+  phone: z.string().trim().optional(),
+});
+
+/** Edita nome, cargo e telefone do colaborador direto na tela. */
+export async function updateMemberProfile(
+  userId: string,
+  input: { name: string; position?: string; phone?: string },
+): Promise<ActionState> {
+  const auth = await guardTeam("team.update");
+  if (!auth.ok) return { error: auth.error };
+  const parsed = profileSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+  const d = parsed.data;
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return { error: "Usuário não encontrado." };
+
+  await db.update(users).set({ name: d.name }).where(eq(users.id, userId));
+  const member = await db.query.teamMembers.findFirst({ where: eq(teamMembers.userId, userId) });
+  if (member) {
+    await db
+      .update(teamMembers)
+      .set({ position: d.position ?? null, phone: d.phone ?? null })
+      .where(eq(teamMembers.userId, userId));
+  } else {
+    await db.insert(teamMembers).values({ userId, position: d.position, phone: d.phone, status: "ATIVO" });
+  }
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "team.profileUpdated",
+    entityType: "user",
+    entityId: userId,
+    metadata: { name: d.name, position: d.position ?? null },
+  });
+  revalidatePath("/equipe");
+  return { success: "Dados do colaborador atualizados." };
+}
+
+/**
+ * Exclui um colaborador de forma definitiva e segura. Antes de remover, anula
+ * as referências (autoria/atribuição) que apontam para o usuário e cujo FK é
+ * restritivo — preservando o histórico operacional sem violar integridade.
+ * Tudo em transação: se algo falhar, nada é excluído.
+ */
+export async function deleteTeamMember(userId: string): Promise<ActionState> {
+  const auth = await guardTeam("team.delete");
+  if (!auth.ok) return { error: auth.error };
+  if (userId === auth.session.userId) return { error: "Você não pode excluir a si mesmo." };
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    with: { userRoles: { with: { role: true } } },
+  });
+  if (!user) return { error: "Usuário não encontrado." };
+
+  const targetRoles = user.userRoles.map((ur) => ur.role.name);
+  // Só OWNER pode excluir OWNER/ADMIN (mesma proteção da concessão de papéis)
+  const touchingPrivileged = ensureCanGrantRoles(auth.session.roles, targetRoles);
+  if (touchingPrivileged) return { error: touchingPrivileged };
+
+  // Nunca deixar o sistema sem nenhum OWNER
+  if (targetRoles.includes("OWNER")) {
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(and(eq(roles.name, "OWNER"), ne(userRoles.userId, userId)));
+    if (!n) return { error: "Não é possível excluir o último OWNER do sistema." };
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      // Anula referências restritivas (não-CASCADE) que apontam para o usuário
+      const fks = (await tx.execute(sql`
+        SELECT tc.table_name, kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+        JOIN information_schema.referential_constraints rc
+          ON rc.constraint_name = tc.constraint_name AND rc.constraint_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND ccu.table_name = 'users' AND ccu.column_name = 'id'
+          AND rc.delete_rule <> 'CASCADE'
+      `)) as unknown as { table_name: string; column_name: string }[];
+      const rows = Array.isArray(fks) ? fks : ((fks as { rows?: unknown[] }).rows ?? []);
+      for (const r of rows as { table_name: string; column_name: string }[]) {
+        await tx.execute(
+          sql`UPDATE ${sql.identifier(r.table_name)} SET ${sql.identifier(r.column_name)} = NULL WHERE ${sql.identifier(r.column_name)} = ${userId}`,
+        );
+      }
+      // Remove o usuário; tabelas com FK CASCADE (papéis, notificações, etc.) saem juntas
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+  } catch {
+    return {
+      error:
+        "Não foi possível excluir este colaborador com segurança. Como alternativa, desative o acesso dele.",
+    };
+  }
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "team.memberDeleted",
+    entityType: "user",
+    entityId: userId,
+    metadata: { email: user.email, name: user.name, roles: targetRoles },
+  });
+  revalidatePath("/equipe");
+  return { success: `${user.name} foi excluído(a) do sistema.` };
 }
 
 export async function toggleMemberActive(userId: string): Promise<ActionState> {

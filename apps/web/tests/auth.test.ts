@@ -16,11 +16,11 @@ beforeAll(() => {
 });
 
 describe("senha", () => {
-  it("hash nunca é a senha em texto puro e verifica corretamente", () => {
-    const hash = hashPassword("cop123456");
+  it("hash nunca é a senha em texto puro e verifica corretamente (async)", async () => {
+    const hash = await hashPassword("cop123456");
     expect(hash).not.toContain("cop123456");
-    expect(verifyPassword("cop123456", hash)).toBe(true);
-    expect(verifyPassword("senha-errada", hash)).toBe(false);
+    await expect(verifyPassword("cop123456", hash)).resolves.toBe(true);
+    await expect(verifyPassword("senha-errada", hash)).resolves.toBe(false);
   });
 });
 

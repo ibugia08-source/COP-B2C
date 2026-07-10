@@ -64,7 +64,7 @@ async function seed() {
     .onConflictDoNothing();
 
   // --- Usuários (senha padrão de dev: "cop123456") ----------------------------
-  const defaultHash = hashPassword("cop123456");
+  const defaultHash = await hashPassword("cop123456");
   const seedUsers: { name: string; email: string; role: RoleName; position: string }[] = [
     { name: "Owner B2C", email: "owner@b2cgestao.com.br", role: "OWNER", position: "CEO" },
     { name: "Admin B2C", email: "admin@b2cgestao.com.br", role: "ADMIN", position: "COO" },

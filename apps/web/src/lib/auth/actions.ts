@@ -95,7 +95,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     await registerFailure();
     return invalid;
   }
-  if (!verifyPassword(parsed.data.password, user.passwordHash)) {
+  if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
     await registerFailure();
     await logActivity({
       userId: user.id,
@@ -174,7 +174,7 @@ export async function signup(_prev: SignupState, formData: FormData): Promise<Si
     .values({
       name: provisionalName,
       email: parsed.data.email,
-      passwordHash: hashPassword(parsed.data.password),
+      passwordHash: await hashPassword(parsed.data.password),
       status: "PENDENTE",
       isActive: false,
       signupSource: "SELF_SIGNUP",

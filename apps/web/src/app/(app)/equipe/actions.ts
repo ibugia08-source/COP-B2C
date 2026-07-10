@@ -104,7 +104,7 @@ export async function createTeamMember(
     .values({
       name: parsed.data.name,
       email: parsed.data.email,
-      passwordHash: hashPassword(parsed.data.password),
+      passwordHash: await hashPassword(parsed.data.password),
       status: "ATIVO",
       isActive: true,
       signupSource: "ADMIN",

@@ -166,11 +166,14 @@ export async function confirmTrelloImport(jsonText: string, fileName: string): P
 
     // 3) segredos — criptografados na hora; texto puro nunca é persistido
     for (const s of card.secrets) {
+      // secretId gerado ANTES para entrar no AAD do GCM
+      const secretId = crypto.randomUUID();
       await db.insert(digitalAssetSecrets).values({
+        id: secretId,
         assetId: asset.id,
         secretType: s.type,
         label: s.label,
-        encryptedValue: encryptSecret(s.value),
+        encryptedValue: encryptSecret(s.value, { secretId, assetId: asset.id }),
         maskedPreview: maskSecret(s.value),
         createdById: auth.session.userId,
       });

@@ -115,10 +115,11 @@ describe("parser do export JSON do Trello", () => {
     expect(preview.skipped.some((s) => s.name === "Card arquivado")).toBe(true);
   });
 
-  it("segredos do parse sobrevivem ao ciclo criptografa→descriptografa", () => {
+  it("segredos do parse sobrevivem ao ciclo criptografa→descriptografa (com AAD)", () => {
     const insta = preview.cards.find((c) => c.title === "Instagram Cliente X")!;
+    const aad = { secretId: "sec-import", assetId: "asset-import" };
     for (const s of insta.secrets) {
-      expect(decryptSecret(encryptSecret(s.value))).toBe(s.value);
+      expect(decryptSecret(encryptSecret(s.value, aad), aad)).toBe(s.value);
     }
   });
 

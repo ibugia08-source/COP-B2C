@@ -291,11 +291,14 @@ export async function createAsset(_prev: ActionState, formData: FormData): Promi
     if (!canCreateSecrets) continue;
     const [, type, ...labelParts] = key.split("__");
     const secretType = SECRET_TYPES.includes(type as never) ? (type as (typeof SECRET_TYPES)[number]) : "OTHER";
+    // secretId gerado ANTES para entrar no AAD do GCM (vincula ciphertext ao registro)
+    const secretId = crypto.randomUUID();
     await db.insert(digitalAssetSecrets).values({
+      id: secretId,
       assetId: asset.id,
       secretType,
       label: labelParts.join("__") || secretType,
-      encryptedValue: encryptSecret(value),
+      encryptedValue: encryptSecret(value, { secretId, assetId: asset.id }),
       maskedPreview: maskSecret(value),
       createdById: auth.session.userId,
     });
@@ -438,11 +441,22 @@ export async function duplicateAsset(assetId: string, copySecrets: boolean): Pro
     const canCreateSecrets = roleHasPermission(auth.session.roles, "digital_assets.create_secrets");
     if (!canCreateSecrets) return { error: "Você não tem permissão para copiar segredos." };
     for (const s of secrets) {
+      // O AAD vincula o ciphertext ao (secretId, assetId) de origem — para
+      // copiar é preciso decriptar e recriptar com o contexto do novo registro.
+      // O plaintext nunca sai do servidor.
+      let plain: string;
+      try {
+        plain = decryptSecret(s.encryptedValue, { secretId: s.id, assetId });
+      } catch {
+        continue; // segredo ilegível (chave antiga/adulterado) — não copia
+      }
+      const newSecretId = crypto.randomUUID();
       await db.insert(digitalAssetSecrets).values({
+        id: newSecretId,
         assetId: copy.id,
         secretType: s.secretType,
         label: s.label,
-        encryptedValue: s.encryptedValue, // já criptografado — nunca descriptografa aqui
+        encryptedValue: encryptSecret(plain, { secretId: newSecretId, assetId: copy.id }),
         maskedPreview: s.maskedPreview,
         createdById: auth.session.userId,
       });
@@ -685,11 +699,14 @@ export async function addSecret(
   const denied = await denyOutOfScope(auth.session, assetId, { action: "addSecret" });
   if (denied) return denied;
 
+  // secretId gerado ANTES para entrar no AAD do GCM (vincula ciphertext ao registro)
+  const secretId = crypto.randomUUID();
   await db.insert(digitalAssetSecrets).values({
+    id: secretId,
     assetId,
     secretType: parsed.data.secretType,
     label: parsed.data.label,
-    encryptedValue: encryptSecret(parsed.data.value),
+    encryptedValue: encryptSecret(parsed.data.value, { secretId, assetId }),
     maskedPreview: maskSecret(parsed.data.value),
     createdById: auth.session.userId,
   });
@@ -736,7 +753,10 @@ export async function updateSecret(
     .set({
       label: label.trim(),
       ...(value
-        ? { encryptedValue: encryptSecret(value), maskedPreview: maskSecret(value) }
+        ? {
+            encryptedValue: encryptSecret(value, { secretId, assetId: secret.assetId }),
+            maskedPreview: maskSecret(value),
+          }
         : {}),
       updatedById: auth.session.userId,
     })
@@ -833,8 +853,9 @@ export async function revealSecret(
 
   let value: string;
   try {
-    value = decryptSecret(secret.encryptedValue);
+    value = decryptSecret(secret.encryptedValue, { secretId: secret.id, assetId: secret.assetId });
   } catch {
+    // chave trocada, payload adulterado OU ciphertext trocado entre registros (AAD)
     return { error: "Falha ao descriptografar. A chave do cofre pode ter mudado." };
   }
 

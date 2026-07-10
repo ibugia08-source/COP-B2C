@@ -13,10 +13,23 @@ function getKey(): Buffer {
   return Buffer.from(hex, "hex");
 }
 
-export function encryptSecret(plaintext: string): string {
+/**
+ * Contexto criptográfico do segredo (AAD do GCM). Vincula o ciphertext ao
+ * registro dono: trocar encrypted_value entre linhas do banco quebra a
+ * autenticação na decriptação. Gere o secretId (UUID) ANTES de criptografar.
+ */
+export type SecretAad = { secretId: string; assetId: string };
+
+function aadBuffer(aad: SecretAad): Buffer {
+  // ordem fixa das chaves — JSON.stringify segue a ordem do literal
+  return Buffer.from(JSON.stringify({ secretId: aad.secretId, assetId: aad.assetId }), "utf8");
+}
+
+export function encryptSecret(plaintext: string, aad: SecretAad): string {
   const key = getKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(aadBuffer(aad));
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return [iv.toString("base64"), authTag.toString("base64"), ciphertext.toString("base64")].join(":");
@@ -31,13 +44,14 @@ export function maskSecret(value: string): string {
   return `${value.slice(0, 2)}${"•".repeat(Math.min(value.length - 4, 12))}${value.slice(-2)}`;
 }
 
-export function decryptSecret(payload: string): string {
+export function decryptSecret(payload: string, aad: SecretAad): string {
   const key = getKey();
   const [ivB64, tagB64, dataB64] = payload.split(":");
   if (!ivB64 || !tagB64 || !dataB64) {
     throw new Error("Payload de segredo inválido");
   }
   const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64"));
+  decipher.setAAD(aadBuffer(aad));
   decipher.setAuthTag(Buffer.from(tagB64, "base64"));
   return Buffer.concat([
     decipher.update(Buffer.from(dataB64, "base64")),

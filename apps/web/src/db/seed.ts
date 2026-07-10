@@ -309,7 +309,15 @@ async function seed() {
   }
 
   // --- Banco de Ativos Digitais ------------------------------------------------
-  const sec = (v: string) => ({ encryptedValue: encryptSecret(v), maskedPreview: maskSecret(v) });
+  // secretId gerado antes para compor o AAD do GCM (vincula ciphertext ao registro)
+  const sec = (v: string, assetId: string) => {
+    const secretId = crypto.randomUUID();
+    return {
+      id: secretId,
+      encryptedValue: encryptSecret(v, { secretId, assetId }),
+      maskedPreview: maskSecret(v),
+    };
+  };
   const groupRows = await db
     .insert(digitalAssetGroups)
     .values([
@@ -376,36 +384,40 @@ async function seed() {
     .returning();
   const assetByTitle = new Map(assetRows.map((a) => [a.title, a]));
 
+  const aBm = assetByTitle.get("BM Principal — Sorriso Prime")!.id;
+  const aInsta = assetByTitle.get("Instagram @sorrisoprime")!.id;
+  const aGads = assetByTitle.get("Google Ads — Martins & Rocha")!.id;
+  const aGmail = assetByTitle.get("Gmail interno — relatórios")!.id;
   await db.insert(digitalAssetSecrets).values([
     {
-      assetId: assetByTitle.get("BM Principal — Sorriso Prime")!.id,
+      assetId: aBm,
       secretType: "USERNAME", label: "Login principal", createdById: admin,
-      ...sec("ads@sorrisoprime.com.br"),
+      ...sec("ads@sorrisoprime.com.br", aBm),
     },
     {
-      assetId: assetByTitle.get("BM Principal — Sorriso Prime")!.id,
+      assetId: aBm,
       secretType: "PASSWORD", label: "Senha do BM", createdById: admin,
-      ...sec("senha-exemplo-sorriso"),
+      ...sec("senha-exemplo-sorriso", aBm),
     },
     {
-      assetId: assetByTitle.get("Instagram @sorrisoprime")!.id,
+      assetId: aInsta,
       secretType: "PASSWORD", label: "Senha do Instagram", createdById: admin,
-      ...sec("senha-exemplo-insta"),
+      ...sec("senha-exemplo-insta", aInsta),
     },
     {
-      assetId: assetByTitle.get("Google Ads — Martins & Rocha")!.id,
+      assetId: aGads,
       secretType: "EMAIL", label: "E-mail de acesso", createdById: admin,
-      ...sec("trafego@martinsrocha.adv.br"),
+      ...sec("trafego@martinsrocha.adv.br", aGads),
     },
     {
-      assetId: assetByTitle.get("Google Ads — Martins & Rocha")!.id,
+      assetId: aGads,
       secretType: "PASSWORD", label: "Senha do Google Ads", createdById: admin,
-      ...sec("senha-exemplo-advocacia"),
+      ...sec("senha-exemplo-advocacia", aGads),
     },
     {
-      assetId: assetByTitle.get("Gmail interno — relatórios")!.id,
+      assetId: aGmail,
       secretType: "API_KEY", label: "API Key relatórios", createdById: admin,
-      ...sec("chave-api-exemplo-000"),
+      ...sec("chave-api-exemplo-000", aGmail),
     },
   ]);
 

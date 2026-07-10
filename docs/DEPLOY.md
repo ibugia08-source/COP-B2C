@@ -51,6 +51,21 @@ npm run db:seed     # papéis, permissões, usuários e dados de exemplo
 
 (Alternativa versionada: `npm run db:migrate`, que aplica `drizzle/0000_baseline-pg.sql`.)
 
+### Migração dos segredos para o formato com AAD (refactor 2026-07)
+
+O cofre passou a criptografar com **AES-256-GCM + AAD** (`{secretId, assetId}`),
+que vincula cada ciphertext ao seu registro — segredos gravados no formato
+antigo (sem AAD) **não decriptam mais**. Como não havia produção rodando,
+o caminho adotado foi **recriar os segredos**: truncar a tabela e recadastrar
+(ou rodar `db:seed` de novo em dev):
+
+```sql
+TRUNCATE TABLE digital_asset_secrets;
+```
+
+Se algum dia existirem segredos legados a preservar, escreva um script que
+decripta sem AAD e recripta com AAD antes de subir esta versão.
+
 ## 5. Redeploy
 
 Com Root Directory + env vars configurados, faça **Redeploy** (ou um novo push).

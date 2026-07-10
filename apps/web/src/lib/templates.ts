@@ -88,21 +88,26 @@ export async function applyTemplateToClient(
       })),
     );
     checklistItems = template.items.length;
-  } else {
-    for (const item of template.items) {
-      const assignedToId = await resolveRole(item.role, client);
-      await db.insert(tasks).values({
+  } else if (template.items.length) {
+    // resolve cada função UMA vez (≤4 queries) e insere as tarefas em lote
+    const distinctRoles = [...new Set(template.items.map((i) => i.role).filter(Boolean))] as TemplateRole[];
+    const assigneeByRole = new Map<TemplateRole, string | null>();
+    for (const role of distinctRoles) {
+      assigneeByRole.set(role, await resolveRole(role, client));
+    }
+    await db.insert(tasks).values(
+      template.items.map((item) => ({
         title: `${item.title} — ${client.name}`,
         type: template.taskType,
-        status: "A_FAZER",
-        priority: "MEDIA",
+        status: "A_FAZER" as const,
+        priority: "MEDIA" as const,
         clientId,
-        assignedToId,
+        assignedToId: item.role ? (assigneeByRole.get(item.role) ?? null) : null,
         createdById: opts.actorId ?? null,
         dueDate: item.dueOffsetDays != null ? new Date(now + item.dueOffsetDays * DAY_MS) : null,
-      });
-      createdTasks++;
-    }
+      })),
+    );
+    createdTasks = template.items.length;
   }
 
   await logActivity({

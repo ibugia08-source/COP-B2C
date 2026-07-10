@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
@@ -22,9 +22,9 @@ import {
   type AssetStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { writeAssetAudit, writeAssetAuditStrict } from "@/lib/assets/audit";
+import { writeAssetAudit, writeAssetAuditBatchStrict, writeAssetAuditStrict } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
-import { canAccessAsset, canAccessClient } from "@/lib/auth/ownership";
+import { canAccessAsset, canAccessClient, partitionAssetsByAccess } from "@/lib/auth/ownership";
 import type { SessionPayload } from "@/lib/auth/session";
 import { RESTRICTED_SECRET_TYPES_FOR_SOCIAL, roleHasPermission } from "@/lib/auth/permissions";
 import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
@@ -1022,48 +1022,147 @@ export async function deleteAsset(assetId: string): Promise<ActionState> {
   return { success: "Ativo excluído." };
 }
 
+/**
+ * Valida o lote inteiro: ownership em UMA query. Se qualquer item estiver
+ * fora do escopo, a operação inteira falha listando os IDs negados (nada é
+ * pulado em silêncio) e a negação é auditada.
+ */
+async function guardBulkScope(
+  session: SessionPayload,
+  ids: string[],
+  action: string,
+): Promise<{ allowed: string[] } | { error: string }> {
+  const { allowed, denied } = await partitionAssetsByAccess(session, ids);
+  if (denied.length) {
+    await writeAssetAudit({
+      userId: session.userId,
+      action: "PERMISSION_DENIED",
+      metadata: { action, deniedIds: denied, reason: "ownership_scope" },
+    });
+    return {
+      error: `Operação cancelada: você não é responsável por ${denied.length} ativo(s) do lote (${denied.join(", ")}).`,
+    };
+  }
+  if (!allowed.length) return { error: "Nenhum ativo válido na seleção." };
+  return { allowed };
+}
+
 export async function bulkDeleteAssets(ids: string[]): Promise<BulkResult> {
   const auth = await checkPermission("digital_assets.delete");
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
-  let ok = 0;
-  for (const id of ids) {
-    const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, id) });
-    if (!asset) continue;
-    if (await denyOutOfScope(auth.session, id, { action: "bulkDeleteAssets" })) continue;
-    await db.delete(digitalAssets).where(eq(digitalAssets.id, id));
-    ok++;
-  }
-  await logActivity({ userId: auth.session.userId, action: "asset.bulkDeleted", entityType: "digitalAsset", metadata: { count: ok } });
+
+  const scope = await guardBulkScope(auth.session, ids, "bulkDeleteAssets");
+  if ("error" in scope) return { ok: 0, fail: ids.length, error: scope.error };
+
+  await db.delete(digitalAssets).where(inArray(digitalAssets.id, scope.allowed));
+  await logActivity({
+    userId: auth.session.userId,
+    action: "asset.bulkDeleted",
+    entityType: "digitalAsset",
+    metadata: { count: scope.allowed.length },
+  });
   revalidatePath("/ativos");
-  return { ok, fail: ids.length - ok, success: `${ok} ativo(s) excluído(s).` };
+  return {
+    ok: scope.allowed.length,
+    fail: ids.length - scope.allowed.length,
+    success: `${scope.allowed.length} ativo(s) excluído(s).`,
+  };
 }
 
-/** Move vários ativos para um status (reusa as regras de changeAssetStatus). */
+/** Move vários ativos para um status — um UPDATE + INSERTs multi-valores. */
 export async function bulkMoveAssets(ids: string[], status: string): Promise<BulkResult> {
   const auth = await checkPermission("digital_assets.update");
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
-  let ok = 0;
-  for (const id of ids) {
-    const result = await changeAssetStatus(id, status, "Alteração em massa");
-    if (result.success) ok++;
+  if (!(await isValidAssetStatus(status))) return { ok: 0, fail: ids.length, error: "Status inválido." };
+
+  const scope = await guardBulkScope(auth.session, ids, "bulkMoveAssets");
+  if ("error" in scope) return { ok: 0, fail: ids.length, error: scope.error };
+
+  const rows = await db.query.digitalAssets.findMany({
+    where: inArray(digitalAssets.id, scope.allowed),
+    columns: { id: true, title: true, status: true, clientId: true, assignedToId: true },
+  });
+  const toChange = rows.filter((r) => r.status !== status);
+  if (!toChange.length) {
+    return { ok: 0, fail: ids.length, error: "Os ativos selecionados já estão neste status." };
   }
+
+  const reason = "Alteração em massa";
+  const set: Partial<typeof digitalAssets.$inferInsert> = {
+    status: status as AssetStatus,
+    updatedById: auth.session.userId,
+  };
+  if (status === "SENDO_ESQUENTADA") set.nextReviewAt = new Date(Date.now() + 7 * 86400_000);
+
+  // old→new coletados em memória; histórico/comentários/auditoria em INSERTs multi
+  await db.transaction(async (tx) => {
+    const changedIds = toChange.map((r) => r.id);
+    await tx.update(digitalAssets).set(set).where(inArray(digitalAssets.id, changedIds));
+    await tx.insert(digitalAssetStatusHistory).values(
+      toChange.map((r) => ({
+        assetId: r.id,
+        oldStatus: r.status,
+        newStatus: status as AssetStatus,
+        reason,
+        changedById: auth.session.userId,
+      })),
+    );
+    await tx.insert(digitalAssetComments).values(
+      toChange.map((r) => ({
+        assetId: r.id,
+        authorId: auth.session.userId,
+        type: "ALTERACAO_STATUS" as const,
+        content: `Status alterado de ${r.status} para ${status} — ${reason}`,
+      })),
+    );
+    await writeAssetAuditBatchStrict(
+      toChange.map((r) => ({
+        assetId: r.id,
+        userId: auth.session.userId,
+        action: "STATUS_CHANGED" as const,
+        metadata: { from: r.status, to: status, reason, bulk: true },
+      })),
+      tx,
+    );
+  });
+
+  // automações de status (notificações/tarefas) só para status conhecidos do sistema
+  if ((ASSET_STATUSES as readonly string[]).includes(status)) {
+    for (const r of toChange) {
+      await runStatusAutomations(r, status as AssetStatus, auth.session.userId);
+    }
+  }
+
   revalidatePath("/ativos");
-  return { ok, fail: ids.length - ok, success: `${ok} ativo(s) movido(s).` };
+  return {
+    ok: toChange.length,
+    fail: ids.length - toChange.length,
+    success: `${toChange.length} ativo(s) movido(s).`,
+  };
 }
 
-/** Edição em massa: define responsável dos ativos selecionados. */
+/** Edição em massa: define responsável dos ativos selecionados — um UPDATE. */
 export async function bulkAssignAssets(ids: string[], userId: string | null): Promise<BulkResult> {
   const auth = await checkPermission("digital_assets.update");
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
-  let ok = 0;
-  for (const id of ids) {
-    const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, id) });
-    if (!asset) continue;
-    if (await denyOutOfScope(auth.session, id, { action: "bulkAssignAssets" })) continue;
-    await db.update(digitalAssets).set({ assignedToId: userId || null, updatedById: auth.session.userId }).where(eq(digitalAssets.id, id));
-    ok++;
-  }
-  await logActivity({ userId: auth.session.userId, action: "asset.bulkAssigned", entityType: "digitalAsset", metadata: { count: ok } });
+
+  const scope = await guardBulkScope(auth.session, ids, "bulkAssignAssets");
+  if ("error" in scope) return { ok: 0, fail: ids.length, error: scope.error };
+
+  await db
+    .update(digitalAssets)
+    .set({ assignedToId: userId || null, updatedById: auth.session.userId })
+    .where(inArray(digitalAssets.id, scope.allowed));
+  await logActivity({
+    userId: auth.session.userId,
+    action: "asset.bulkAssigned",
+    entityType: "digitalAsset",
+    metadata: { count: scope.allowed.length },
+  });
   revalidatePath("/ativos");
-  return { ok, fail: ids.length - ok, success: `${ok} ativo(s) atualizado(s).` };
+  return {
+    ok: scope.allowed.length,
+    fail: ids.length - scope.allowed.length,
+    success: `${scope.allowed.length} ativo(s) atualizado(s).`,
+  };
 }

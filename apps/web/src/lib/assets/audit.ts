@@ -51,6 +51,25 @@ export async function writeAssetAuditStrict(
   });
 }
 
+/** Versão em lote da escrita estrita: UM INSERT multi-valores (sem N+1). */
+export async function writeAssetAuditBatchStrict(
+  inputs: AuditInput[],
+  executor: AuditExecutor = db,
+): Promise<void> {
+  if (!inputs.length) return;
+  const { ipAddress, userAgent } = await requestContext();
+  await executor.insert(digitalAssetAuditLogs).values(
+    inputs.map((input) => ({
+      assetId: input.assetId ?? null,
+      userId: input.userId ?? null,
+      action: input.action,
+      metadata: input.metadata,
+      ipAddress,
+      userAgent,
+    })),
+  );
+}
+
 /**
  * Escrita best-effort para eventos informativos (criação/edição de ativo,
  * mudança de status): não derruba a operação principal, mas registra a falha

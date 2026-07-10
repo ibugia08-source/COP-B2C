@@ -217,6 +217,77 @@ export async function canAccessAsset(
   });
 }
 
+/**
+ * Particiona um lote de ativos por acesso, com UMA query (+1 para clientes
+ * herdados do grupo) em vez de N — usado pelas ações em massa.
+ * `missing` = ids inexistentes (não contam como negação).
+ */
+export async function partitionAssetsByAccess(
+  session: SessionPayload,
+  ids: string[],
+): Promise<{ allowed: string[]; denied: string[]; missing: string[] }> {
+  const unique = [...new Set(ids)];
+  if (!unique.length) return { allowed: [], denied: [], missing: [] };
+
+  const rows = await db.query.digitalAssets.findMany({
+    where: inArray(digitalAssets.id, unique),
+    columns: { id: true, clientId: true },
+    with: {
+      group: { columns: { clientId: true } },
+      client: {
+        columns: {
+          strategistId: true,
+          trafficManager1Id: true,
+          trafficManager2Id: true,
+          mainResponsibleId: true,
+        },
+      },
+    },
+  });
+  const found = new Set(rows.map((r) => r.id));
+  const missing = unique.filter((id) => !found.has(id));
+
+  if (isElevated(session.roles)) {
+    return { allowed: rows.map((r) => r.id), denied: [], missing };
+  }
+
+  // clientes herdados só do grupo (asset.clientId null): carrega em lote
+  const inheritedClientIds = [
+    ...new Set(
+      rows
+        .filter((r) => !r.clientId && r.group?.clientId)
+        .map((r) => r.group!.clientId!),
+    ),
+  ];
+  const inheritedClients = inheritedClientIds.length
+    ? await db.query.clients.findMany({
+        where: inArray(clients.id, inheritedClientIds),
+        columns: {
+          id: true,
+          strategistId: true,
+          trafficManager1Id: true,
+          trafficManager2Id: true,
+          mainResponsibleId: true,
+        },
+      })
+    : [];
+  const clientById = new Map(inheritedClients.map((c) => [c.id, c]));
+
+  const allowed: string[] = [];
+  const denied: string[] = [];
+  for (const row of rows) {
+    const effectiveClientId = row.clientId ?? row.group?.clientId ?? null;
+    const client =
+      row.client ?? (effectiveClientId ? (clientById.get(effectiveClientId) ?? null) : null);
+    const ok = assetOwnershipCheck(session.roles, session.userId, {
+      clientId: effectiveClientId,
+      client,
+    });
+    (ok ? allowed : denied).push(row.id);
+  }
+  return { allowed, denied, missing };
+}
+
 /** true se o usuário pode escrever na tarefa. */
 export async function canAccessTask(session: SessionPayload, taskId: string): Promise<boolean> {
   if (isElevated(session.roles)) return true;

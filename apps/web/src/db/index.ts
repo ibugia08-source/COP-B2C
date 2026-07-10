@@ -12,15 +12,48 @@ import * as schema from "./schema";
 const url = process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
 const isPg = !!url && /^postgres(ql)?:\/\//i.test(url);
 
-if (!isPg && process.env.NODE_ENV !== "production") {
-  console.warn("[db] DATABASE_URL/POSTGRES_URL ausente ou inválida — nenhuma query funcionará.");
+// Durante o `next build` os módulos são importados sem env de runtime — nesse
+// caso (e só nesse) o cliente vira um proxy que lança em qualquer query.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
+const MISSING_URL_ERROR =
+  "DATABASE_URL/POSTGRES_URL ausente ou inválida. Defina no ambiente (apps/web/.env em dev; " +
+  "Vercel → Settings → Environment Variables em produção). Veja docs/DEPLOY.md.";
+
+/**
+ * Cliente-fantasma para import em build/dev sem env: o drizzle() só toca em
+ * client.options.parsers/serializers na construção; qualquer QUERY lança um
+ * erro claro em vez de tentar conectar num host inexistente.
+ */
+function throwingClient(): ReturnType<typeof postgres> {
+  const options = { parsers: {}, serializers: {} };
+  return new Proxy(function () {} as unknown as ReturnType<typeof postgres>, {
+    get(_target, prop) {
+      if (prop === "options") return options;
+      if (prop === "then") return undefined; // não é thenable
+      throw new Error(MISSING_URL_ERROR);
+    },
+    apply() {
+      throw new Error(MISSING_URL_ERROR);
+    },
+  });
 }
 
-// prepare:false é necessário para o pooler do Supabase em modo "transaction".
-// A conexão é lazy: nada é aberto durante o `next build`.
-const client = postgres(isPg ? url! : "postgres://build:build@build.example.com/neondb", {
-  prepare: false,
-});
+let client: ReturnType<typeof postgres>;
+if (isPg) {
+  // prepare:false é necessário para o pooler do Supabase em modo "transaction".
+  // A conexão é lazy: nada é aberto durante o import.
+  client = postgres(url!, { prepare: false });
+} else if (process.env.NODE_ENV === "production" && !isBuildPhase) {
+  // Produção sem banco = crash imediato e explícito no boot — nunca um
+  // fallback silencioso apontando para um host fake.
+  throw new Error(MISSING_URL_ERROR);
+} else {
+  if (!isBuildPhase && process.env.NODE_ENV !== "test") {
+    console.warn(`[db] ${MISSING_URL_ERROR}`);
+  }
+  client = throwingClient();
+}
 
 export const db = drizzle(client, { schema });
 export * as dbSchema from "./schema";

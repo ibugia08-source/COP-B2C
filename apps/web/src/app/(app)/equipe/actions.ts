@@ -51,6 +51,14 @@ function ensureCanGrantRoles(
   return isOwnerAdmin ? null : "Apenas OWNER/ADMIN podem conceder papéis administrativos.";
 }
 
+/** Incrementa users.sessionVersion — invalida na hora as sessões abertas do usuário. */
+async function revokeUserSessions(userId: string) {
+  await db
+    .update(users)
+    .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+    .where(eq(users.id, userId));
+}
+
 async function setUserRoles(userId: string, roleNames: string[]) {
   const roleRows = await db
     .select()
@@ -60,6 +68,8 @@ async function setUserRoles(userId: string, roleNames: string[]) {
   if (roleRows.length) {
     await db.insert(userRoles).values(roleRows.map((r) => ({ userId, roleId: r.id })));
   }
+  // mudança de papéis derruba sessões antigas (o JWT guarda a sessionVersion)
+  await revokeUserSessions(userId);
 }
 
 export async function createTeamMember(
@@ -182,7 +192,7 @@ export async function rejectUser(userId: string): Promise<ActionState> {
 
   await db
     .update(users)
-    .set({ status: "REJEITADO", isActive: false })
+    .set({ status: "REJEITADO", isActive: false, sessionVersion: sql`${users.sessionVersion} + 1` })
     .where(eq(users.id, userId));
 
   await logActivity({
@@ -374,7 +384,12 @@ export async function toggleMemberActive(userId: string): Promise<ActionState> {
   const newActive = !user.isActive;
   await db
     .update(users)
-    .set({ isActive: newActive, status: newActive ? "ATIVO" : "INATIVO" })
+    .set({
+      isActive: newActive,
+      status: newActive ? "ATIVO" : "INATIVO",
+      // desativar/reativar invalida sessões abertas imediatamente
+      sessionVersion: sql`${users.sessionVersion} + 1`,
+    })
     .where(eq(users.id, userId));
   await db
     .update(teamMembers)

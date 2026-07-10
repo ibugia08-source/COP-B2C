@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
+import {
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  createSessionToken,
+  verifySessionToken,
+} from "@/lib/auth/session";
 
 const PUBLIC_PATHS = ["/login"];
 
@@ -20,7 +25,26 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+
+  // Sliding refresh: renova o cookie quando mais de 50% do TTL já foi consumido.
+  // O proxy só confere a assinatura — a validação contra o banco (revogação,
+  // status, sessionVersion) acontece em lib/auth/session-server.ts.
+  if (session?.exp) {
+    const remaining = session.exp - Math.floor(Date.now() / 1000);
+    if (remaining > 0 && remaining < SESSION_TTL_SECONDS / 2) {
+      const renewed = await createSessionToken({ userId: session.userId, sv: session.sv });
+      response.cookies.set(SESSION_COOKIE, renewed, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: SESSION_TTL_SECONDS,
+        path: "/",
+      });
+    }
+  }
+
+  return response;
 }
 
 export const config = {

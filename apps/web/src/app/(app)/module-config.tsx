@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth/session";
+import { getSession } from "@/lib/auth/session-server";
 import { BUILTIN_GROUPS, resolveOptions, type ModuleKey } from "@/lib/config-options";
 import { ConfigDrawerButton, type DrawerGroup } from "./config-drawer";
 

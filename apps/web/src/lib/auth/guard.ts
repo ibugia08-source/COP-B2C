@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
-import { getSession, type SessionPayload } from "./session";
+import type { SessionPayload } from "./session";
+import { getSession, getSessionState } from "./session-server";
 import { roleHasPermission, ROLE_PERMISSIONS, type PermissionKey } from "./permissions";
 
 /** Exige sessão ativa; senão redireciona para /login. */
 export async function requireSession(): Promise<SessionPayload> {
-  const session = await getSession();
-  if (!session) redirect("/login");
+  const { session, revoked } = await getSessionState();
+  if (!session) redirect(revoked ? "/login?reason=session_revoked" : "/login");
   return session;
 }
 

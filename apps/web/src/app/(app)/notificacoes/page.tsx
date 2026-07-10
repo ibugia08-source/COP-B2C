@@ -17,7 +17,7 @@ const TYPE_TONES: Record<string, "blue" | "amber" | "red" | "green" | "zinc"> = 
 
 async function markAllRead() {
   "use server";
-  const { getSession } = await import("@/lib/auth/session");
+  const { getSession } = await import("@/lib/auth/session-server");
   const session = await getSession();
   if (!session) return;
   await db
@@ -32,7 +32,7 @@ async function markRead(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const { getSession } = await import("@/lib/auth/session");
+  const { getSession } = await import("@/lib/auth/session-server");
   const session = await getSession();
   if (!session) return;
   // só marca notificações do próprio usuário (sem vazamento entre contas)

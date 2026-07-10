@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { appSettings, userDashboardConfigs } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { getSession } from "@/lib/auth/session";
+import { getSession } from "@/lib/auth/session-server";
 import {
   BUILTIN_DEFAULT_METRICS,
   isValidMetricKey,

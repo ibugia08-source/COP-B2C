@@ -2,9 +2,25 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { RoleName } from "@/db/schema";
 
-export const SESSION_COOKIE = "cop_session";
-const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12h
+// Camada de token/cookie da sessão. Este arquivo é importado pelo proxy (edge)
+// e por isso NÃO pode importar o driver do banco — a validação contra o banco
+// (status, papéis, sessionVersion) fica em ./session-server.ts.
 
+export const SESSION_COOKIE = "cop_session";
+export const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8h
+
+/**
+ * Payload do JWT: mínimo possível. Papéis, nome e e-mail são reconsultados do
+ * banco a cada request (ver session-server.ts) — o token não carrega dados que
+ * possam ficar obsoletos. `sv` = users.sessionVersion no momento do login;
+ * qualquer mudança de papéis/status incrementa a coluna e invalida o token.
+ */
+export type TokenPayload = {
+  userId: string;
+  sv: number;
+};
+
+/** Sessão hidratada do banco — o que o restante do app consome. */
 export type SessionPayload = {
   userId: string;
   name: string;
@@ -20,7 +36,7 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function createSessionToken(payload: SessionPayload): Promise<string> {
+export async function createSessionToken(payload: TokenPayload): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -28,24 +44,37 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
     .sign(getSecret());
 }
 
-export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
+export async function verifySessionToken(
+  token: string,
+): Promise<(TokenPayload & { exp?: number; iat?: number }) | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    return payload as unknown as SessionPayload;
+    if (typeof payload.userId !== "string" || typeof payload.sv !== "number") return null;
+    return payload as unknown as TokenPayload & { exp?: number; iat?: number };
   } catch {
     return null;
   }
 }
 
-/** Sessão atual a partir do cookie (server components / server actions / route handlers). */
-export async function getSession(): Promise<SessionPayload | null> {
-  const store = await cookies();
-  const token = store.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  return verifySessionToken(token);
+/**
+ * Regra única de validade da sessão contra o estado atual do usuário no banco.
+ * Pura (testável sem banco): usada por session-server.ts a cada request.
+ */
+export function isSessionUserValid(
+  token: TokenPayload,
+  user:
+    | { id: string; isActive: boolean; status: string; sessionVersion: number }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.id !== token.userId) return false;
+  if (!user.isActive || user.status !== "ATIVO") return false;
+  if (user.sessionVersion !== token.sv) return false;
+  return true;
 }
 
-export async function setSessionCookie(payload: SessionPayload): Promise<void> {
+export async function setSessionCookie(payload: TokenPayload): Promise<void> {
   const token = await createSessionToken(payload);
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {

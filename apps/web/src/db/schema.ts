@@ -346,6 +346,8 @@ export const users = pgTable(
     signupSource: text("signup_source", { enum: ["SELF_SIGNUP", "ADMIN"] })
       .notNull()
       .default("ADMIN"),
+    // incrementada a cada mudança de papéis/status — invalida JWTs emitidos antes
+    sessionVersion: integer("session_version").notNull().default(0),
     approvedById: text("approved_by_id"),
     approvedAt: timestamp("approved_at", { mode: "date" }),
     avatarUrl: text("avatar_url"),

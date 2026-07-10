@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { configOptionGroups, configOptions } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { getSession } from "@/lib/auth/session";
+import { getSession } from "@/lib/auth/session-server";
 import { getBuiltinGroup } from "@/lib/config-options";
 
 export type ActionState = { error?: string; success?: string };

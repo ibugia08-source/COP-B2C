@@ -4,11 +4,12 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { users, type RoleName } from "@/db/schema";
+import { users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { notifyRole } from "@/lib/notify";
 import { hashPassword, verifyPassword } from "./password";
-import { clearSessionCookie, getSession, setSessionCookie } from "./session";
+import { clearSessionCookie, setSessionCookie } from "./session";
+import { getSession } from "./session-server";
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("E-mail inválido"),
@@ -54,13 +55,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: "Usuário desativado. Fale com um administrador." };
   }
 
-  const roleNames = user.userRoles.map((ur) => ur.role.name as RoleName);
-  await setSessionCookie({
-    userId: user.id,
-    name: user.name,
-    email: user.email,
-    roles: roleNames,
-  });
+  // Token mínimo: papéis/nome/e-mail são reconsultados do banco a cada request.
+  await setSessionCookie({ userId: user.id, sv: user.sessionVersion });
   await logActivity({
     userId: user.id,
     action: "auth.login",

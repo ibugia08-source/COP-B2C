@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# COP B2C — app web
 
-## Getting Started
+Este é o app Next.js do **COP B2C** (Central Operacional da B2C Gestão).
+A documentação real do projeto está na **raiz do repositório**:
 
-First, run the development server:
+- [`../../README.md`](../../README.md) — visão geral, módulos e comandos
+- [`../../docs/PRD.md`](../../docs/PRD.md) — requisitos de produto
+- [`../../docs/DEPLOY.md`](../../docs/DEPLOY.md) — deploy (Vercel + Postgres), envs e rotas públicas
+- [`../../docs/IMPORTACAO.md`](../../docs/IMPORTACAO.md) — importadores ClickUp/Trello
+- [`../../docs/REFACTOR-CRITICO.md`](../../docs/REFACTOR-CRITICO.md) — refactor de segurança pré-go-live
+
+## Comandos
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev        # servidor de desenvolvimento
+npm run build      # build de produção
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint
+npm run test       # vitest (não precisa de banco nem .env)
+npm run db:push    # aplica o schema no Postgres (DDL)
+npm run db:seed    # papéis, usuários e dados de exemplo
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Envs obrigatórias em `.env` (veja `.env.example`): `DATABASE_URL`,
+`AUTH_SECRET`, `VAULT_ENCRYPTION_KEY` (+ `STORAGE_DRIVER`/`BLOB_READ_WRITE_TOKEN`
+para uploads em produção).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> **Atenção**: este projeto usa Next.js 16 com breaking changes — leia
+> `AGENTS.md` e `node_modules/next/dist/docs/` antes de mexer em rotas,
+> middleware (`src/proxy.ts`) ou `params`/`searchParams` (são Promises).

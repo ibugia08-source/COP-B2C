@@ -14,7 +14,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
-// Enums (SQLite não tem enum nativo — garantidos via Drizzle text({enum}) + Zod)
+// Enums como text({enum}) do Drizzle + validação Zod nas actions (o banco é
+// Postgres; enums nativos exigiriam migration por valor novo — text é flexível)
 // ---------------------------------------------------------------------------
 
 export const AGENCY_BRANDS = ["B2C_GESTAO", "LIFE_ADS"] as const;
@@ -93,42 +94,6 @@ export type CreativeBrief = {
   referenceLink?: string;
   approvalStatus?: (typeof CREATIVE_APPROVALS)[number];
 };
-
-export const CREATIVE_STATUSES = [
-  "SOLICITADO",
-  "EM_ROTEIRO",
-  "EM_DESIGN",
-  "EM_EDICAO",
-  "AGUARDANDO_APROVACAO",
-  "APROVADO",
-  "REPROVADO",
-  "PUBLICADO",
-  "CANCELADO",
-] as const;
-export const CREATIVE_OBJECTIVES = [
-  "MENSAGENS",
-  "ENGAJAMENTO",
-  "RECONHECIMENTO",
-  "VENDAS",
-  "LEADS",
-  "SOCIAL_MEDIA",
-] as const;
-export const CREATIVE_PLATFORMS = [
-  "META_ADS",
-  "GOOGLE_ADS",
-  "INSTAGRAM",
-  "TIKTOK",
-  "OUTRO",
-] as const;
-export const CREATIVE_TYPES = [
-  "VIDEO",
-  "IMAGEM",
-  "CARROSSEL",
-  "STORIES",
-  "REELS",
-  "COPY",
-  "LANDING_PAGE",
-] as const;
 
 // ------------------------- Banco de Ativos Digitais -------------------------
 
@@ -715,49 +680,6 @@ export const taskTimeEntries = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("task_time_entries_task_idx").on(t.taskId)],
-);
-
-// ---------------------------------------------------------------------------
-// Criativos — DEPRECATED: o módulo foi absorvido por Tarefas (tipo CRIATIVO).
-// A tabela permanece apenas para preservar dados históricos em produção;
-// nenhuma tela ou action escreve/lê daqui. Remover em uma limpeza futura.
-// ---------------------------------------------------------------------------
-
-export const creativeRequests = pgTable(
-  "creative_requests",
-  {
-    id: id(),
-    clientId: text("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
-    title: text("title").notNull(),
-    briefing: text("briefing"),
-    objective: text("objective", { enum: CREATIVE_OBJECTIVES }),
-    platform: text("platform", { enum: CREATIVE_PLATFORMS }),
-    creativeType: text("creative_type", { enum: CREATIVE_TYPES }),
-    status: text("status", { enum: CREATIVE_STATUSES }).notNull().default("SOLICITADO"),
-    requestedById: text("requested_by_id").references(() => users.id),
-    copyResponsibleId: text("copy_responsible_id").references(() => users.id),
-    assignedToId: text("assigned_to_id").references(() => users.id), // design/edição
-    dueDate: timestamp("due_date", { mode: "date" }),
-    deliveredAt: timestamp("delivered_at", { mode: "date" }),
-    approvedAt: timestamp("approved_at", { mode: "date" }),
-    fileLinks: text("file_links"),
-    publishedLink: text("published_link"),
-    offer: text("offer"),
-    cta: text("cta"),
-    observations: text("observations"),
-    clientFeedback: text("client_feedback"),
-    rejectionReason: text("rejection_reason"),
-    taskId: text("task_id").references(() => tasks.id, { onDelete: "set null" }),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (t) => [
-    index("creative_requests_client_idx").on(t.clientId),
-    index("creative_requests_status_idx").on(t.status),
-    index("creative_requests_assigned_idx").on(t.assignedToId),
-  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -1578,7 +1500,6 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
   tasks: many(tasks),
   digitalAssets: many(digitalAssets),
   meetings: many(clientMeetings),
-  creativeRequests: many(creativeRequests),
   documents: many(documents),
 }));
 
@@ -1594,16 +1515,6 @@ export const clientMeetingsRelations = relations(clientMeetings, ({ one }) => ({
     references: [users.id],
     relationName: "meetingResponsible",
   }),
-}));
-
-export const creativeRequestsRelations = relations(creativeRequests, ({ one }) => ({
-  client: one(clients, { fields: [creativeRequests.clientId], references: [clients.id] }),
-  requestedBy: one(users, { fields: [creativeRequests.requestedById], references: [users.id] }),
-  copyResponsible: one(users, {
-    fields: [creativeRequests.copyResponsibleId],
-    references: [users.id],
-  }),
-  assignedTo: one(users, { fields: [creativeRequests.assignedToId], references: [users.id] }),
 }));
 
 export const documentsRelations = relations(documents, ({ one }) => ({
@@ -1813,7 +1724,6 @@ export type ClientPipelineStage = typeof clientPipelineStages.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
-export type CreativeRequest = typeof creativeRequests.$inferSelect;
 export type DigitalAssetGroup = typeof digitalAssetGroups.$inferSelect;
 export type DigitalAsset = typeof digitalAssets.$inferSelect;
 export type NewDigitalAsset = typeof digitalAssets.$inferInsert;
@@ -1858,7 +1768,6 @@ export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 export type TaskType = (typeof TASK_TYPES)[number];
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
-export type CreativeStatus = (typeof CREATIVE_STATUSES)[number];
 export type AutomationTrigger = (typeof AUTOMATION_TRIGGERS)[number];
 export type AutomationActionType = (typeof AUTOMATION_ACTIONS)[number];
 export type TemplateRole = (typeof TEMPLATE_ROLES)[number];

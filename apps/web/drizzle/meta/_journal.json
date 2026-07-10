@@ -50,6 +50,13 @@
       "when": 1783646110594,
       "tag": "0006_login-rate-limit",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783646742283,
+      "tag": "0007_drop-masked-preview",
+      "breakpoints": true
     }
   ]
 }

@@ -14,7 +14,7 @@ import {
 import { logActivity } from "@/lib/activity";
 import { writeAssetAudit } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
-import { encryptSecret, maskSecret } from "@/lib/crypto";
+import { encryptSecret } from "@/lib/crypto";
 import { parseTrelloExport, type TrelloPreview } from "@/lib/import/trello";
 
 export type PreviewResult = { error?: string; preview?: SerializablePreview };
@@ -174,7 +174,6 @@ export async function confirmTrelloImport(jsonText: string, fileName: string): P
         secretType: s.type,
         label: s.label,
         encryptedValue: encryptSecret(s.value, { secretId, assetId: asset.id }),
-        maskedPreview: maskSecret(s.value),
         createdById: auth.session.userId,
       });
       secretCount++;

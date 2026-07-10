@@ -1,29 +1,13 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { encryptSecret, decryptSecret, maskSecret } from "@/lib/crypto";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { parseCardDescription, parseTrelloExport } from "@/lib/import/trello";
 
 beforeAll(() => {
   process.env.VAULT_ENCRYPTION_KEY = "a".repeat(64);
 });
 
-describe("maskSecret", () => {
-  it("nunca contém o valor completo", () => {
-    const value = "senha-super-secreta-123";
-    const masked = maskSecret(value);
-    expect(masked).not.toContain(value);
-    expect(masked).toContain("•");
-  });
-  it("valores curtos viram máscara total", () => {
-    expect(maskSecret("abc")).toBe("••••••");
-    expect(maskSecret("1234567")).toBe("••••••");
-  });
-  it("valores longos mostram só 2 primeiros e 2 últimos caracteres", () => {
-    const masked = maskSecret("abcdefghij");
-    expect(masked.startsWith("ab")).toBe(true);
-    expect(masked.endsWith("ij")).toBe(true);
-    expect(masked).not.toContain("cdefgh");
-  });
-});
+// maskSecret e a coluna masked_preview foram removidos (P0.6): nenhuma prévia
+// do segredo é persistida nem enviada ao cliente antes da revelação auditada.
 
 describe("parser de descrição do Trello", () => {
   it("extrai segredos estruturados", () => {

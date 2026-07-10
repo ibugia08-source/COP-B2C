@@ -30,7 +30,7 @@ import { canAccessAsset, canAccessClient } from "@/lib/auth/ownership";
 import type { SessionPayload } from "@/lib/auth/session";
 import { RESTRICTED_SECRET_TYPES_FOR_SOCIAL, roleHasPermission } from "@/lib/auth/permissions";
 import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
-import { encryptSecret, decryptSecret, maskSecret } from "@/lib/crypto";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { notifyRole, notifyUser } from "@/lib/notify";
 
 export type ActionState = { error?: string; success?: string; assetId?: string };
@@ -299,7 +299,6 @@ export async function createAsset(_prev: ActionState, formData: FormData): Promi
       secretType,
       label: labelParts.join("__") || secretType,
       encryptedValue: encryptSecret(value, { secretId, assetId: asset.id }),
-      maskedPreview: maskSecret(value),
       createdById: auth.session.userId,
     });
     secretCount++;
@@ -457,7 +456,6 @@ export async function duplicateAsset(assetId: string, copySecrets: boolean): Pro
         secretType: s.secretType,
         label: s.label,
         encryptedValue: encryptSecret(plain, { secretId: newSecretId, assetId: copy.id }),
-        maskedPreview: s.maskedPreview,
         createdById: auth.session.userId,
       });
     }
@@ -707,7 +705,6 @@ export async function addSecret(
     secretType: parsed.data.secretType,
     label: parsed.data.label,
     encryptedValue: encryptSecret(parsed.data.value, { secretId, assetId }),
-    maskedPreview: maskSecret(parsed.data.value),
     createdById: auth.session.userId,
   });
   await writeAssetAudit({
@@ -753,10 +750,7 @@ export async function updateSecret(
     .set({
       label: label.trim(),
       ...(value
-        ? {
-            encryptedValue: encryptSecret(value, { secretId, assetId: secret.assetId }),
-            maskedPreview: maskSecret(value),
-          }
+        ? { encryptedValue: encryptSecret(value, { secretId, assetId: secret.assetId }) }
         : {}),
       updatedById: auth.session.userId,
     })

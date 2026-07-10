@@ -180,11 +180,12 @@ export function AssetHeaderControls({
 // Credenciais
 // ---------------------------------------------------------------------------
 
+// Nada do valor do segredo (nem máscara) chega ao cliente antes de revelar —
+// a listagem mostra apenas metadados; a máscara persistida foi removida (P0.6).
 type SecretMeta = {
   id: string;
   secretType: string;
   label: string;
-  maskedPreview: string;
   lastRevealedAt: string | null;
 };
 
@@ -252,7 +253,7 @@ function SecretRow({
               </button>
             </>
           ) : (
-            <code className="rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-500">{secret.maskedPreview}</code>
+            <code className="rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-500">••••••••</code>
           )}
           {canReveal && value === null && (
             <Button size="sm" variant="secondary" disabled={pending} onClick={doReveal}>

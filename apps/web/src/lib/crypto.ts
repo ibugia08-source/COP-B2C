@@ -35,15 +35,6 @@ export function encryptSecret(plaintext: string, aad: SecretAad): string {
   return [iv.toString("base64"), authTag.toString("base64"), ciphertext.toString("base64")].join(":");
 }
 
-/**
- * Prévia mascarada para listagens — nunca contém o valor completo.
- * Ex.: "senha-forte-123" → "se•••••••23"; valores curtos viram só "••••••".
- */
-export function maskSecret(value: string): string {
-  if (value.length < 8) return "••••••";
-  return `${value.slice(0, 2)}${"•".repeat(Math.min(value.length - 4, 12))}${value.slice(-2)}`;
-}
-
 export function decryptSecret(payload: string, aad: SecretAad): string {
   const key = getKey();
   const [ivB64, tagB64, dataB64] = payload.split(":");

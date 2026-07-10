@@ -30,7 +30,7 @@ import {
 } from "./schema";
 import { PERMISSION_KEYS, ROLE_PERMISSIONS } from "../lib/auth/permissions";
 import { hashPassword } from "../lib/auth/password";
-import { encryptSecret, maskSecret } from "../lib/crypto";
+import { encryptSecret } from "../lib/crypto";
 import { materializeAllGroups } from "../lib/config-options";
 
 async function seed() {
@@ -315,7 +315,6 @@ async function seed() {
     return {
       id: secretId,
       encryptedValue: encryptSecret(v, { secretId, assetId }),
-      maskedPreview: maskSecret(v),
     };
   };
   const groupRows = await db

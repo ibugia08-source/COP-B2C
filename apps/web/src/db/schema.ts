@@ -852,10 +852,10 @@ export const digitalAssetSecrets = pgTable(
       .references(() => digitalAssets.id, { onDelete: "cascade" }),
     secretType: text("secret_type", { enum: SECRET_TYPES }).notNull().default("PASSWORD"),
     label: text("label").notNull(),
-    // AES-256-GCM: iv:authTag:ciphertext (base64) — NUNCA texto puro
+    // AES-256-GCM com AAD {secretId, assetId}: iv:authTag:ciphertext (base64).
+    // NUNCA texto puro. Nenhuma prévia/máscara é persistida — quem tem SELECT
+    // no banco não pode ver nem as extremidades do segredo.
     encryptedValue: text("encrypted_value").notNull(),
-    // prévia mascarada para listagem — nunca contém o valor completo
-    maskedPreview: text("masked_preview").notNull(),
     createdById: text("created_by_id").references(() => users.id),
     updatedById: text("updated_by_id").references(() => users.id),
     lastRevealedAt: timestamp("last_revealed_at", { mode: "date" }),

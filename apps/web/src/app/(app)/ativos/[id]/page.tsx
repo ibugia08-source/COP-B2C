@@ -196,7 +196,6 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         id: s.id,
         secretType: s.secretType,
         label: s.label,
-        maskedPreview: s.maskedPreview,
         lastRevealedAt: s.lastRevealedAt ? s.lastRevealedAt.toISOString() : null,
       }))}
       canReveal={can.reveal}

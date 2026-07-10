@@ -1,0 +1,1 @@
+ALTER TABLE "digital_asset_secrets" DROP COLUMN "masked_preview";

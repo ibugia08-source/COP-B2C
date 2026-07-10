@@ -14,8 +14,6 @@ import {
   documents,
   formTemplates,
   goals,
-  permissions,
-  rolePermissions,
   roles,
   ROLE_NAMES,
   taskChecklistItems,
@@ -28,7 +26,6 @@ import {
   type RoleName,
   type TemplateItem,
 } from "./schema";
-import { PERMISSION_KEYS, ROLE_PERMISSIONS } from "../lib/auth/permissions";
 import { hashPassword } from "../lib/auth/password";
 import { encryptSecret } from "../lib/crypto";
 import { materializeAllGroups } from "../lib/config-options";
@@ -36,32 +33,15 @@ import { materializeAllGroups } from "../lib/config-options";
 async function seed() {
   console.log("🌱 Seed COP B2C (v3 — Banco de Ativos Digitais)...");
 
-  // --- Permissões e papéis ---------------------------------------------------
-  await db
-    .insert(permissions)
-    .values(PERMISSION_KEYS.map((key) => ({ key })))
-    .onConflictDoNothing();
-  const allPerms = await db.select().from(permissions);
-  const permByKey = new Map(allPerms.map((p) => [p.key, p.id]));
-
+  // --- Papéis ------------------------------------------------------------------
+  // Permissões NÃO são persistidas: a fonte de verdade é o mapa estático
+  // ROLE_PERMISSIONS em src/lib/auth/permissions.ts (usado pelos guards).
   await db
     .insert(roles)
     .values(ROLE_NAMES.map((name) => ({ name })))
     .onConflictDoNothing();
   const allRoles = await db.select().from(roles);
   const roleByName = new Map(allRoles.map((r) => [r.name, r.id]));
-
-  await db
-    .insert(rolePermissions)
-    .values(
-      Object.entries(ROLE_PERMISSIONS).flatMap(([roleName, keys]) =>
-        keys.map((key) => ({
-          roleId: roleByName.get(roleName as RoleName)!,
-          permissionId: permByKey.get(key)!,
-        })),
-      ),
-    )
-    .onConflictDoNothing();
 
   // --- Usuários (senha padrão de dev: "cop123456") ----------------------------
   const defaultHash = await hashPassword("cop123456");

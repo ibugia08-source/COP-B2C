@@ -364,12 +364,9 @@ export const roles = pgTable("roles", {
   createdAt: createdAt(),
 });
 
-export const permissions = pgTable("permissions", {
-  id: id(),
-  // formato "modulo.acao", ex.: "clients.view", "vault.revealSecret"
-  key: text("key").notNull().unique(),
-  description: text("description"),
-});
+// A fonte de verdade das permissões é o mapa estático ROLE_PERMISSIONS em
+// src/lib/auth/permissions.ts — as antigas tabelas permissions/role_permissions
+// eram populadas no seed mas nunca lidas em runtime e foram removidas (P0.9).
 
 export const userRoles = pgTable(
   "user_roles",
@@ -382,19 +379,6 @@ export const userRoles = pgTable(
       .references(() => roles.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ columns: [t.userId, t.roleId] })],
-);
-
-export const rolePermissions = pgTable(
-  "role_permissions",
-  {
-    roleId: text("role_id")
-      .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
-    permissionId: text("permission_id")
-      .notNull()
-      .references(() => permissions.id, { onDelete: "cascade" }),
-  },
-  (t) => [primaryKey({ columns: [t.roleId, t.permissionId] })],
 );
 
 // Tentativas de login (rate limiting / lockout). Limpa registros >7 dias no
@@ -1546,24 +1530,11 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 
 export const rolesRelations = relations(roles, ({ many }) => ({
   userRoles: many(userRoles),
-  rolePermissions: many(rolePermissions),
 }));
 
 export const userRolesRelations = relations(userRoles, ({ one }) => ({
   user: one(users, { fields: [userRoles.userId], references: [users.id] }),
   role: one(roles, { fields: [userRoles.roleId], references: [roles.id] }),
-}));
-
-export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
-  role: one(roles, { fields: [rolePermissions.roleId], references: [roles.id] }),
-  permission: one(permissions, {
-    fields: [rolePermissions.permissionId],
-    references: [permissions.id],
-  }),
-}));
-
-export const permissionsRelations = relations(permissions, ({ many }) => ({
-  rolePermissions: many(rolePermissions),
 }));
 
 export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
@@ -1819,7 +1790,6 @@ export type User = typeof users.$inferSelect;
 export type UserStatus = (typeof USER_STATUSES)[number];
 export type NewUser = typeof users.$inferInsert;
 export type Role = typeof roles.$inferSelect;
-export type Permission = typeof permissions.$inferSelect;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type Client = typeof clients.$inferSelect;
 export type NewClient = typeof clients.$inferInsert;

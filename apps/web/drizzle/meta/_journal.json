@@ -57,6 +57,13 @@
       "when": 1783646742283,
       "tag": "0007_drop-masked-preview",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783647540890,
+      "tag": "0008_drop-permission-tables",
+      "breakpoints": true
     }
   ]
 }

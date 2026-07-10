@@ -6,7 +6,11 @@ import {
   verifySessionToken,
 } from "@/lib/auth/session";
 
-const PUBLIC_PATHS = ["/login"];
+// Rotas acessíveis sem sessão (lista documentada em docs/DEPLOY.md):
+// - /login        — tela de entrada; o auto-cadastro é uma ABA dela (não há /signup)
+// - /acesso-negado — destino dos redirects de permissão (evita loop com /login)
+// - /api/health   — monitoramento/uptime (não toca no banco)
+const PUBLIC_PATHS = ["/login", "/acesso-negado", "/api/health"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -72,6 +72,18 @@ Com Root Directory + env vars configurados, faça **Redeploy** (ou um novo push)
 O login inicial é `owner@b2cgestao.com.br` / `cop123456` — **troque a senha do seed**
 antes de uso real.
 
+## Rotas públicas (sem sessão)
+
+O middleware (`apps/web/src/proxy.ts`) exige sessão em tudo, exceto:
+
+| Rota | Motivo |
+|---|---|
+| `/login` | tela de entrada — o auto-cadastro é uma aba dela (não existe `/signup`) |
+| `/acesso-negado` | destino dos redirects de permissão |
+| `/api/health` | health check para monitoramento/uptime (não toca no banco) |
+
+Qualquer página pública nova precisa entrar em `PUBLIC_PATHS` no proxy.
+
 ## Observações
 
 - **Dev local** usa o mesmo driver: basta ter `DATABASE_URL` no `apps/web/.env`

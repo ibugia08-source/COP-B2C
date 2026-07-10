@@ -1,5 +1,6 @@
-import { getFeatureFlags } from "@/lib/settings";
+import { getGoogleAccessToken } from "@/lib/google-auth";
 import { isGoogleConfigured } from "@/lib/google-meet";
+import { getFeatureFlags } from "@/lib/settings";
 
 /**
  * Camada de integração com o Google Drive.
@@ -9,7 +10,7 @@ import { isGoogleConfigured } from "@/lib/google-meet";
  * continua podendo colar links do Drive manualmente. Nada no sistema quebra sem
  * a integração.
  *
- * Para habilitar (fase futura), configure na Vercel:
+ * Para habilitar, configure no ambiente (local e Vercel):
  *   GOOGLE_CLIENT_ID
  *   GOOGLE_CLIENT_SECRET
  *   GOOGLE_REDIRECT_URI        (ex.: https://SEU_DOMINIO/api/google/callback)
@@ -103,12 +104,17 @@ export function parseDriveUrl(url: string): ParsedDrive {
 export type DrivePickResult = { ok: true; files: DriveFile[] } | { ok: false; error: string };
 export type DriveFile = { id: string; name: string; url: string; mimeType: string };
 
+/** Escapa aspas simples/contrabarras para a query language do Drive (q=). */
+function escapeDriveQuery(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
 /**
- * Lista/seleciona arquivos do Drive da conta conectada. Stub até o OAuth estar
- * configurado — retorna erro amigável, sem lançar.
+ * Lista arquivos do Drive da conta robô via Drive API (files.list), mais
+ * recentes primeiro; com `query`, filtra por nome. Retorna erro amigável,
+ * sem lançar.
  */
-export async function listDriveFiles(_query?: string): Promise<DrivePickResult> {
-  void _query;
+export async function listDriveFiles(query?: string): Promise<DrivePickResult> {
   if (!(await isGoogleDriveEnabled())) {
     return {
       ok: false,
@@ -116,9 +122,41 @@ export async function listDriveFiles(_query?: string): Promise<DrivePickResult> 
         "Google Drive não conectado. Configure as credenciais do Google e ligue a integração em Configurações → Integrações. Você pode colar o link do Drive manualmente.",
     };
   }
-  // TODO(fase Google): chamar Drive API (files.list) com o refresh token da agência.
-  return {
-    ok: false,
-    error: "Seleção de arquivos do Drive ainda não implementada — cole o link do Drive manualmente por enquanto.",
+
+  const auth = await getGoogleAccessToken();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const q = query?.trim()
+    ? `name contains '${escapeDriveQuery(query.trim())}' and trashed = false`
+    : "trashed = false";
+  const params = new URLSearchParams({
+    q,
+    pageSize: "20",
+    orderBy: "modifiedTime desc",
+    fields: "files(id,name,mimeType,webViewLink)",
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+      headers: { Authorization: `Bearer ${auth.accessToken}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, error: "Não foi possível contatar o Google Drive (falha de rede). Tente novamente." };
+  }
+  if (!res.ok) {
+    return { ok: false, error: `O Google Drive respondeu com erro (${res.status}). Tente novamente em instantes.` };
+  }
+
+  const data = (await res.json().catch(() => ({}))) as {
+    files?: { id: string; name: string; mimeType: string; webViewLink?: string }[];
   };
+  const files: DriveFile[] = (data.files ?? []).map((f) => ({
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+    url: f.webViewLink ?? `https://drive.google.com/file/d/${f.id}/view`,
+  }));
+  return { ok: true, files };
 }

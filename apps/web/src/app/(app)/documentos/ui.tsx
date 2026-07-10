@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useState, useTransition } from "react";
 import type { Document } from "@/db/schema";
+import type { DriveFile } from "@/lib/google-drive";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
-import { deleteDocument, saveDocument, toggleArchiveDocument, uploadDocument, type ActionState } from "./actions";
+import { deleteDocument, saveDocument, searchDriveFiles, toggleArchiveDocument, uploadDocument, type ActionState } from "./actions";
 
 export const DOC_TYPE_LABELS: Record<string, string> = {
   WIKI: "Wiki",
@@ -30,6 +31,14 @@ export const DOC_SOURCE_LABELS: Record<string, string> = {
   UPLOAD: "Upload de arquivo",
   GOOGLE_DRIVE: "Google Drive",
   EXTERNAL_LINK: "Link externo",
+};
+
+const DRIVE_MIME_LABELS: Record<string, string> = {
+  "application/vnd.google-apps.document": "Docs",
+  "application/vnd.google-apps.spreadsheet": "Sheets",
+  "application/vnd.google-apps.presentation": "Slides",
+  "application/vnd.google-apps.folder": "Pasta",
+  "application/pdf": "PDF",
 };
 
 type Option = { id: string; name: string };
@@ -57,7 +66,26 @@ export function DocumentFormButton({
 }) {
   const [open, setOpen] = useState(autoOpen ?? false);
   const [source, setSource] = useState<string>(doc?.sourceType ?? "INTERNAL");
+  const [driveUrl, setDriveUrl] = useState(doc?.googleDriveUrl ?? "");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [driveQuery, setDriveQuery] = useState("");
+  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [driveSearching, startDriveSearch] = useTransition();
   const router = useRouter();
+
+  function searchDrive(query: string) {
+    startDriveSearch(async () => {
+      const result = await searchDriveFiles(query);
+      if (result.ok) {
+        setDriveFiles(result.files);
+        setDriveError(result.files.length === 0 ? "Nenhum arquivo encontrado no Drive." : null);
+      } else {
+        setDriveFiles([]);
+        setDriveError(result.error);
+      }
+    });
+  }
 
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
@@ -125,7 +153,13 @@ export function DocumentFormButton({
           {source === "GOOGLE_DRIVE" && (
             <div className="space-y-2">
               <Field label="Link do Google Drive / Docs *">
-                <Input name="googleDriveUrl" type="url" defaultValue={doc?.googleDriveUrl ?? ""} placeholder="https://docs.google.com/... ou https://drive.google.com/..." />
+                <Input
+                  name="googleDriveUrl"
+                  type="url"
+                  value={driveUrl}
+                  onChange={(e) => setDriveUrl(e.target.value)}
+                  placeholder="https://docs.google.com/... ou https://drive.google.com/..."
+                />
               </Field>
               <div className="flex items-center gap-2">
                 <Button
@@ -134,8 +168,12 @@ export function DocumentFormButton({
                   size="sm"
                   disabled={!driveConnected}
                   title={driveConnected ? "Selecionar do Drive" : "Conecte o Google Drive em Configurações → Integrações"}
+                  onClick={() => {
+                    setPickerOpen((v) => !v);
+                    if (!pickerOpen && driveFiles.length === 0) searchDrive("");
+                  }}
                 >
-                  Selecionar do Drive
+                  {pickerOpen ? "Fechar seletor" : "Selecionar do Drive"}
                 </Button>
                 {!driveConnected && (
                   <span className="text-[11px] text-amber-500/80">
@@ -143,6 +181,46 @@ export function DocumentFormButton({
                   </span>
                 )}
               </div>
+              {pickerOpen && (
+                <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={driveQuery}
+                      onChange={(e) => setDriveQuery(e.target.value)}
+                      placeholder="Buscar por nome no Drive..."
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          searchDrive(driveQuery);
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="secondary" size="sm" disabled={driveSearching} onClick={() => searchDrive(driveQuery)}>
+                      {driveSearching ? "Buscando..." : "Buscar"}
+                    </Button>
+                  </div>
+                  {driveError && <p className="text-[11px] text-amber-500/80">{driveError}</p>}
+                  {driveFiles.length > 0 && (
+                    <ul className="max-h-48 divide-y divide-zinc-800 overflow-y-auto">
+                      {driveFiles.map((f) => (
+                        <li key={f.id}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-2 px-1 py-1.5 text-left text-sm text-zinc-200 hover:bg-zinc-800/60"
+                            onClick={() => {
+                              setDriveUrl(f.url);
+                              setPickerOpen(false);
+                            }}
+                          >
+                            <span className="truncate">{f.name}</span>
+                            <span className="shrink-0 text-[10px] text-zinc-500">{DRIVE_MIME_LABELS[f.mimeType] ?? "Arquivo"}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               <p className="text-[11px] text-zinc-500">
                 O COP guarda apenas o link e os metadados. Quem abrir o arquivo precisa ter permissão no Google Drive.
               </p>

@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { DOCUMENT_SOURCES, DOCUMENT_TYPES, documents } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
-import { isGoogleDriveUrl, parseDriveUrl } from "@/lib/google-drive";
+import { isGoogleDriveUrl, listDriveFiles, parseDriveUrl, type DrivePickResult } from "@/lib/google-drive";
 import { buildStorageKey, getStorage, maxUploadBytes } from "@/lib/storage";
 import { UPLOAD_WHITELISTS, validateUpload } from "@/lib/storage/validation";
 
@@ -47,6 +47,13 @@ function isHttpUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Busca arquivos no Drive da agência para o seletor do formulário de documentos. */
+export async function searchDriveFiles(query: string): Promise<DrivePickResult> {
+  const auth = await checkPermission("tasks.view"); // mesmo requisito de quem cria documento
+  if (!auth.ok) return { ok: false, error: auth.error };
+  return listDriveFiles(query);
 }
 
 function revalidateDoc(documentId?: string, clientId?: string | null) {

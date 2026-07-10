@@ -113,16 +113,22 @@ Qualquer página pública nova precisa entrar em `PUBLIC_PATHS` no proxy.
 
 ## Integração Google Meet / Calendar (opcional — reuniões)
 
-O módulo de Reuniões funciona 100% manualmente (cola-se o link do Meet). Para
-gerar links automaticamente no futuro, configure na Vercel e ligue a flag
-"Google Meet" em Configurações → Serviços & Módulos:
+O módulo de Reuniões funciona 100% manualmente (cola-se o link do Meet). Com as
+variáveis abaixo configuradas (local e Vercel) **e** a flag "Google Meet" ligada
+em Configurações → Serviços & Módulos, o botão "Gerar link Meet" cria um evento
+real na agenda primária da conta robô (Calendar API com `conferenceData`) e
+devolve o link:
 
 | Variável | Descrição |
 |---|---|
-| `GOOGLE_CLIENT_ID` | Client ID do OAuth (Google Cloud Console) |
-| `GOOGLE_CLIENT_SECRET` | Client Secret do OAuth |
+| `GOOGLE_CLIENT_ID` | Client ID do OAuth (Google Cloud Console → Credentials) |
+| `GOOGLE_CLIENT_SECRET` | Client Secret do OAuth (só aparece na criação — guarde) |
 | `GOOGLE_REDIRECT_URI` | ex.: `https://SEU_DOMINIO/api/google/callback` |
-| `GOOGLE_REFRESH_TOKEN` | refresh token da conta robô da agência (Calendar API) |
+| `GOOGLE_REFRESH_TOKEN` | refresh token da conta robô, gerado no OAuth Playground com os escopos `drive.readonly` + `calendar.events` |
+
+> O app OAuth precisa estar **publicado** ("In production") no consent screen —
+> em modo Testing o refresh token expira em 7 dias. Se o Google responder
+> `invalid_grant`, gere um refresh token novo no OAuth Playground.
 
 Sem essas variáveis, o botão "Gerar link Meet" fica desabilitado com aviso — o
 sistema não quebra.
@@ -130,12 +136,13 @@ sistema não quebra.
 ## Integração Google Drive (opcional — documentos)
 
 O módulo Documentos funciona 100% sem o Drive: dá para colar links do Drive/Docs
-manualmente, fazer upload de arquivos e cadastrar links externos. Para habilitar a
-seleção de arquivos direto do Drive (fase futura), use as **mesmas** variáveis
-`GOOGLE_*` acima (a conta robô precisa de acesso ao Drive da agência) e clique em
-"Conectar Google Drive" em **Configurações → Integrações**. Enquanto as credenciais
-não existirem, a área mostra "Não conectado / Configuração pendente" e o botão
-"Selecionar arquivo do Drive" fica desabilitado — nada quebra.
+manualmente, fazer upload de arquivos e cadastrar links externos. Com as
+**mesmas** variáveis `GOOGLE_*` acima (a conta robô precisa de acesso ao Drive
+da agência) e a flag "Google Drive em Documentos" ligada, o botão
+"Selecionar do Drive" no formulário de documentos abre um seletor que busca os
+arquivos por nome na Drive API (`files.list`, somente leitura) e preenche o
+link. Enquanto as credenciais não existirem, a área em Configurações →
+Integrações mostra "Não conectado" e o botão fica desabilitado — nada quebra.
 
 > Uploads de arquivos usam o storage configurado (`STORAGE_DRIVER`): Vercel Blob
 > em produção, disco local em dev. Ver seção de variáveis de ambiente.

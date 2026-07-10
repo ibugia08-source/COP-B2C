@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, isNull, like, lt, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, isNull, like, lt, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssetGroups, digitalAssets, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
@@ -71,7 +71,8 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
   const resp = str(sp.responsavel);
   if (resp === "__none__") filters.push(isNull(digitalAssets.assignedToId));
   else if (resp) filters.push(eq(digitalAssets.assignedToId, resp));
-  if (str(sp.tag)) filters.push(like(digitalAssets.tags, `%"${str(sp.tag)}"%`));
+  // containment jsonb (usa o índice GIN) — LIKE não existe para jsonb
+  if (str(sp.tag)) filters.push(sql`${digitalAssets.tags} @> ${JSON.stringify([str(sp.tag)])}::jsonb`);
   if (str(sp.revisao) === "pendente") filters.push(lt(digitalAssets.nextReviewAt, now));
 
   const [assets, groups, allClients, allUsers, statusOptionsAll] = await Promise.all([

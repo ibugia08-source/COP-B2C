@@ -607,6 +607,8 @@ export const tasks = pgTable(
     index("tasks_due_idx").on(t.dueDate),
     index("tasks_parent_idx").on(t.parentTaskId),
     index("tasks_asset_idx").on(t.digitalAssetId),
+    // busca por tag usa containment (tags @> '["x"]') — GIN jsonb_path_ops
+    index("tasks_tags_gin_idx").using("gin", t.tags.op("jsonb_path_ops")),
   ],
 );
 
@@ -828,6 +830,8 @@ export const digitalAssets = pgTable(
     index("assets_status_idx").on(t.status),
     index("assets_assigned_idx").on(t.assignedToId),
     index("assets_review_idx").on(t.nextReviewAt),
+    // busca por tag usa containment (tags @> '["x"]') — GIN jsonb_path_ops
+    index("assets_tags_gin_idx").using("gin", t.tags.op("jsonb_path_ops")),
   ],
 );
 

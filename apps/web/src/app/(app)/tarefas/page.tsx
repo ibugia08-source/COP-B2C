@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, gte, isNull, like, lt, not, inArray, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lt, not, inArray, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
@@ -72,7 +72,8 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   if (status === "__abertas__") filters.push(not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])));
   else if (status) filters.push(eq(tasks.status, status as never));
   if (str(sp.prioridade)) filters.push(eq(tasks.priority, str(sp.prioridade) as never));
-  if (str(sp.tag)) filters.push(like(tasks.tags, `%"${str(sp.tag)}"%`));
+  // containment jsonb (usa o índice GIN) — LIKE não existe para jsonb
+  if (str(sp.tag)) filters.push(sql`${tasks.tags} @> ${JSON.stringify([str(sp.tag)])}::jsonb`);
   if (str(sp.criador)) filters.push(eq(tasks.createdById, str(sp.criador)!));
 
   const now = new Date();

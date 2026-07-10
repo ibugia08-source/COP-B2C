@@ -10,6 +10,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -577,9 +578,13 @@ export const tasks = pgTable(
     priority: text("priority", { enum: TASK_PRIORITIES }).notNull().default("MEDIA"),
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
     projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
-    parentTaskId: text("parent_task_id"),
+    parentTaskId: text("parent_task_id").references((): AnyPgColumn => tasks.id, {
+      onDelete: "set null",
+    }),
     // tarefa pode ser vinculada a um ativo digital (ex.: "resolver conta bloqueada")
-    digitalAssetId: text("digital_asset_id"),
+    digitalAssetId: text("digital_asset_id").references((): AnyPgColumn => digitalAssets.id, {
+      onDelete: "set null",
+    }),
     assignedToId: text("assigned_to_id").references(() => users.id),
     createdById: text("created_by_id").references(() => users.id),
     cancelReason: text("cancel_reason"),
@@ -982,8 +987,10 @@ export const documents = pgTable(
     category: text("category"), // ex.: estrategia, funil, processo, wiki
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
     taskId: text("task_id").references(() => tasks.id, { onDelete: "set null" }),
-    // vínculo opcional a um ativo digital (sem FK no banco, igual a tasks.digitalAssetId)
-    digitalAssetId: text("digital_asset_id"),
+    // vínculo opcional a um ativo digital
+    digitalAssetId: text("digital_asset_id").references(() => digitalAssets.id, {
+      onDelete: "set null",
+    }),
     isArchived: boolean("is_archived").notNull().default(false),
     visibleToRoles: jsonb("visible_to_roles")
       .$type<string[]>()
@@ -1298,8 +1305,10 @@ export const copilotSuggestions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
-    taskId: text("task_id"),
-    digitalAssetId: text("digital_asset_id"),
+    taskId: text("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    digitalAssetId: text("digital_asset_id").references(() => digitalAssets.id, {
+      onDelete: "set null",
+    }),
     type: text("type", { enum: COPILOT_SUGGESTION_TYPES }).notNull().default("OUTRO"),
     title: text("title").notNull(),
     description: text("description"),

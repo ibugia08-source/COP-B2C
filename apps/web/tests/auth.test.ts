@@ -1,6 +1,11 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import {
+  assessLoginRateLimit,
+  countRecentFailures,
+  LOGIN_RATE_LIMIT,
+} from "@/lib/auth/rate-limit";
+import {
   createSessionToken,
   isSessionUserValid,
   verifySessionToken,
@@ -61,6 +66,59 @@ describe("sessão JWT", () => {
       .setExpirationTime("1h")
       .sign(new TextEncoder().encode(process.env.AUTH_SECRET));
     expect(await verifySessionToken(legacy)).toBeNull();
+  });
+});
+
+describe("rate limiting do login", () => {
+  const now = new Date("2026-07-09T12:00:00Z");
+  const failure = (minutesAgo: number) => ({
+    success: false,
+    createdAt: new Date(now.getTime() - minutesAgo * 60_000),
+  });
+
+  it("6 falhas do mesmo e-mail nos últimos 15 min → bloqueado", () => {
+    const attempts = [1, 2, 3, 5, 8, 12].map(failure);
+    const emailFailures = countRecentFailures(attempts, now);
+    expect(emailFailures).toBe(6);
+    expect(assessLoginRateLimit({ emailFailures, ipFailures: 6 })).toEqual({
+      blocked: true,
+      reason: "email",
+    });
+  });
+
+  it("5 falhas ainda não bloqueiam (limite é >5)", () => {
+    const attempts = [1, 2, 3, 5, 8].map(failure);
+    const emailFailures = countRecentFailures(attempts, now);
+    expect(emailFailures).toBe(5);
+    expect(assessLoginRateLimit({ emailFailures, ipFailures: 5 }).blocked).toBe(false);
+  });
+
+  it("falhas fora da janela de 15 min não contam", () => {
+    const attempts = [1, 2, 16, 30, 60].map(failure);
+    expect(countRecentFailures(attempts, now)).toBe(2);
+  });
+
+  it("sucessos não contam como falha (contador zerado após login)", () => {
+    const attempts = [
+      failure(1),
+      { success: true, createdAt: new Date(now.getTime() - 2 * 60_000) },
+      failure(3),
+    ];
+    expect(countRecentFailures(attempts, now)).toBe(2);
+  });
+
+  it(">20 falhas por IP bloqueiam mesmo com e-mails variados", () => {
+    expect(assessLoginRateLimit({ emailFailures: 0, ipFailures: 21 })).toEqual({
+      blocked: true,
+      reason: "ip",
+    });
+    expect(assessLoginRateLimit({ emailFailures: 0, ipFailures: 20 }).blocked).toBe(false);
+  });
+
+  it("janela e limites são os documentados (15 min / 5 / 20)", () => {
+    expect(LOGIN_RATE_LIMIT.windowMs).toBe(15 * 60_000);
+    expect(LOGIN_RATE_LIMIT.maxEmailFailures).toBe(5);
+    expect(LOGIN_RATE_LIMIT.maxIpFailures).toBe(20);
   });
 });
 

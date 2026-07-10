@@ -1,15 +1,54 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, count, eq, gte, lt } from "drizzle-orm";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { loginAttempts, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { notifyRole } from "@/lib/notify";
 import { hashPassword, verifyPassword } from "./password";
+import {
+  assessLoginRateLimit,
+  LOGIN_RATE_LIMIT,
+  RATE_LIMIT_MESSAGE,
+} from "./rate-limit";
 import { clearSessionCookie, setSessionCookie } from "./session";
 import { getSession } from "./session-server";
+
+async function requestIp(): Promise<string | null> {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip");
+}
+
+async function countFailuresSince(cutoff: Date, email: string, ip: string | null) {
+  const [byEmail, byIp] = await Promise.all([
+    db
+      .select({ n: count() })
+      .from(loginAttempts)
+      .where(
+        and(
+          eq(loginAttempts.email, email),
+          eq(loginAttempts.success, false),
+          gte(loginAttempts.createdAt, cutoff),
+        ),
+      ),
+    ip
+      ? db
+          .select({ n: count() })
+          .from(loginAttempts)
+          .where(
+            and(
+              eq(loginAttempts.ipAddress, ip),
+              eq(loginAttempts.success, false),
+              gte(loginAttempts.createdAt, cutoff),
+            ),
+          )
+      : Promise.resolve([{ n: 0 }]),
+  ]);
+  return { emailFailures: byEmail[0].n, ipFailures: byIp[0].n };
+}
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("E-mail inválido"),
@@ -28,14 +67,36 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   }
 
+  // Rate limiting ANTES de comparar senha: >5 falhas por e-mail ou >20 por IP
+  // nos últimos 15 min bloqueiam com mensagem genérica (não vaza existência).
+  const email = parsed.data.email;
+  const ip = await requestIp();
+  const cutoff = new Date(Date.now() - LOGIN_RATE_LIMIT.windowMs);
+  const verdict = assessLoginRateLimit(await countFailuresSince(cutoff, email, ip));
+  if (verdict.blocked) {
+    await logActivity({
+      action: "auth.loginRateLimited",
+      entityType: "user",
+      metadata: { reason: verdict.reason },
+    });
+    return { error: RATE_LIMIT_MESSAGE };
+  }
+
   const user = await db.query.users.findFirst({
-    where: eq(users.email, parsed.data.email),
+    where: eq(users.email, email),
     with: { userRoles: { with: { role: true } } },
   });
 
   const invalid = { error: "E-mail ou senha incorretos." };
-  if (!user) return invalid;
+  const registerFailure = async () => {
+    await db.insert(loginAttempts).values({ email, ipAddress: ip, success: false });
+  };
+  if (!user) {
+    await registerFailure();
+    return invalid;
+  }
   if (!verifyPassword(parsed.data.password, user.passwordHash)) {
+    await registerFailure();
     await logActivity({
       userId: user.id,
       action: "auth.loginFailed",
@@ -54,6 +115,16 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (user.status === "INATIVO" || !user.isActive) {
     return { error: "Usuário desativado. Fale com um administrador." };
   }
+
+  // Sucesso: registra, zera o contador de falhas do e-mail (não do IP) e faz
+  // a limpeza oportunista dos registros antigos (>7 dias).
+  await db.insert(loginAttempts).values({ email, ipAddress: ip, success: true });
+  await db
+    .delete(loginAttempts)
+    .where(and(eq(loginAttempts.email, email), eq(loginAttempts.success, false)));
+  await db
+    .delete(loginAttempts)
+    .where(lt(loginAttempts.createdAt, new Date(Date.now() - LOGIN_RATE_LIMIT.retentionMs)));
 
   // Token mínimo: papéis/nome/e-mail são reconsultados do banco a cada request.
   await setSessionCookie({ userId: user.id, sv: user.sessionVersion });

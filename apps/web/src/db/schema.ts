@@ -397,6 +397,23 @@ export const rolePermissions = pgTable(
   (t) => [primaryKey({ columns: [t.roleId, t.permissionId] })],
 );
 
+// Tentativas de login (rate limiting / lockout). Limpa registros >7 dias no
+// próprio fluxo de login — não guarda histórico longo.
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: id(),
+    email: text("email").notNull(), // sempre lowercase
+    ipAddress: text("ip_address"),
+    success: boolean("success").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("login_attempts_email_idx").on(t.email, t.createdAt),
+    index("login_attempts_ip_idx").on(t.ipAddress, t.createdAt),
+  ],
+);
+
 export const teamMembers = pgTable("team_members", {
   id: id(),
   userId: text("user_id")

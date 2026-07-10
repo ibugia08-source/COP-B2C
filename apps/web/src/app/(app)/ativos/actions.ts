@@ -26,6 +26,8 @@ import {
 import { logActivity } from "@/lib/activity";
 import { writeAssetAudit } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
+import { canAccessAsset, canAccessClient } from "@/lib/auth/ownership";
+import type { SessionPayload } from "@/lib/auth/session";
 import { RESTRICTED_SECRET_TYPES_FOR_SOCIAL, roleHasPermission } from "@/lib/auth/permissions";
 import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
 import { encryptSecret, decryptSecret, maskSecret } from "@/lib/crypto";
@@ -46,6 +48,26 @@ function revalidateAsset(assetId?: string, clientId?: string | null) {
   revalidatePath("/ativos");
   if (assetId) revalidatePath(`/ativos/${assetId}`);
   if (clientId) revalidatePath(`/clientes/${clientId}`);
+}
+
+/**
+ * Gate de ownership: além da permissão RBAC, escrever/revelar exige ser
+ * responsável pelo cliente do ativo (OWNER/ADMIN operam tudo; ativos internos
+ * exigem GESTOR_OPERACIONAL). Negações são auditadas.
+ */
+async function denyOutOfScope(
+  session: SessionPayload,
+  assetId: string,
+  context: Record<string, unknown> = {},
+): Promise<ActionState | null> {
+  if (await canAccessAsset(session, assetId)) return null;
+  await writeAssetAudit({
+    assetId,
+    userId: session.userId,
+    action: "PERMISSION_DENIED",
+    metadata: { ...context, reason: "ownership_scope" },
+  });
+  return { error: "Você não é responsável por este ativo/cliente." };
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +268,16 @@ export async function createAsset(_prev: ActionState, formData: FormData): Promi
   const parsed = parseAssetForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
 
+  // criar ativo para um cliente exige ser responsável por esse cliente
+  if (parsed.data.clientId && !(await canAccessClient(auth.session, parsed.data.clientId))) {
+    await writeAssetAudit({
+      userId: auth.session.userId,
+      action: "PERMISSION_DENIED",
+      metadata: { action: "createAsset", clientId: parsed.data.clientId, reason: "ownership_scope" },
+    });
+    return { error: "Você não é responsável por este cliente." };
+  }
+
   const [asset] = await db
     .insert(digitalAssets)
     .values({ ...assetValues(parsed.data, auth.session.userId), createdById: auth.session.userId })
@@ -315,6 +347,9 @@ export async function updateAsset(
   const existing = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!existing) return { error: "Ativo não encontrado." };
 
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "updateAsset" });
+  if (denied) return denied;
+
   const values = assetValues(parsed.data, auth.session.userId);
   // mudança de status pelo form de edição também gera histórico
   if (values.status !== existing.status) {
@@ -352,6 +387,9 @@ export async function archiveAsset(assetId: string): Promise<ActionState> {
   const existing = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!existing) return { error: "Ativo não encontrado." };
 
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "archiveAsset" });
+  if (denied) return denied;
+
   const restoring = !!existing.archivedAt;
   await db
     .update(digitalAssets)
@@ -379,6 +417,9 @@ export async function duplicateAsset(assetId: string, copySecrets: boolean): Pro
     with: { secrets: true },
   });
   if (!existing) return { error: "Ativo não encontrado." };
+
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "duplicateAsset" });
+  if (denied) return denied;
 
   const { id: _id, createdAt: _c, updatedAt: _u, secrets, ...rest } = existing;
   void _id; void _c; void _u;
@@ -443,6 +484,9 @@ export async function changeAssetStatus(
   if (!existing) return { error: "Ativo não encontrado." };
   if (existing.status === newStatus) return { error: "O ativo já está neste status." };
 
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "changeAssetStatus" });
+  if (denied) return denied;
+
   // Regra: bloquear exige motivo (registrado no histórico + comentário)
   if (newStatus === "BLOQUEADA" && reason.trim().length < 3) {
     return { requires: "BLOQUEADA", error: "Marcar como BLOQUEADA exige um motivo (mínimo 3 caracteres)." };
@@ -506,6 +550,16 @@ export async function quickCreateAsset(
   const clean = title.trim();
   if (clean.length < 2) return { error: "Título muito curto." };
 
+  // criar ativo para um cliente exige ser responsável por esse cliente
+  if (opts.clientId && !(await canAccessClient(auth.session, opts.clientId))) {
+    await writeAssetAudit({
+      userId: auth.session.userId,
+      action: "PERMISSION_DENIED",
+      metadata: { action: "quickCreateAsset", clientId: opts.clientId, reason: "ownership_scope" },
+    });
+    return { error: "Você não é responsável por este cliente." };
+  }
+
   // grupo: informado, ou o primeiro ativo (todo ativo precisa de um grupo)
   let groupId = opts.groupId;
   if (!groupId) {
@@ -567,6 +621,9 @@ export async function moveAssetToGroup(assetId: string, groupId: string): Promis
   if (!group) return { error: "Grupo não encontrado." };
   if (asset.groupId === groupId) return { success: "O ativo já está neste grupo." };
 
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "moveAssetToGroup" });
+  if (denied) return denied;
+
   await db
     .update(digitalAssets)
     .set({ groupId, updatedById: auth.session.userId })
@@ -587,6 +644,8 @@ export async function markAssetChecked(assetId: string, nextReviewDays: number):
   const days = Number.isFinite(nextReviewDays) && nextReviewDays > 0 ? nextReviewDays : 30;
   const existing = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!existing) return { error: "Ativo não encontrado." };
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "markAssetChecked" });
+  if (denied) return denied;
   await db
     .update(digitalAssets)
     .set({
@@ -622,6 +681,9 @@ export async function addSecret(
 
   const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!asset) return { error: "Ativo não encontrado." };
+
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "addSecret" });
+  if (denied) return denied;
 
   await db.insert(digitalAssetSecrets).values({
     assetId,
@@ -663,6 +725,12 @@ export async function updateSecret(
   if (!secret) return { error: "Segredo não encontrado." };
   if (!label.trim()) return { error: "Informe o rótulo." };
 
+  const denied = await denyOutOfScope(auth.session, secret.assetId, {
+    action: "updateSecret",
+    secretId,
+  });
+  if (denied) return denied;
+
   await db
     .update(digitalAssetSecrets)
     .set({
@@ -690,6 +758,13 @@ export async function deleteSecret(secretId: string): Promise<ActionState> {
     where: eq(digitalAssetSecrets.id, secretId),
   });
   if (!secret) return { error: "Segredo não encontrado." };
+
+  const denied = await denyOutOfScope(auth.session, secret.assetId, {
+    action: "deleteSecret",
+    secretId,
+  });
+  if (denied) return denied;
+
   await db.delete(digitalAssetSecrets).where(eq(digitalAssetSecrets.id, secretId));
   await writeAssetAudit({
     assetId: secret.assetId,
@@ -730,6 +805,14 @@ export async function revealSecret(
     with: { asset: true },
   });
   if (!secret) return { error: "Segredo não encontrado." };
+
+  // escopo de ownership: só responsáveis pelo cliente do ativo revelam segredos
+  const denied = await denyOutOfScope(auth.session, secret.assetId, {
+    action: "revealSecret",
+    secretId,
+    mode,
+  });
+  if (denied) return { error: denied.error };
 
   // SOCIAL_MEDIA não revela tokens/API keys/2FA
   const isPrivileged = auth.session.roles.some((r) =>
@@ -805,6 +888,9 @@ export async function uploadAttachment(assetId: string, formData: FormData): Pro
   const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!asset) return { error: "Ativo não encontrado." };
 
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "uploadAttachment" });
+  if (denied) return denied;
+
   const safeName = file.name.replace(/[^\w.\-À-ú ]/g, "_").slice(0, 120);
   const storageName = `${crypto.randomUUID()}__${safeName}`;
   await mkdir(UPLOADS_DIR, { recursive: true });
@@ -836,6 +922,13 @@ export async function deleteAttachment(attachmentId: string): Promise<ActionStat
     where: eq(digitalAssetAttachments.id, attachmentId),
   });
   if (!attachment) return { error: "Anexo não encontrado." };
+
+  const denied = await denyOutOfScope(auth.session, attachment.assetId, {
+    action: "deleteAttachment",
+    attachmentId,
+  });
+  if (denied) return denied;
+
   await db.delete(digitalAssetAttachments).where(eq(digitalAssetAttachments.id, attachmentId));
   try {
     await unlink(join(UPLOADS_DIR, attachment.storagePath));
@@ -864,6 +957,9 @@ export async function addAssetComment(
   const auth = await checkPermission("digital_assets.view");
   if (!auth.ok) return { error: auth.error };
   if (!content.trim()) return { error: "Comentário vazio." };
+
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "addAssetComment" });
+  if (denied) return denied;
   const commentType = ASSET_COMMENT_TYPES.includes(type as never)
     ? (type as (typeof ASSET_COMMENT_TYPES)[number])
     : "COMENTARIO";
@@ -891,6 +987,8 @@ export async function deleteAsset(assetId: string): Promise<ActionState> {
   if (!auth.ok) return { error: auth.error };
   const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!asset) return { error: "Ativo não encontrado." };
+  const denied = await denyOutOfScope(auth.session, assetId, { action: "deleteAsset" });
+  if (denied) return denied;
   // A auditoria do ativo tem FK CASCADE — sai junto. Registro em ActivityLog.
   await db.delete(digitalAssets).where(eq(digitalAssets.id, assetId));
   await logActivity({
@@ -911,6 +1009,7 @@ export async function bulkDeleteAssets(ids: string[]): Promise<BulkResult> {
   for (const id of ids) {
     const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, id) });
     if (!asset) continue;
+    if (await denyOutOfScope(auth.session, id, { action: "bulkDeleteAssets" })) continue;
     await db.delete(digitalAssets).where(eq(digitalAssets.id, id));
     ok++;
   }
@@ -940,6 +1039,7 @@ export async function bulkAssignAssets(ids: string[], userId: string | null): Pr
   for (const id of ids) {
     const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, id) });
     if (!asset) continue;
+    if (await denyOutOfScope(auth.session, id, { action: "bulkAssignAssets" })) continue;
     await db.update(digitalAssets).set({ assignedToId: userId || null, updatedById: auth.session.userId }).where(eq(digitalAssets.id, id));
     ok++;
   }

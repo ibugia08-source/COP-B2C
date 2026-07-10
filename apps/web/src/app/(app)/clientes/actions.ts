@@ -21,12 +21,35 @@ import {
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
+import { canAccessClient } from "@/lib/auth/ownership";
+import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
 import { isValidOptionValue } from "@/lib/config-options";
 import { cascadeSafeDelete } from "@/lib/safe-delete";
 import { clientFormSchema, operationalProfileSchema } from "@/lib/validations/client";
 
 export type ActionState = { error?: string; success?: string };
+
+/**
+ * Gate de ownership: escrever num cliente exige ser um dos responsáveis
+ * (estrategista, gestores, responsável principal) — OWNER/ADMIN operam tudo.
+ * Negações são registradas em activityLogs.
+ */
+async function denyClientOutOfScope(
+  session: SessionPayload,
+  clientId: string,
+  action: string,
+): Promise<ActionState | null> {
+  if (await canAccessClient(session, clientId)) return null;
+  await logActivity({
+    userId: session.userId,
+    action: "client.ownershipDenied",
+    entityType: "client",
+    entityId: clientId,
+    metadata: { action, reason: "ownership_scope" },
+  });
+  return { error: "Você não é responsável por este cliente." };
+}
 
 function parseClientForm(formData: FormData) {
   return clientFormSchema.safeParse({
@@ -114,6 +137,9 @@ export async function updateClient(
 
   const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!existing) return { error: "Cliente não encontrado." };
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "updateClient");
+  if (denied) return denied;
 
   if (d.status === "PERDIDO" && existing.status !== "PERDIDO") {
     return { error: "Para marcar como PERDIDO use a ação específica, que exige motivo de churn." };
@@ -214,6 +240,9 @@ export async function changeClientHealth(
   if (!existing) return { error: "Cliente não encontrado." };
   if (existing.healthStatus === newStatus) return { error: "O cliente já está neste status de saúde." };
 
+  const denied = await denyClientOutOfScope(auth.session, clientId, "changeClientHealth");
+  if (denied) return denied;
+
   await db
     .update(clients)
     .set({ healthStatus: newStatus as HealthStatus })
@@ -237,6 +266,9 @@ export async function toggleAdsStatus(clientId: string, newStatus: AdsStatus): P
 
   const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!existing) return { error: "Cliente não encontrado." };
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "toggleAdsStatus");
+  if (denied) return denied;
 
   await db.update(clients).set({ adsStatus: newStatus }).where(eq(clients.id, clientId));
   await logActivity({
@@ -264,6 +296,9 @@ export async function markClientLost(
 
   const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!existing) return { error: "Cliente não encontrado." };
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "markClientLost");
+  if (denied) return denied;
 
   await db
     .update(clients)
@@ -310,6 +345,9 @@ export async function registerMeeting(clientId: string, input: MeetingInput): Pr
   if (input.meetLink && !/^https?:\/\//i.test(input.meetLink.trim())) {
     return { error: "O link da reunião deve começar com http(s)://" };
   }
+  const denied = await denyClientOutOfScope(auth.session, clientId, "registerMeeting");
+  if (denied) return denied;
+
   const { MEETING_STATUSES, MEETING_TYPES } = await import("@/db/schema");
   const type = (MEETING_TYPES as readonly string[]).includes(input.meetingType) ? input.meetingType : "ACOMPANHAMENTO";
   const status = (MEETING_STATUSES as readonly string[]).includes(input.status) ? input.status : "AGENDADA";
@@ -346,6 +384,9 @@ export async function createMeetingFollowup(meetingId: string): Promise<ActionSt
   const { clientMeetings: cm, tasks } = await import("@/db/schema");
   const meeting = await db.query.clientMeetings.findFirst({ where: eq(cm.id, meetingId) });
   if (!meeting) return { error: "Reunião não encontrada." };
+
+  const denied = await denyClientOutOfScope(auth.session, meeting.clientId, "createMeetingFollowup");
+  if (denied) return denied;
 
   await db.insert(tasks).values({
     title: `Follow-up: ${meeting.title}`,
@@ -389,6 +430,9 @@ export async function saveOperationalProfile(
 ): Promise<ActionState> {
   const auth = await checkPermission("clients.update");
   if (!auth.ok) return { error: auth.error };
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "saveOperationalProfile");
+  if (denied) return denied;
 
   const parsed = operationalProfileSchema.safeParse({
     platforms: formData.getAll("platforms").map(String),
@@ -466,8 +510,9 @@ async function applyClientField(
   ids: string[],
   field: string,
   value: string,
-  userId: string,
+  session: SessionPayload,
 ): Promise<BulkResult> {
+  const userId = session.userId;
   if (!EDITABLE_FIELDS.has(field)) return { ok: 0, fail: 0, error: "Campo não editável." };
   // Regras que exigem fluxo próprio (motivo) — bloqueadas na edição rápida
   if (field === "status" && value === "PERDIDO") {
@@ -488,6 +533,7 @@ async function applyClientField(
   for (const id of ids) {
     const existing = await db.query.clients.findFirst({ where: eq(clients.id, id) });
     if (!existing) continue;
+    if (await denyClientOutOfScope(session, id, `applyClientField:${field}`)) continue;
     await db.update(clients).set({ [field]: dbValue } as Partial<typeof clients.$inferInsert>).where(eq(clients.id, id));
     if (field === "healthStatus" && existing.healthStatus !== dbValue) {
       await db.insert(clientHealthLogs).values({
@@ -522,14 +568,16 @@ export async function updateClientField(
 ): Promise<ActionState> {
   const auth = await checkPermission("clients.update");
   if (!auth.ok) return { error: auth.error };
-  const r = await applyClientField([clientId], field, value, auth.session.userId);
-  return r.error ? { error: r.error } : { success: "Atualizado." };
+  const r = await applyClientField([clientId], field, value, auth.session);
+  if (r.error) return { error: r.error };
+  if (!r.ok) return { error: "Você não é responsável por este cliente." };
+  return { success: "Atualizado." };
 }
 
 async function bulkField(ids: string[], field: string, value: string): Promise<BulkResult> {
   const auth = await checkPermission("clients.update");
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
-  return applyClientField(ids, field, value, auth.session.userId);
+  return applyClientField(ids, field, value, auth.session);
 }
 
 // Wrappers (ids, value) para a barra de ações em massa
@@ -558,6 +606,8 @@ export async function deleteClientRow(clientId: string): Promise<ActionState> {
   if (!auth.ok) return { error: auth.error };
   const c = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!c) return { error: "Cliente não encontrado." };
+  const denied = await denyClientOutOfScope(auth.session, clientId, "deleteClientRow");
+  if (denied) return denied;
   try {
     await cascadeSafeDelete("clients", clientId);
   } catch {
@@ -574,6 +624,7 @@ export async function bulkDeleteClientsList(ids: string[]): Promise<BulkResult> 
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
   let ok = 0;
   for (const id of ids) {
+    if (await denyClientOutOfScope(auth.session, id, "bulkDeleteClientsList")) continue;
     try {
       await cascadeSafeDelete("clients", id);
       ok++;

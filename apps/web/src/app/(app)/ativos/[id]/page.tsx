@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssetGroups, digitalAssets, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { canAccessAsset } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import {
   ASSET_COMMENT_TYPE_META,
@@ -97,6 +98,9 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
     },
   });
   if (!asset) notFound();
+
+  // escopo de ownership: quem não é OWNER/ADMIN só abre ativos de clientes que gerencia
+  if (!(await canAccessAsset(session, asset.id))) redirect("/acesso-negado");
 
   const can = {
     update: hasPermission(session, "digital_assets.update"),

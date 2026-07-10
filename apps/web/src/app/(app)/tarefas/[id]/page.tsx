@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { taskTemplates, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { taskOwnershipCheck } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import {
   CLIENT_STATUS_META,
@@ -52,6 +53,15 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
     },
   });
   if (!task) notFound();
+
+  // escopo de ownership: quem não é OWNER/ADMIN só abre tarefas suas ou de clientes que gerencia
+  const inScope = taskOwnershipCheck(session.roles, session.userId, {
+    assignedToId: task.assignedToId,
+    createdById: task.createdById,
+    assigneeIds: task.assignees.map((a) => a.userId),
+    client: task.client ?? null,
+  });
+  if (!inScope) redirect("/acesso-negado");
 
   const canUpdate = hasPermission(session, "tasks.update");
   const canComplete = hasPermission(session, "tasks.complete");

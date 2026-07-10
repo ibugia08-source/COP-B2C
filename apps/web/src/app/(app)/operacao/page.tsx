@@ -3,6 +3,7 @@ import { and, asc, eq, gte, inArray, isNull, lt, not, type SQL } from "drizzle-o
 import { db } from "@/db";
 import { agencyServices, clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { clientScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import {
   ADS_META,
@@ -35,6 +36,9 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
 
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [];
+  // escopo de ownership: quem não é OWNER/ADMIN só vê os clientes que gerencia
+  const scope = clientScopeCondition(session);
+  if (scope) filters.push(scope);
   if (str(sp.etapa)) filters.push(eq(clients.pipelineStage, str(sp.etapa) as never));
   if (str(sp.cliente)) filters.push(eq(clients.id, str(sp.cliente)!));
   if (str(sp.responsavel)) filters.push(eq(clients.mainResponsibleId, str(sp.responsavel)!));

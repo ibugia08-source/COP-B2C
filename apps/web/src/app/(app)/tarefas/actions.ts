@@ -19,6 +19,8 @@ import {
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
+import { canAccessClient, canAccessTask } from "@/lib/auth/ownership";
+import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
 import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
 import { notifyUser } from "@/lib/notify";
@@ -31,6 +33,44 @@ async function isValidTaskStatus(status: string): Promise<boolean> {
 }
 
 export type ActionState = { error?: string; success?: string; taskId?: string };
+
+/**
+ * Gate de ownership: escrever numa tarefa exige ser responsável (ou adicional),
+ * criador, ou responsável pelo cliente da tarefa — OWNER/ADMIN operam tudo.
+ * Negações são registradas em activityLogs.
+ */
+async function denyTaskOutOfScope(
+  session: SessionPayload,
+  taskId: string,
+  action: string,
+): Promise<ActionState | null> {
+  if (await canAccessTask(session, taskId)) return null;
+  await logActivity({
+    userId: session.userId,
+    action: "task.ownershipDenied",
+    entityType: "task",
+    entityId: taskId,
+    metadata: { action, reason: "ownership_scope" },
+  });
+  return { error: "Você não é responsável por esta tarefa." };
+}
+
+/** Criar tarefa vinculada a um cliente exige ser responsável por esse cliente. */
+async function denyClientScopeForTask(
+  session: SessionPayload,
+  clientId: string,
+  action: string,
+): Promise<ActionState | null> {
+  if (await canAccessClient(session, clientId)) return null;
+  await logActivity({
+    userId: session.userId,
+    action: "task.ownershipDenied",
+    entityType: "client",
+    entityId: clientId,
+    metadata: { action, reason: "ownership_scope" },
+  });
+  return { error: "Você não é responsável por este cliente." };
+}
 
 const taskSchema = z.object({
   title: z.string().trim().min(3, "Título muito curto"),
@@ -111,6 +151,11 @@ export async function createTask(_prev: ActionState, formData: FormData): Promis
   const status = d.status || (await resolveDefaultValue("tasks", "status", "A_FAZER"));
   if (!(await isValidTaskStatus(status))) return { error: "Status inválido." };
 
+  if (d.clientId) {
+    const denied = await denyClientScopeForTask(auth.session, d.clientId, "createTask");
+    if (denied) return denied;
+  }
+
   const [task] = await db
     .insert(tasks)
     .values({
@@ -182,6 +227,9 @@ export async function updateTask(
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
 
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "updateTask");
+  if (denied) return denied;
+
   await db
     .update(tasks)
     .set({
@@ -226,6 +274,9 @@ export async function changeTaskStatus(taskId: string, status: string): Promise<
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
 
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "changeTaskStatus");
+  if (denied) return denied;
+
   if (status === "CONCLUIDA") {
     const complete = await checkPermission("tasks.complete");
     if (!complete.ok) return { error: complete.error };
@@ -264,6 +315,9 @@ export async function cancelTask(taskId: string, reason: string): Promise<Action
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
 
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "cancelTask");
+  if (denied) return denied;
+
   await db
     .update(tasks)
     .set({ status: "CANCELADA", cancelReason: reason.trim() })
@@ -286,6 +340,9 @@ export async function deleteTask(taskId: string): Promise<ActionState> {
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
 
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "deleteTask");
+  if (denied) return denied;
+
   await db.delete(tasks).where(eq(tasks.id, taskId));
   await db.delete(tasks).where(eq(tasks.parentTaskId, taskId));
   await logActivity({
@@ -304,6 +361,9 @@ export async function addComment(taskId: string, body: string): Promise<ActionSt
   if (!auth.ok) return { error: auth.error };
   if (!body.trim()) return { error: "Comentário vazio." };
 
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "addComment");
+  if (denied) return denied;
+
   await db.insert(taskComments).values({ taskId, authorId: auth.session.userId, body: body.trim() });
   revalidatePath(`/tarefas/${taskId}`);
   return { success: "Comentário adicionado." };
@@ -313,6 +373,8 @@ export async function addChecklist(taskId: string, title: string): Promise<Actio
   const auth = await checkPermission("tasks.update");
   if (!auth.ok) return { error: auth.error };
   if (!title.trim()) return { error: "Informe o título do checklist." };
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "addChecklist");
+  if (denied) return denied;
   await db.insert(taskChecklists).values({ taskId, title: title.trim() });
   revalidatePath(`/tarefas/${taskId}`);
   return { success: "Checklist criado." };
@@ -322,6 +384,8 @@ export async function addChecklistItem(checklistId: string, taskId: string, cont
   const auth = await checkPermission("tasks.update");
   if (!auth.ok) return { error: auth.error };
   if (!content.trim()) return { error: "Item vazio." };
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "addChecklistItem");
+  if (denied) return denied;
   const siblings = await db
     .select({ order: taskChecklistItems.order })
     .from(taskChecklistItems)
@@ -342,6 +406,8 @@ export async function toggleChecklistItem(itemId: string, taskId: string): Promi
     where: eq(taskChecklistItems.id, itemId),
   });
   if (!item) return { error: "Item não encontrado." };
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "toggleChecklistItem");
+  if (denied) return denied;
   await db
     .update(taskChecklistItems)
     .set({
@@ -357,6 +423,8 @@ export async function toggleChecklistItem(itemId: string, taskId: string): Promi
 export async function applyTemplateAction(taskId: string, templateSlug: string): Promise<ActionState> {
   const auth = await checkPermission("tasks.update");
   if (!auth.ok) return { error: auth.error };
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "applyTemplateAction");
+  if (denied) return denied;
   try {
     const result = await applyTemplateToTask(templateSlug, taskId, { actorId: auth.session.userId });
     revalidatePath(`/tarefas/${taskId}`);
@@ -375,6 +443,8 @@ export async function addAttachment(taskId: string, fileName: string, fileUrl: s
   } catch {
     return { error: "Link do arquivo inválido." };
   }
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "addAttachment");
+  if (denied) return denied;
   const { taskAttachments } = await import("@/db/schema");
   await db.insert(taskAttachments).values({
     taskId,
@@ -393,6 +463,8 @@ export async function addTimeEntry(taskId: string, minutes: number, description:
   const { taskTimeEntries } = await import("@/db/schema");
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "addTimeEntry");
+  if (denied) return denied;
   await db.insert(taskTimeEntries).values({
     taskId,
     userId: auth.session.userId,
@@ -419,6 +491,11 @@ export async function quickCreateTask(
   const clean = title.trim();
   if (clean.length < 3) return { error: "Título muito curto." };
   if (!(await isValidTaskStatus(status)) || status === "CANCELADA") return { error: "Coluna inválida." };
+
+  if (clientId) {
+    const denied = await denyClientScopeForTask(auth.session, clientId, "quickCreateTask");
+    if (denied) return denied;
+  }
 
   const [task] = await db
     .insert(tasks)
@@ -459,6 +536,8 @@ export async function updateCreativeBrief(taskId: string, brief: CreativeBrief):
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
   if (existing.type !== "CRIATIVO") return { error: "Briefing só existe em tarefas do tipo Criativo." };
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "updateCreativeBrief");
+  if (denied) return denied;
   if (brief.approvalStatus && !CREATIVE_APPROVALS.includes(brief.approvalStatus)) {
     return { error: "Status de aprovação inválido." };
   }
@@ -501,6 +580,7 @@ export async function bulkDeleteTasks(ids: string[]): Promise<BulkResult> {
   for (const id of ids) {
     const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
     if (!existing) continue;
+    if (await denyTaskOutOfScope(auth.session, id, "bulkDeleteTasks")) continue;
     await db.delete(tasks).where(eq(tasks.parentTaskId, id));
     await db.delete(tasks).where(eq(tasks.id, id));
     if (existing.clientId) clientIds.add(existing.clientId);
@@ -531,6 +611,7 @@ export async function bulkMoveTasks(ids: string[], status: string): Promise<Bulk
   for (const id of ids) {
     const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
     if (!existing || existing.status === status) continue;
+    if (await denyTaskOutOfScope(auth.session, id, "bulkMoveTasks")) continue;
     await db
       .update(tasks)
       .set({ status: status as TaskStatus, completedAt: status === "CONCLUIDA" ? new Date() : null })
@@ -558,6 +639,7 @@ export async function bulkEditTasks(
   for (const id of ids) {
     const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
     if (!existing) continue;
+    if (await denyTaskOutOfScope(auth.session, id, "bulkEditTasks")) continue;
     await db.update(tasks).set(set).where(eq(tasks.id, id));
     ok++;
   }
@@ -571,6 +653,8 @@ export async function assignTask(taskId: string, userId: string | null): Promise
   if (!auth.ok) return { error: auth.error };
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "assignTask");
+  if (denied) return denied;
   await db.update(tasks).set({ assignedToId: userId }).where(eq(tasks.id, taskId));
   await logActivity({
     userId: auth.session.userId,

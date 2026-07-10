@@ -3,6 +3,7 @@ import { and, asc, eq, gte, isNull, like, lt, not, inArray, type SQL } from "dri
 import { db } from "@/db";
 import { clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { taskScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import { formatDate, PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META, type Tone } from "@/lib/labels";
 import {
@@ -57,6 +58,9 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
 
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [isNull(tasks.parentTaskId)];
+  // escopo de ownership: quem não é OWNER/ADMIN só vê tarefas suas ou de clientes que gerencia
+  const scope = taskScopeCondition(session);
+  if (scope) filters.push(scope);
   const cliente = str(sp.cliente);
   if (cliente === "__none__") filters.push(isNull(tasks.clientId));
   else if (cliente) filters.push(eq(tasks.clientId, cliente));

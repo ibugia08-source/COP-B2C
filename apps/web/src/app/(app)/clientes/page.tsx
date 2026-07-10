@@ -10,6 +10,7 @@ import {
   users,
 } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { clientScopeCondition } from "@/lib/auth/ownership";
 import {
   ADS_META,
   AGENCY_BRAND_META,
@@ -42,6 +43,9 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
 
   const filters: SQL[] = [];
+  // escopo de ownership: quem não é OWNER/ADMIN só vê os clientes que gerencia
+  const scope = clientScopeCondition(session);
+  if (scope) filters.push(scope);
   const q = str(sp.q);
   if (q) {
     const pattern = `%${q}%`;

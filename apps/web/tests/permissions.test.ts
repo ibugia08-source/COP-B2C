@@ -4,6 +4,11 @@ import {
   ROLE_PERMISSIONS,
   roleHasPermission,
 } from "@/lib/auth/permissions";
+import {
+  assetOwnershipCheck,
+  clientOwnershipCheck,
+  taskOwnershipCheck,
+} from "@/lib/auth/ownership";
 import { ROLE_NAMES } from "@/db/schema";
 
 describe("matriz de permissões", () => {
@@ -88,5 +93,93 @@ describe("matriz de permissões", () => {
       expect(ROLE_PERMISSIONS[role]).toBeDefined();
       for (const key of ROLE_PERMISSIONS[role]) expect(valid.has(key)).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Escopo de ownership (P0.2): além do RBAC, operar exige ser responsável
+// ---------------------------------------------------------------------------
+
+const CLIENT = {
+  strategistId: "u-estrategista",
+  trafficManager1Id: "u-gestor1",
+  trafficManager2Id: "u-gestor2",
+  mainResponsibleId: "u-principal",
+};
+
+describe("ownership de clientes (clientOwnershipCheck)", () => {
+  it("OWNER e ADMIN acessam qualquer cliente, mesmo sem serem responsáveis", () => {
+    expect(clientOwnershipCheck(["OWNER"], "u-qualquer", CLIENT)).toBe(true);
+    expect(clientOwnershipCheck(["ADMIN"], "u-qualquer", CLIENT)).toBe(true);
+  });
+
+  it("cada um dos 4 responsáveis acessa; um terceiro não", () => {
+    for (const role of ["GESTOR_TRAFEGO", "GESTOR_OPERACIONAL", "SOCIAL_MEDIA", "COMERCIAL"] as const) {
+      expect(clientOwnershipCheck([role], "u-estrategista", CLIENT)).toBe(true);
+      expect(clientOwnershipCheck([role], "u-gestor1", CLIENT)).toBe(true);
+      expect(clientOwnershipCheck([role], "u-gestor2", CLIENT)).toBe(true);
+      expect(clientOwnershipCheck([role], "u-principal", CLIENT)).toBe(true);
+      expect(clientOwnershipCheck([role], "u-intruso", CLIENT)).toBe(false);
+    }
+  });
+
+  it("cliente inexistente ou sem responsáveis nega para não-admin", () => {
+    expect(clientOwnershipCheck(["GESTOR_TRAFEGO"], "u1", null)).toBe(false);
+    expect(
+      clientOwnershipCheck(["GESTOR_TRAFEGO"], "u1", {
+        strategistId: null,
+        trafficManager1Id: null,
+        trafficManager2Id: null,
+        mainResponsibleId: null,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("ownership de ativos digitais (assetOwnershipCheck)", () => {
+  it("ativo de cliente: responsável acessa, terceiro não", () => {
+    const asset = { clientId: "c1", client: CLIENT };
+    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u-gestor1", asset)).toBe(true);
+    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u-principal", asset)).toBe(true);
+    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u-intruso", asset)).toBe(false);
+    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u-intruso", asset)).toBe(false);
+  });
+
+  it("ativo interno (sem cliente): só OWNER/ADMIN/GESTOR_OPERACIONAL", () => {
+    const internal = { clientId: null, client: null };
+    expect(assetOwnershipCheck(["OWNER"], "u1", internal)).toBe(true);
+    expect(assetOwnershipCheck(["ADMIN"], "u1", internal)).toBe(true);
+    expect(assetOwnershipCheck(["GESTOR_OPERACIONAL"], "u1", internal)).toBe(true);
+    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u1", internal)).toBe(false);
+    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u1", internal)).toBe(false);
+    expect(assetOwnershipCheck(["DESIGNER"], "u1", internal)).toBe(false);
+  });
+
+  it("OWNER/ADMIN acessam qualquer ativo; ativo inexistente nega", () => {
+    expect(assetOwnershipCheck(["ADMIN"], "u1", { clientId: "c1", client: CLIENT })).toBe(true);
+    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u1", null)).toBe(false);
+  });
+});
+
+describe("ownership de tarefas (taskOwnershipCheck)", () => {
+  const base = { assignedToId: null, createdById: null, assigneeIds: [] as string[], client: null };
+
+  it("responsável, adicional e criador escrevem", () => {
+    expect(taskOwnershipCheck(["DESIGNER"], "u1", { ...base, assignedToId: "u1" })).toBe(true);
+    expect(taskOwnershipCheck(["DESIGNER"], "u1", { ...base, createdById: "u1" })).toBe(true);
+    expect(taskOwnershipCheck(["DESIGNER"], "u1", { ...base, assigneeIds: ["u2", "u1"] })).toBe(true);
+  });
+
+  it("responsável pelo cliente da tarefa escreve; terceiro não", () => {
+    expect(taskOwnershipCheck(["GESTOR_TRAFEGO"], "u-gestor1", { ...base, client: CLIENT })).toBe(true);
+    expect(
+      taskOwnershipCheck(["GESTOR_TRAFEGO"], "u-intruso", { ...base, assignedToId: "u2", client: CLIENT }),
+    ).toBe(false);
+  });
+
+  it("tarefa interna sem dono é colaborativa; com dono, só o dono/admins", () => {
+    expect(taskOwnershipCheck(["SOCIAL_MEDIA"], "u1", base)).toBe(true);
+    expect(taskOwnershipCheck(["SOCIAL_MEDIA"], "u1", { ...base, assignedToId: "u2" })).toBe(false);
+    expect(taskOwnershipCheck(["ADMIN"], "u1", { ...base, assignedToId: "u2" })).toBe(true);
   });
 });

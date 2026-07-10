@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { digitalAssetAttachments } from "@/db/schema";
 import { writeAssetAudit } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
+import { canAccessAsset } from "@/lib/auth/ownership";
 
 const UPLOADS_DIR = join(process.cwd(), "uploads", "ativos");
 
@@ -22,6 +23,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     where: eq(digitalAssetAttachments.id, id),
   });
   if (!attachment) return NextResponse.json({ error: "Anexo não encontrado" }, { status: 404 });
+
+  // escopo de ownership: só responsáveis pelo cliente do ativo baixam anexos
+  if (!(await canAccessAsset(auth.session, attachment.assetId))) {
+    await writeAssetAudit({
+      assetId: attachment.assetId,
+      userId: auth.session.userId,
+      action: "PERMISSION_DENIED",
+      metadata: { action: "downloadAttachment", attachmentId: attachment.id, reason: "ownership_scope" },
+    });
+    return NextResponse.json({ error: "Você não é responsável por este ativo/cliente." }, { status: 403 });
+  }
 
   const filePath = join(UPLOADS_DIR, attachment.storagePath);
   if (!existsSync(filePath)) {

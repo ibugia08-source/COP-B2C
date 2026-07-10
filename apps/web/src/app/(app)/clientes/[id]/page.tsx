@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { clientOwnershipCheck } from "@/lib/auth/ownership";
 import {
   ADS_META,
   AGENCY_BRAND_META,
@@ -72,6 +73,9 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
     },
   });
   if (!client) notFound();
+
+  // escopo de ownership: quem não é OWNER/ADMIN só abre clientes que gerencia
+  if (!clientOwnershipCheck(session.roles, session.userId, client)) redirect("/acesso-negado");
 
   const canAssets = hasPermission(session, "digital_assets.view");
   const canCreateAsset = hasPermission(session, "digital_assets.create");

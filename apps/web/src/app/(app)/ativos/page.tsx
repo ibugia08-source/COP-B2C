@@ -3,6 +3,7 @@ import { and, asc, eq, isNull, like, lt, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssetGroups, digitalAssets, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { assetScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import {
   ASSET_PLATFORM_LABEL,
@@ -54,6 +55,9 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
 
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [isNull(digitalAssets.archivedAt)];
+  // escopo de ownership: quem não é OWNER/ADMIN só vê ativos dos clientes que gerencia
+  const scope = assetScopeCondition(session);
+  if (scope) filters.push(scope);
   const q = str(sp.q);
   if (q) {
     const p = `%${q}%`;

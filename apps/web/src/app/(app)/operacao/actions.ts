@@ -15,12 +15,31 @@ import {
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
+import { canAccessClient } from "@/lib/auth/ownership";
+import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
 import { isValidOptionValue } from "@/lib/config-options";
 import { cascadeSafeDelete } from "@/lib/safe-delete";
 
 export type MoveResult = { error?: string; success?: string; requires?: "PERDIDO" | "CRITICO" };
 export type BulkResult = { ok: number; fail: number; error?: string; success?: string };
+
+/** Gate de ownership (mesma regra de clientes/actions.ts): negações vão para o ActivityLog. */
+async function denyClientOutOfScope(
+  session: SessionPayload,
+  clientId: string,
+  action: string,
+): Promise<{ error: string } | null> {
+  if (await canAccessClient(session, clientId)) return null;
+  await logActivity({
+    userId: session.userId,
+    action: "client.ownershipDenied",
+    entityType: "client",
+    entityId: clientId,
+    metadata: { action, reason: "ownership_scope" },
+  });
+  return { error: "Você não é responsável por este cliente." };
+}
 
 // Sincronização etapa do pipeline → status macro / saúde do cliente
 const STAGE_TO_STATUS: Partial<Record<PipelineStage, ClientStatus>> = {
@@ -66,6 +85,9 @@ export async function moveClientStage(
   });
   if (!client) return { error: "Cliente não encontrado." };
   if (client.pipelineStage === toStage) return { success: "Cliente já está nesta etapa." };
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "moveClientStage");
+  if (denied) return denied;
 
   // Regras obrigatórias por etapa
   if (toStage === "CLIENTE_PERDIDO") {
@@ -174,6 +196,8 @@ export async function deleteClient(clientId: string): Promise<MoveResult> {
   if (!auth.ok) return { error: auth.error };
   const client = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!client) return { error: "Cliente não encontrado." };
+  const denied = await denyClientOutOfScope(auth.session, clientId, "deleteClient");
+  if (denied) return denied;
   try {
     await cascadeSafeDelete("clients", clientId);
   } catch {
@@ -196,6 +220,7 @@ export async function bulkDeleteClients(ids: string[]): Promise<BulkResult> {
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
   let ok = 0;
   for (const id of ids) {
+    if (await denyClientOutOfScope(auth.session, id, "bulkDeleteClients")) continue;
     try {
       await cascadeSafeDelete("clients", id);
       ok++;
@@ -260,6 +285,7 @@ export async function bulkEditClients(
   for (const id of ids) {
     const existing = await db.query.clients.findFirst({ where: eq(clients.id, id) });
     if (!existing) continue;
+    if (await denyClientOutOfScope(auth.session, id, "bulkEditClients")) continue;
     await db.update(clients).set(set).where(eq(clients.id, id));
     if (set.healthStatus && existing.healthStatus !== set.healthStatus) {
       await db.insert(clientHealthLogs).values({

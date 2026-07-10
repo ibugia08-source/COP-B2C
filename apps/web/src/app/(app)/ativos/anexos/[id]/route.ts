@@ -1,7 +1,3 @@
-import { createReadStream, existsSync } from "node:fs";
-import { stat } from "node:fs/promises";
-import { join } from "node:path";
-import { Readable } from "node:stream";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
@@ -9,8 +5,7 @@ import { digitalAssetAttachments } from "@/db/schema";
 import { writeAssetAudit } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
 import { canAccessAsset } from "@/lib/auth/ownership";
-
-const UPLOADS_DIR = join(process.cwd(), "uploads", "ativos");
+import { getStorage } from "@/lib/storage";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const auth = await checkPermission("digital_assets.download_attachments");
@@ -35,8 +30,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "Você não é responsável por este ativo/cliente." }, { status: 403 });
   }
 
-  const filePath = join(UPLOADS_DIR, attachment.storagePath);
-  if (!existsSync(filePath)) {
+  let body: Buffer;
+  try {
+    body = await getStorage().download(attachment.storagePath);
+  } catch {
     return NextResponse.json({ error: "Arquivo não encontrado no armazenamento" }, { status: 404 });
   }
 
@@ -47,12 +44,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     metadata: { fileName: attachment.fileName },
   });
 
-  const { size } = await stat(filePath);
-  const stream = Readable.toWeb(createReadStream(filePath)) as ReadableStream;
-  return new NextResponse(stream, {
+  return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": attachment.fileType || "application/octet-stream",
-      "Content-Length": String(size),
+      "Content-Length": String(body.length),
       "Content-Disposition": `attachment; filename="${encodeURIComponent(attachment.fileName)}"`,
     },
   });

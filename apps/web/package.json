@@ -16,8 +16,10 @@
     "db:seed": "tsx --env-file=.env src/db/seed.ts"
   },
   "dependencies": {
+    "@vercel/blob": "^2.6.1",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
+    "file-type": "^22.0.1",
     "jose": "^6.2.3",
     "next": "16.2.10",
     "postgres": "^3.4.9",

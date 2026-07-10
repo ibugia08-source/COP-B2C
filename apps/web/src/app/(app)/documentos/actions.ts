@@ -1,7 +1,5 @@
 "use server";
 
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -10,11 +8,10 @@ import { DOCUMENT_SOURCES, DOCUMENT_TYPES, documents } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
 import { isGoogleDriveUrl, parseDriveUrl } from "@/lib/google-drive";
+import { buildStorageKey, getStorage, maxUploadBytes } from "@/lib/storage";
+import { UPLOAD_WHITELISTS, validateUpload } from "@/lib/storage/validation";
 
 export type ActionState = { error?: string; success?: string; documentId?: string };
-
-const UPLOADS_DIR = join(process.cwd(), "uploads", "documentos");
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
 const docSchema = z.object({
   title: z.string().trim().min(3, "Título muito curto"),
@@ -169,14 +166,6 @@ export async function uploadDocument(_prev: ActionState, formData: FormData): Pr
   const auth = await checkPermission("tasks.view");
   if (!auth.ok) return { error: auth.error };
 
-  // Vercel tem filesystem efêmero — uploads precisam de storage externo.
-  if (process.env.VERCEL) {
-    return {
-      error:
-        "Upload de arquivos indisponível neste ambiente. Configure um storage externo (Vercel Blob/S3) ou use link externo/Google Drive. Veja docs/DEPLOY.md.",
-    };
-  }
-
   const title = String(formData.get("title") ?? "").trim();
   if (title.length < 3) return { error: "Título muito curto." };
   const type = String(formData.get("type") ?? "OUTRO");
@@ -188,12 +177,19 @@ export async function uploadDocument(_prev: ActionState, formData: FormData): Pr
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Selecione um arquivo." };
-  if (file.size > MAX_FILE_SIZE) return { error: "Arquivo muito grande (limite 25MB)." };
 
-  const safeName = file.name.replace(/[^\w.\-À-ú ]/g, "_").slice(0, 120);
-  const storageName = `${crypto.randomUUID()}__${safeName}`;
-  await mkdir(UPLOADS_DIR, { recursive: true });
-  await writeFile(join(UPLOADS_DIR, storageName), Buffer.from(await file.arrayBuffer()));
+  // valida por conteúdo (magic bytes), não por extensão/Content-Type declarados
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const valid = await validateUpload({
+    buffer,
+    fileName: file.name,
+    allowed: UPLOAD_WHITELISTS.documentos,
+    maxBytes: maxUploadBytes(),
+  });
+  if (!valid.ok) return { error: valid.error };
+
+  const { key, safeName } = buildStorageKey("documentos", file.name);
+  await getStorage().upload({ path: key, body: buffer, contentType: valid.mime });
 
   const [doc] = await db
     .insert(documents)
@@ -202,8 +198,8 @@ export async function uploadDocument(_prev: ActionState, formData: FormData): Pr
       description,
       type: documentType as (typeof DOCUMENT_TYPES)[number],
       sourceType: "UPLOAD",
-      storagePath: storageName,
-      mimeType: file.type || null,
+      storagePath: key,
+      mimeType: valid.mime,
       clientId,
       taskId,
       digitalAssetId,
@@ -251,9 +247,9 @@ export async function deleteDocument(documentId: string): Promise<ActionState> {
   if (!doc) return { error: "Documento não encontrado." };
   if (doc.storagePath) {
     try {
-      await unlink(join(UPLOADS_DIR, doc.storagePath));
+      await getStorage().delete(doc.storagePath);
     } catch {
-      // arquivo já removido do disco — segue
+      // arquivo já removido do storage — segue
     }
   }
   await db.delete(documents).where(eq(documents.id, documentId));

@@ -1,7 +1,5 @@
 "use server";
 
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -32,6 +30,8 @@ import { RESTRICTED_SECRET_TYPES_FOR_SOCIAL, roleHasPermission } from "@/lib/aut
 import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { notifyRole, notifyUser } from "@/lib/notify";
+import { buildStorageKey, getStorage, maxUploadBytes } from "@/lib/storage";
+import { UPLOAD_WHITELISTS, validateUpload } from "@/lib/storage/validation";
 
 export type ActionState = { error?: string; success?: string; assetId?: string };
 
@@ -40,9 +40,6 @@ async function isValidAssetStatus(status: string): Promise<boolean> {
   if ((ASSET_STATUSES as readonly string[]).includes(status)) return true;
   return isValidOptionValue("digital_assets", "status", status);
 }
-
-const UPLOADS_DIR = join(process.cwd(), "uploads", "ativos");
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
 function revalidateAsset(assetId?: string, clientId?: string | null) {
   revalidatePath("/ativos");
@@ -887,18 +884,8 @@ export async function uploadAttachment(assetId: string, formData: FormData): Pro
   const auth = await checkPermission("digital_assets.upload_attachments");
   if (!auth.ok) return { error: auth.error };
 
-  // Vercel tem filesystem efêmero/somente-leitura — anexos precisam de storage
-  // externo (Vercel Blob/S3). Evita crash confuso até isso ser configurado.
-  if (process.env.VERCEL) {
-    return {
-      error:
-        "Upload de anexos indisponível neste ambiente. Configure um storage externo (Vercel Blob/S3) — veja docs/DEPLOY.md.",
-    };
-  }
-
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Selecione um arquivo." };
-  if (file.size > MAX_FILE_SIZE) return { error: "Arquivo muito grande (limite 25MB)." };
 
   const asset = await db.query.digitalAssets.findFirst({ where: eq(digitalAssets.id, assetId) });
   if (!asset) return { error: "Ativo não encontrado." };
@@ -906,17 +893,25 @@ export async function uploadAttachment(assetId: string, formData: FormData): Pro
   const denied = await denyOutOfScope(auth.session, assetId, { action: "uploadAttachment" });
   if (denied) return denied;
 
-  const safeName = file.name.replace(/[^\w.\-À-ú ]/g, "_").slice(0, 120);
-  const storageName = `${crypto.randomUUID()}__${safeName}`;
-  await mkdir(UPLOADS_DIR, { recursive: true });
-  await writeFile(join(UPLOADS_DIR, storageName), Buffer.from(await file.arrayBuffer()));
+  // valida por conteúdo (magic bytes), não por extensão/Content-Type declarados
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const valid = await validateUpload({
+    buffer,
+    fileName: file.name,
+    allowed: UPLOAD_WHITELISTS.ativos,
+    maxBytes: maxUploadBytes(),
+  });
+  if (!valid.ok) return { error: valid.error };
+
+  const { key, safeName } = buildStorageKey("ativos", file.name);
+  await getStorage().upload({ path: key, body: buffer, contentType: valid.mime });
 
   await db.insert(digitalAssetAttachments).values({
     assetId,
     fileName: safeName,
-    fileType: file.type || null,
+    fileType: valid.mime,
     fileSize: file.size,
-    storagePath: storageName,
+    storagePath: key,
     uploadedById: auth.session.userId,
   });
   await writeAssetAudit({
@@ -946,9 +941,9 @@ export async function deleteAttachment(attachmentId: string): Promise<ActionStat
 
   await db.delete(digitalAssetAttachments).where(eq(digitalAssetAttachments.id, attachmentId));
   try {
-    await unlink(join(UPLOADS_DIR, attachment.storagePath));
+    await getStorage().delete(attachment.storagePath);
   } catch {
-    // arquivo já removido do disco — segue
+    // arquivo já removido do storage — segue
   }
   await writeAssetAudit({
     assetId: attachment.assetId,

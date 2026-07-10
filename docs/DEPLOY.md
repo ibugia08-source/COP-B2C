@@ -27,9 +27,12 @@ Em **Settings → Environment Variables**, adicione (Production + Preview):
 
 | Nome | Valor |
 |---|---|
-| `DATABASE_URL` | URL do **pooler de transação** (Supabase porta 6543) com `?sslmode=require` |
+| `DATABASE_URL` | URL do **pooler de transação** (Supabase porta 6543) com `?sslmode=require` — **obrigatória**: sem ela o app agora falha no boot com erro claro (o fallback silencioso foi removido) |
 | `AUTH_SECRET` | o mesmo valor usado no seed (veja abaixo) |
 | `VAULT_ENCRYPTION_KEY` | **o mesmo** usado no seed — obrigatório para decriptar os segredos |
+| `STORAGE_DRIVER` | `vercel_blob` em produção (default quando `NODE_ENV=production`); `local` só em dev |
+| `BLOB_READ_WRITE_TOKEN` | token do Vercel Blob (Vercel → Storage → Blob) — obrigatório com `vercel_blob` |
+| `MAX_UPLOAD_MB` | limite de upload em MB (opcional; default 25) |
 
 > A `VAULT_ENCRYPTION_KEY` na Vercel precisa ser **idêntica** à usada quando o
 > `db:seed` rodou, senão os segredos do Banco de Ativos não descriptografam.
@@ -72,6 +75,18 @@ Com Root Directory + env vars configurados, faça **Redeploy** (ou um novo push)
 O login inicial é `owner@b2cgestao.com.br` / `cop123456` — **troque a senha do seed**
 antes de uso real.
 
+## Checklist de produção
+
+1. Envs obrigatórias configuradas: `DATABASE_URL`, `AUTH_SECRET`,
+   `VAULT_ENCRYPTION_KEY`, `BLOB_READ_WRITE_TOKEN` (com `STORAGE_DRIVER=vercel_blob`).
+   Sem `DATABASE_URL` o app **crasha no boot de propósito** (fallback removido).
+2. `npm run db:push` (URL direta/5432) e `npm run db:seed` rodados com os
+   MESMOS `AUTH_SECRET`/`VAULT_ENCRYPTION_KEY` da Vercel.
+3. Segredos do cofre: recadastrados no formato com AAD (ver seção acima).
+4. `/api/health` responde `{ ok: true }` no domínio de produção.
+5. Uploads funcionam (Vercel Blob) — não existe mais bloqueio `if (VERCEL)`.
+6. Senha do seed trocada e usuários de exemplo desativados/excluídos.
+
 ## Rotas públicas (sem sessão)
 
 O middleware (`apps/web/src/proxy.ts`) exige sessão em tudo, exceto:
@@ -89,10 +104,10 @@ Qualquer página pública nova precisa entrar em `PUBLIC_PATHS` no proxy.
 - **Dev local** usa o mesmo driver: basta ter `DATABASE_URL` no `apps/web/.env`
   apontando para um Postgres (pode ser o próprio Neon, ou uma branch dele). Não é
   mais necessário instalar Postgres localmente.
-- **Upload de anexos** (aba Anexos do Banco de Ativos) grava em disco local, que a
-  Vercel não persiste. Em produção esse botão fica bloqueado com aviso; para
-  habilitar, integrar Vercel Blob ou S3 (Fase 2). Todo o resto do módulo
-  (credenciais criptografadas, comentários, auditoria) funciona normalmente.
+- **Upload de anexos** usa a abstração de storage: `STORAGE_DRIVER=vercel_blob`
+  em produção (com `BLOB_READ_WRITE_TOKEN`) e `local` em dev. Uploads são
+  validados por conteúdo (magic bytes) contra uma whitelist; downloads
+  sensíveis passam pela rota autenticada com verificação de ownership.
 - **Migrations**: `npm run db:generate` gera SQL a partir do schema; o baseline
   Postgres está em `apps/web/drizzle/0000_baseline-pg.sql`.
 
@@ -122,5 +137,5 @@ seleção de arquivos direto do Drive (fase futura), use as **mesmas** variávei
 não existirem, a área mostra "Não conectado / Configuração pendente" e o botão
 "Selecionar arquivo do Drive" fica desabilitado — nada quebra.
 
-> Uploads de arquivos gravam em disco local; na Vercel (filesystem efêmero) o upload
-> fica bloqueado com aviso — use link externo/Drive ou configure Vercel Blob/S3.
+> Uploads de arquivos usam o storage configurado (`STORAGE_DRIVER`): Vercel Blob
+> em produção, disco local em dev. Ver seção de variáveis de ambiente.

@@ -22,7 +22,7 @@ import {
   type AssetStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { writeAssetAudit } from "@/lib/assets/audit";
+import { writeAssetAudit, writeAssetAuditStrict } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
 import { canAccessAsset, canAccessClient } from "@/lib/auth/ownership";
 import type { SessionPayload } from "@/lib/auth/session";
@@ -850,18 +850,28 @@ export async function revealSecret(
     return { error: "Falha ao descriptografar. A chave do cofre pode ter mudado." };
   }
 
-  await db
-    .update(digitalAssetSecrets)
-    .set({ lastRevealedAt: new Date() })
-    .where(eq(digitalAssetSecrets.id, secretId));
-
+  // Auditoria TRANSACIONAL com a ação sensível: se o registro de auditoria
+  // falhar, a transação reverte e o plaintext NÃO é retornado (fail-closed).
   const isCritical = ["TOKEN", "API_KEY", "TWO_FACTOR_SECRET"].includes(secret.secretType);
-  await writeAssetAudit({
-    assetId: secret.assetId,
-    userId: auth.session.userId,
-    action: mode === "copy" ? "SECRET_COPIED" : "SECRET_REVEALED",
-    metadata: { label: secret.label, secretType: secret.secretType, critical: isCritical },
-  });
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(digitalAssetSecrets)
+        .set({ lastRevealedAt: new Date() })
+        .where(eq(digitalAssetSecrets.id, secretId));
+      await writeAssetAuditStrict(
+        {
+          assetId: secret.assetId,
+          userId: auth.session.userId,
+          action: mode === "copy" ? "SECRET_COPIED" : "SECRET_REVEALED",
+          metadata: { label: secret.label, secretType: secret.secretType, critical: isCritical },
+        },
+        tx,
+      );
+    });
+  } catch {
+    return { error: "Não foi possível registrar a auditoria — revelação bloqueada." };
+  }
   // segredo crítico revelado → notificar admins
   if (isCritical) {
     await notifyRole("ADMIN", {

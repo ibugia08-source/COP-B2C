@@ -19,7 +19,17 @@ export async function logActivity(input: LogInput): Promise<void> {
       metadata: input.metadata,
     });
   } catch (err) {
-    // Log de auditoria nunca deve derrubar a operação principal
-    console.error("Falha ao registrar ActivityLog:", err);
+    // Log de atividade nunca derruba a operação principal — mas a falha vira
+    // stderr estruturado para não perder o sinal (contadores/alertas externos).
+    console.error(
+      JSON.stringify({
+        level: "error",
+        event: "activity_log_write_failed",
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
   }
 }

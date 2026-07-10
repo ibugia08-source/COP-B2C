@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { digitalAssetAttachments } from "@/db/schema";
-import { writeAssetAudit } from "@/lib/assets/audit";
+import { writeAssetAudit, writeAssetAuditStrict } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
 import { canAccessAsset } from "@/lib/auth/ownership";
 import { getStorage } from "@/lib/storage";
@@ -37,12 +37,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "Arquivo não encontrado no armazenamento" }, { status: 404 });
   }
 
-  await writeAssetAudit({
-    assetId: attachment.assetId,
-    userId: auth.session.userId,
-    action: "ATTACHMENT_DOWNLOADED",
-    metadata: { fileName: attachment.fileName },
-  });
+  // Fail-closed: sem registro de auditoria, o arquivo não é servido.
+  try {
+    await writeAssetAuditStrict({
+      assetId: attachment.assetId,
+      userId: auth.session.userId,
+      action: "ATTACHMENT_DOWNLOADED",
+      metadata: { fileName: attachment.fileName },
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Não foi possível registrar a auditoria — download bloqueado." },
+      { status: 503 },
+    );
+  }
 
   return new NextResponse(new Uint8Array(body), {
     headers: {

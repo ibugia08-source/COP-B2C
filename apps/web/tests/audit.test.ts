@@ -78,6 +78,8 @@ beforeEach(() => {
   updateRan = false;
 });
 
+// Timeout maior: o import dinâmico de ativos/actions (módulo grande) passa de 5s
+// quando a suíte roda em paralelo em máquina sob carga.
 describe("revealSecret — auditoria transacional (fail-closed)", () => {
   it("falha de INSERT na auditoria bloqueia a revelação (sem plaintext)", async () => {
     auditInsertFails = true;
@@ -85,7 +87,7 @@ describe("revealSecret — auditoria transacional (fail-closed)", () => {
     const result = await revealSecret(SECRET_ID, "reveal");
     expect(result.value).toBeUndefined();
     expect(result.error).toMatch(/auditoria/i);
-  });
+  }, 30_000);
 
   it("com auditoria funcionando, a revelação retorna o valor", async () => {
     const { revealSecret } = await import("@/app/(app)/ativos/actions");
@@ -93,5 +95,5 @@ describe("revealSecret — auditoria transacional (fail-closed)", () => {
     expect(result.error).toBeUndefined();
     expect(result.value).toBe(PLAINTEXT);
     expect(updateRan).toBe(true);
-  });
+  }, 30_000);
 });

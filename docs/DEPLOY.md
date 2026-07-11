@@ -49,7 +49,7 @@ Na sua máquina, aponte o `.env` de `apps/web` para o **mesmo** `DATABASE_URL` e
 cd apps/web
 npm install
 npm run db:push     # cria as tabelas no Postgres
-npm run db:seed     # papéis, permissões, usuários e dados de exemplo
+npm run db:seed     # papéis, templates, automações e configuração (SEM dados de exemplo)
 ```
 
 (Alternativa versionada: `npm run db:migrate`, que aplica `drizzle/0000_baseline-pg.sql`.)
@@ -72,8 +72,10 @@ decripta sem AAD e recripta com AAD antes de subir esta versão.
 ## 5. Redeploy
 
 Com Root Directory + env vars configurados, faça **Redeploy** (ou um novo push).
-O login inicial é `owner@b2cgestao.com.br` / `cop123456` — **troque a senha do seed**
-antes de uso real.
+O seed é só de configuração (papéis/templates/automações) e **não cria dados de
+exemplo**. Num banco totalmente vazio, ele cria um único OWNER de bootstrap
+(`owner@b2cgestao.com.br` / `cop123456`) — **troque a senha no primeiro login**;
+num banco que já tem usuários, nenhum usuário é criado.
 
 ## Checklist de produção
 
@@ -85,7 +87,9 @@ antes de uso real.
 3. Segredos do cofre: recadastrados no formato com AAD (ver seção acima).
 4. `/api/health` responde `{ ok: true }` no domínio de produção.
 5. Uploads funcionam (Vercel Blob) — não existe mais bloqueio `if (VERCEL)`.
-6. Senha do seed trocada e usuários de exemplo desativados/excluídos.
+6. Sem usuários/dados de exemplo no banco (o seed atual não os cria; a limpeza
+   dos mocks antigos foi feita em 2026-07-10). Se o OWNER de bootstrap foi
+   criado, senha trocada.
 
 ## Rotas públicas (sem sessão)
 

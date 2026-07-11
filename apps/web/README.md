@@ -18,7 +18,7 @@ npm run typecheck  # tsc --noEmit
 npm run lint       # eslint
 npm run test       # vitest (não precisa de banco nem .env)
 npm run db:push    # aplica o schema no Postgres (DDL)
-npm run db:seed    # papéis, usuários e dados de exemplo
+npm run db:seed    # papéis, templates e configuração (sem dados de exemplo)
 ```
 
 Envs obrigatórias em `.env` (veja `.env.example`): `DATABASE_URL`,

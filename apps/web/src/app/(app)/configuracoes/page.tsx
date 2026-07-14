@@ -20,25 +20,11 @@ export default async function ConfiguracoesPage() {
             <p className="mt-1 text-sm text-zinc-400">Serviços da agência e módulos opcionais (Co-piloto, Google).</p>
           </Card>
         </Link>
-        <Link href="/configuracoes/integracoes" className="block">
-          <Card className="p-5 transition hover:border-zinc-600">
-            <p className="text-2xl">🔌</p>
-            <h3 className="mt-2 font-semibold">Integrações</h3>
-            <p className="mt-1 text-sm text-zinc-400">Google Drive e outras conexões externas — status e conexão.</p>
-          </Card>
-        </Link>
         <Link href="/configuracoes/importacao" className="block">
           <Card className="p-5 transition hover:border-zinc-600">
             <p className="text-2xl">📥</p>
             <h3 className="mt-2 font-semibold">Importação do ClickUp</h3>
             <p className="mt-1 text-sm text-zinc-400">Importe clientes do CSV com prévia e relatório.</p>
-          </Card>
-        </Link>
-        <Link href="/configuracoes/importacao-trello" className="block">
-          <Card className="p-5 transition hover:border-zinc-600">
-            <p className="text-2xl">🗄️</p>
-            <h3 className="mt-2 font-semibold">Importação do Trello</h3>
-            <p className="mt-1 text-sm text-zinc-400">Importe contas e perfis para o Banco de Ativos Digitais.</p>
           </Card>
         </Link>
         <Link href="/equipe" className="block">

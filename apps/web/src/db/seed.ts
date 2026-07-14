@@ -252,8 +252,11 @@ async function seed() {
         scope: "GLOBAL", createdById: bootstrapOwnerId,
       },
       {
+        // INATIVA: depende de um agendador (cron) que ainda não existe — nenhum
+        // código emite TASK_OVERDUE. Reativar quando o cron de tarefas existir.
         name: "Tarefa vencida → notificar responsável",
         triggerType: "TASK_OVERDUE",
+        enabled: false,
         actions: [{ type: "SEND_NOTIFICATION", params: { toAssignee: true, title: "Tarefa vencida", type: "TAREFA" } }],
         scope: "GLOBAL", createdById: bootstrapOwnerId,
       },
@@ -265,8 +268,12 @@ async function seed() {
         scope: "OPERACIONAL", createdById: bootstrapOwnerId,
       },
       {
+        // INATIVA: redundante com runStatusAutomations() em ativos/actions.ts,
+        // que já notifica ao marcar um ativo como BLOQUEADA. Deixar ativa
+        // notificaria em dobro.
         name: "Ativo bloqueado → alerta operacional",
         triggerType: "ASSET_STATUS_CHANGED",
+        enabled: false,
         conditions: { toStatus: "BLOQUEADA" },
         actions: [{ type: "SEND_NOTIFICATION", params: { toRole: "GESTOR_OPERACIONAL", title: "Ativo digital bloqueado", type: "ALERTA" } }],
         scope: "GLOBAL", createdById: bootstrapOwnerId,

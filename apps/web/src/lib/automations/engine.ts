@@ -166,23 +166,36 @@ type TxExecutor = Pick<typeof db, "insert" | "update">;
 /** Evento derivado a emitir APÓS o commit da transação da regra. */
 type DeferredEvent = { trigger: AutomationTrigger; payload: AutomationPayload; depth: number };
 
+/** Aplicação de template a rodar APÓS o commit (nunca dentro da transação da regra). */
+type DeferredTemplate = {
+  templateSlug: string;
+  clientId: string;
+  actorId?: string | null;
+  asChecklist: boolean;
+};
+
 async function runAction(
   action: { type: string; params?: Record<string, unknown> },
   payload: AutomationPayload,
   depth: number,
   tx: TxExecutor,
   deferred: DeferredEvent[],
+  deferredTemplates: DeferredTemplate[],
 ): Promise<Record<string, unknown>> {
   const p = action.params ?? {};
   switch (action.type) {
     case "APPLY_TEMPLATE": {
       if (!payload.clientId) throw new Error("APPLY_TEMPLATE requer clientId no payload");
-      // usa o db global (fora da transação da regra): cria tarefas via helper próprio
-      const result = await applyTemplateToClient(String(p.templateSlug), payload.clientId, {
+      // Aplicado APÓS o commit da regra (fora da transação). Se qualquer ação
+      // posterior falhar e reverter, o template NÃO é criado — evita tarefas
+      // órfãs sobrevivendo a um rollback.
+      deferredTemplates.push({
+        templateSlug: String(p.templateSlug),
+        clientId: payload.clientId,
         actorId: payload.actorId,
         asChecklist: p.asChecklist === true,
       });
-      return { ...result };
+      return { template: String(p.templateSlug), applied: "após commit" };
     }
     case "CREATE_TASK": {
       const [task] = await tx
@@ -341,11 +354,12 @@ export async function emitEvent(
       try {
         const results: Record<string, unknown>[] = [];
         const deferred: DeferredEvent[] = [];
+        const deferredTemplates: DeferredTemplate[] = [];
         await db.transaction(async (tx) => {
           let index = 0;
           for (const action of rule.actions ?? []) {
             try {
-              results.push(await runAction(action, payload, depth, tx, deferred));
+              results.push(await runAction(action, payload, depth, tx, deferred, deferredTemplates));
             } catch (err) {
               // contexto de qual ação quebrou vai para o log de ERRO
               throw new Error(
@@ -355,7 +369,26 @@ export async function emitEvent(
             index++;
           }
         });
-        // eventos derivados só após o commit — rollback não emite nada
+        // Templates e eventos derivados só após o commit — se a regra reverteu,
+        // nada disto roda (sem tarefas órfãs).
+        for (const t of deferredTemplates) {
+          try {
+            await applyTemplateToClient(t.templateSlug, t.clientId, {
+              actorId: t.actorId,
+              asChecklist: t.asChecklist,
+            });
+          } catch (err) {
+            console.error(
+              JSON.stringify({
+                level: "error",
+                event: "automation_template_failed",
+                ruleId: rule.id,
+                templateSlug: t.templateSlug,
+                message: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+        }
         for (const d of deferred) {
           await emitEvent(d.trigger, d.payload, d.depth);
         }

@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/labels";
 import { Badge, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui/primitives";
 import { AutomationToggle } from "./ui";
 
+// Rótulos alinhados ao enum AUTOMATION_TRIGGERS (schema.ts).
 const TRIGGER_LABELS: Record<string, string> = {
   CLIENT_CREATED: "Cliente criado",
   CLIENT_STAGE_CHANGED: "Etapa do pipeline alterada",
@@ -15,8 +16,8 @@ const TRIGGER_LABELS: Record<string, string> = {
   TASK_DUE_SOON: "Tarefa vencendo",
   TASK_OVERDUE: "Tarefa vencida",
   TASK_STATUS_CHANGED: "Status de tarefa alterado",
-  RECEIVABLE_OVERDUE: "Cobrança vencida",
-  CREDENTIAL_CREATED: "Credencial criada",
+  ASSET_CREATED: "Ativo criado",
+  ASSET_STATUS_CHANGED: "Status de ativo alterado",
   FORM_SUBMITTED: "Formulário enviado",
 };
 
@@ -56,7 +57,6 @@ export default async function AutomacoesPage() {
               <Th>Automação</Th>
               <Th>Gatilho</Th>
               <Th>Ações</Th>
-              <Th>Escopo</Th>
               <Th>Status</Th>
               {canUpdate && <Th className="text-right"></Th>}
             </>
@@ -80,7 +80,6 @@ export default async function AutomacoesPage() {
                   ))}
                 </div>
               </Td>
-              <Td><Badge tone={r.scope === "GLOBAL" ? "amber" : "zinc"}>{r.scope}</Badge></Td>
               <Td>
                 <Badge tone={r.enabled ? "green" : "zinc"}>{r.enabled ? "ATIVA" : "INATIVA"}</Badge>
               </Td>

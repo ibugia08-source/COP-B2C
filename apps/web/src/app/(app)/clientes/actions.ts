@@ -53,7 +53,6 @@ function parseClientForm(formData: FormData) {
     strategistId: formData.get("strategistId") ?? undefined,
     trafficManager1Id: formData.get("trafficManager1Id") ?? undefined,
     trafficManager2Id: formData.get("trafficManager2Id") ?? undefined,
-    mainResponsibleId: formData.get("mainResponsibleId") ?? undefined,
     startDate: formData.get("startDate") ?? undefined,
     notes: formData.get("notes") ?? undefined,
   });
@@ -89,7 +88,6 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,
       trafficManager2Id: d.trafficManager2Id || null,
-      mainResponsibleId: d.mainResponsibleId || null,
     })
     .returning();
 
@@ -141,17 +139,11 @@ export async function updateClient(
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,
       trafficManager2Id: d.trafficManager2Id || null,
-      mainResponsibleId: d.mainResponsibleId || null,
     })
     .where(eq(clients.id, clientId));
 
   const changes: Record<string, unknown> = {};
-  const responsibleFields = [
-    "strategistId",
-    "trafficManager1Id",
-    "trafficManager2Id",
-    "mainResponsibleId",
-  ] as const;
+  const responsibleFields = ["strategistId", "trafficManager1Id", "trafficManager2Id"] as const;
   for (const f of responsibleFields) {
     if ((existing[f] ?? null) !== (d[f] || null)) changes[f] = { from: existing[f], to: d[f] || null };
   }

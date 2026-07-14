@@ -18,7 +18,6 @@ export type ClientOwnershipInput = {
   strategistId: string | null;
   trafficManager1Id: string | null;
   trafficManager2Id: string | null;
-  mainResponsibleId: string | null;
 };
 
 /** Regra pura: OWNER/ADMIN sempre; demais precisam ser um dos responsáveis. */
@@ -33,7 +32,6 @@ export function clientOwnershipCheck(
     client.strategistId,
     client.trafficManager1Id,
     client.trafficManager2Id,
-    client.mainResponsibleId,
   ].includes(userId);
 }
 
@@ -97,7 +95,6 @@ function managedClientsCondition(userId: string): SQL {
     eq(clients.strategistId, userId),
     eq(clients.trafficManager1Id, userId),
     eq(clients.trafficManager2Id, userId),
-    eq(clients.mainResponsibleId, userId),
   )!;
 }
 
@@ -169,7 +166,6 @@ export async function canAccessClient(
       strategistId: true,
       trafficManager1Id: true,
       trafficManager2Id: true,
-      mainResponsibleId: true,
     },
   });
   return clientOwnershipCheck(session.roles, session.userId, client);
@@ -191,7 +187,6 @@ export async function canAccessAsset(
           strategistId: true,
           trafficManager1Id: true,
           trafficManager2Id: true,
-          mainResponsibleId: true,
         },
       },
     },
@@ -207,7 +202,6 @@ export async function canAccessAsset(
           strategistId: true,
           trafficManager1Id: true,
           trafficManager2Id: true,
-          mainResponsibleId: true,
         },
       })) ?? null;
   }
@@ -239,7 +233,6 @@ export async function partitionAssetsByAccess(
           strategistId: true,
           trafficManager1Id: true,
           trafficManager2Id: true,
-          mainResponsibleId: true,
         },
       },
     },
@@ -267,7 +260,6 @@ export async function partitionAssetsByAccess(
           strategistId: true,
           trafficManager1Id: true,
           trafficManager2Id: true,
-          mainResponsibleId: true,
         },
       })
     : [];
@@ -301,7 +293,6 @@ export async function canAccessTask(session: SessionPayload, taskId: string): Pr
           strategistId: true,
           trafficManager1Id: true,
           trafficManager2Id: true,
-          mainResponsibleId: true,
         },
       },
     },

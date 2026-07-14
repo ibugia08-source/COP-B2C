@@ -99,8 +99,8 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
 
   // Pendências (regras de negócio)
   const pendencias: string[] = [];
-  if (client.status === "ATIVO" && !client.trafficManager1Id && !client.mainResponsibleId) {
-    pendencias.push("Cliente ativo sem gestor/responsável principal definido.");
+  if (client.status === "ATIVO" && !client.trafficManager1Id) {
+    pendencias.push("Cliente ativo sem gestor principal definido.");
   }
   if (client.status === "ATIVO" && !client.operationalProfile?.briefingText) {
     pendencias.push("Cliente ativo sem briefing operacional preenchido.");

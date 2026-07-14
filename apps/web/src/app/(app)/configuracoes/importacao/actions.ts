@@ -73,9 +73,9 @@ export async function confirmClickupImport(csvText: string, fileName: string): P
         adsStatus: row.client.adsStatus,
         notes: row.client.notes,
         strategistId: findUser(row.client.estrategista),
-        trafficManager1Id: findUser(row.client.gestor1),
+        // gestor 1 é o responsável principal; usa "responsável" como fallback.
+        trafficManager1Id: findUser(row.client.gestor1) ?? findUser(row.client.responsavel1),
         trafficManager2Id: findUser(row.client.gestor2),
-        mainResponsibleId: findUser(row.client.responsavel1),
         churnDate: row.client.churn ? new Date() : null,
         churnReason: row.client.churn ? "Importado do ClickUp como perdido (revisar motivo)" : null,
       });

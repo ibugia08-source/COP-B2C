@@ -34,7 +34,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   if (scope) filters.push(scope);
   if (str(sp.etapa)) filters.push(eq(clients.pipelineStage, str(sp.etapa) as never));
   if (str(sp.cliente)) filters.push(eq(clients.id, str(sp.cliente)!));
-  if (str(sp.responsavel)) filters.push(eq(clients.mainResponsibleId, str(sp.responsavel)!));
+  if (str(sp.responsavel)) filters.push(eq(clients.trafficManager1Id, str(sp.responsavel)!));
   if (str(sp.gestor)) filters.push(eq(clients.trafficManager1Id, str(sp.gestor)!));
   if (str(sp.estrategista)) filters.push(eq(clients.strategistId, str(sp.estrategista)!));
   if (str(sp.saude)) filters.push(eq(clients.healthStatus, str(sp.saude) as never));
@@ -91,7 +91,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
 
   const kanbanClients: KanbanClient[] = rows.map((c) => {
     const pendencias: string[] = [];
-    if (c.status === "ATIVO" && !c.trafficManager1Id && !c.mainResponsibleId) pendencias.push("Sem gestor principal");
+    if (c.status === "ATIVO" && !c.trafficManager1Id) pendencias.push("Sem gestor principal");
     if (c.status === "ATIVO" && !c.operationalProfile?.briefingText) pendencias.push("Sem briefing operacional");
     if (c.adsStatus === "PAUSADO" && c.status === "ATIVO") pendencias.push("Ads pausado");
     const nextDue = nextDueByClient.get(c.id);

@@ -28,7 +28,6 @@ export const clientFormSchema = z.object({
   strategistId: optionalStr,
   trafficManager1Id: optionalStr,
   trafficManager2Id: optionalStr,
-  mainResponsibleId: optionalStr,
   startDate: optionalStr,
   notes: optionalStr,
 });

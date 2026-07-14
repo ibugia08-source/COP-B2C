@@ -79,7 +79,6 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
         eq(clients.trafficManager1Id, userId),
         eq(clients.trafficManager2Id, userId),
         eq(clients.strategistId, userId),
-        eq(clients.mainResponsibleId, userId),
       ),
       not(eq(clients.status, "PERDIDO")),
     ),

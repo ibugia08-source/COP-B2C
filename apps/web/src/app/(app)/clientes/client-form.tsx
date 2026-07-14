@@ -127,12 +127,11 @@ export function ClientForm({
         </Field>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:grid-cols-2 lg:grid-cols-4">
-        <h2 className="text-sm font-semibold text-zinc-300 sm:col-span-2 lg:col-span-4">Responsáveis</h2>
-        <Field label="Estrategista">{userSelect("strategistId", client?.strategistId)}</Field>
-        <Field label="Gestor 1">{userSelect("trafficManager1Id", client?.trafficManager1Id)}</Field>
+      <section className="grid grid-cols-1 gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:grid-cols-3">
+        <h2 className="text-sm font-semibold text-zinc-300 sm:col-span-3">Responsáveis</h2>
+        <Field label="Gestor 1 (responsável principal)">{userSelect("trafficManager1Id", client?.trafficManager1Id)}</Field>
         <Field label="Gestor 2">{userSelect("trafficManager2Id", client?.trafficManager2Id)}</Field>
-        <Field label="Responsável principal">{userSelect("mainResponsibleId", client?.mainResponsibleId)}</Field>
+        <Field label="Estrategista">{userSelect("strategistId", client?.strategistId)}</Field>
       </section>
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">

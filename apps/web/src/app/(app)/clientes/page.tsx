@@ -65,7 +65,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
     [str(sp.estrategista), clients.strategistId],
     [str(sp.gestor1), clients.trafficManager1Id],
     [str(sp.gestor2), clients.trafficManager2Id],
-    [str(sp.responsavel), clients.mainResponsibleId],
+    [str(sp.responsavel), clients.trafficManager1Id],
   ] as const;
   for (const [value, column] of eqFilters) {
     if (value) filters.push(eq(column as unknown as typeof clients.name, value));

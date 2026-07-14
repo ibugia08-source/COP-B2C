@@ -104,7 +104,6 @@ const CLIENT = {
   strategistId: "u-estrategista",
   trafficManager1Id: "u-gestor1",
   trafficManager2Id: "u-gestor2",
-  mainResponsibleId: "u-principal",
 };
 
 describe("ownership de clientes (clientOwnershipCheck)", () => {
@@ -113,12 +112,11 @@ describe("ownership de clientes (clientOwnershipCheck)", () => {
     expect(clientOwnershipCheck(["ADMIN"], "u-qualquer", CLIENT)).toBe(true);
   });
 
-  it("cada um dos 4 responsáveis acessa; um terceiro não", () => {
+  it("cada um dos 3 responsáveis acessa; um terceiro não", () => {
     for (const role of ["GESTOR_TRAFEGO", "GESTOR_OPERACIONAL", "SOCIAL_MEDIA", "COMERCIAL"] as const) {
       expect(clientOwnershipCheck([role], "u-estrategista", CLIENT)).toBe(true);
       expect(clientOwnershipCheck([role], "u-gestor1", CLIENT)).toBe(true);
       expect(clientOwnershipCheck([role], "u-gestor2", CLIENT)).toBe(true);
-      expect(clientOwnershipCheck([role], "u-principal", CLIENT)).toBe(true);
       expect(clientOwnershipCheck([role], "u-intruso", CLIENT)).toBe(false);
     }
   });
@@ -130,7 +128,6 @@ describe("ownership de clientes (clientOwnershipCheck)", () => {
         strategistId: null,
         trafficManager1Id: null,
         trafficManager2Id: null,
-        mainResponsibleId: null,
       }),
     ).toBe(false);
   });
@@ -140,7 +137,7 @@ describe("ownership de ativos digitais (assetOwnershipCheck)", () => {
   it("ativo de cliente: responsável acessa, terceiro não", () => {
     const asset = { clientId: "c1", client: CLIENT };
     expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u-gestor1", asset)).toBe(true);
-    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u-principal", asset)).toBe(true);
+    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u-estrategista", asset)).toBe(true);
     expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u-intruso", asset)).toBe(false);
     expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u-intruso", asset)).toBe(false);
   });

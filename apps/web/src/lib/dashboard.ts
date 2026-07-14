@@ -86,7 +86,7 @@ export async function getDashboardData(filters: DashboardFilters, userId: string
 
   // Alertas operacionais: clientes com pendências que exigem ação
   const operationalAlerts = allClients.filter((c) => {
-    if (c.status === "ATIVO" && !c.trafficManager1Id && !c.mainResponsibleId) return true;
+    if (c.status === "ATIVO" && !c.trafficManager1Id) return true;
     if (c.status === "ATIVO" && !c.operationalProfile?.briefingText) return true;
     if (c.adsStatus === "PAUSADO" && c.status === "ATIVO") return true;
     return false;
@@ -100,7 +100,7 @@ export async function getDashboardData(filters: DashboardFilters, userId: string
         open: userTasks.length,
         overdue: userTasks.filter((t) => t.dueDate && t.dueDate < now).length,
         urgent: userTasks.filter((t) => t.priority === "URGENTE").length,
-        clients: allClients.filter((c) => c.trafficManager1Id === u.id || c.mainResponsibleId === u.id).length,
+        clients: allClients.filter((c) => c.trafficManager1Id === u.id).length,
         creatives: creativeTasks.filter((t) => t.assignedToId === u.id).length,
         assets: assets.filter((a) => a.assignedToId === u.id || a.ownerUserId === u.id).length,
       };

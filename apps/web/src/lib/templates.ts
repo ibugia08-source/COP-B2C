@@ -71,7 +71,7 @@ export async function applyTemplateToClient(
         status: "A_FAZER",
         priority: "MEDIA",
         clientId,
-        assignedToId: client.mainResponsibleId ?? client.trafficManager1Id,
+        assignedToId: client.trafficManager1Id,
         createdById: opts.actorId ?? null,
       })
       .returning();

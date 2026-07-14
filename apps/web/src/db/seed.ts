@@ -209,28 +209,28 @@ async function seed() {
         name: "Cliente criado → aplicar onboarding",
         triggerType: "CLIENT_CREATED",
         actions: [{ type: "APPLY_TEMPLATE", params: { templateSlug: "onboarding-cliente" } }],
-        scope: "GLOBAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         name: "Movido p/ Integração Meta → tarefas de integração",
         triggerType: "CLIENT_STAGE_CHANGED",
         conditions: { toStage: "INTEGRACAO_META" },
         actions: [{ type: "APPLY_TEMPLATE", params: { templateSlug: "integracao-meta" } }],
-        scope: "OPERACIONAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         name: "Movido p/ Integração Google → tarefas de integração",
         triggerType: "CLIENT_STAGE_CHANGED",
         conditions: { toStage: "INTEGRACAO_GOOGLE" },
         actions: [{ type: "APPLY_TEMPLATE", params: { templateSlug: "integracao-google" } }],
-        scope: "OPERACIONAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         name: "Movido p/ Base de Clientes → checklist de reunião mensal",
         triggerType: "CLIENT_STAGE_CHANGED",
         conditions: { toStage: "BASE_DE_CLIENTES" },
         actions: [{ type: "APPLY_TEMPLATE", params: { templateSlug: "reuniao-mensal", asChecklist: true } }],
-        scope: "OPERACIONAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         name: "Cliente crítico → tarefa de plano de ação",
@@ -240,7 +240,7 @@ async function seed() {
           { type: "APPLY_TEMPLATE", params: { templateSlug: "cliente-critico" } },
           { type: "SEND_NOTIFICATION", params: { toRole: "GESTOR_OPERACIONAL", title: "Cliente crítico", type: "ALERTA" } },
         ],
-        scope: "GLOBAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         name: "Cliente perdido → encerrar campanhas e revisar ativos",
@@ -250,7 +250,7 @@ async function seed() {
           { type: "SEND_NOTIFICATION", params: { toRole: "GESTOR_OPERACIONAL", title: "Cliente perdido — revisar ativos digitais e remover acessos", type: "ALERTA" } },
           { type: "CREATE_ACTIVITY_LOG", params: { action: "client.assetsReviewNeeded" } },
         ],
-        scope: "GLOBAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         // INATIVA: depende de um agendador (cron) que ainda não existe — nenhum
@@ -259,14 +259,14 @@ async function seed() {
         triggerType: "TASK_OVERDUE",
         enabled: false,
         actions: [{ type: "SEND_NOTIFICATION", params: { toAssignee: true, title: "Tarefa vencida", type: "TAREFA" } }],
-        scope: "GLOBAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         name: "Tarefa sem responsável → alertar gestor operacional",
         triggerType: "TASK_CREATED",
         conditions: { withoutAssignee: true },
         actions: [{ type: "SEND_NOTIFICATION", params: { toRole: "GESTOR_OPERACIONAL", title: "Tarefa criada sem responsável", type: "ALERTA" } }],
-        scope: "OPERACIONAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         // INATIVA: redundante com runStatusAutomations() em ativos/actions.ts,
@@ -277,14 +277,14 @@ async function seed() {
         enabled: false,
         conditions: { toStatus: "BLOQUEADA" },
         actions: [{ type: "SEND_NOTIFICATION", params: { toRole: "GESTOR_OPERACIONAL", title: "Ativo digital bloqueado", type: "ALERTA" } }],
-        scope: "GLOBAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
       {
         name: "Formulário de reunião mensal → salvar no histórico",
         triggerType: "FORM_SUBMITTED",
         conditions: { formSlug: "reuniao-mensal" },
         actions: [{ type: "ADD_COMMENT", params: { toClientHistory: true } }],
-        scope: "GLOBAL", createdById: bootstrapOwnerId,
+        createdById: bootstrapOwnerId,
       },
     ]);
   }

@@ -78,7 +78,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
     db.query.clients.findMany({
       where,
       orderBy: [orderBy],
-      with: { strategist: true, trafficManager1: true, mainResponsible: true },
+      with: { strategist: true, trafficManager1: true },
     }),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
     resolveOptions("clients", "niche", { activeOnly: true }),

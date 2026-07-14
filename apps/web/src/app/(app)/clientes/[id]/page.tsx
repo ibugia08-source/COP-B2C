@@ -60,7 +60,6 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       strategist: true,
       trafficManager1: true,
       trafficManager2: true,
-      mainResponsible: true,
       operationalProfile: true,
       contacts: true,
       meetings: { orderBy: (m, { desc }) => [desc(m.meetingDate)], with: { responsible: true } },
@@ -158,10 +157,9 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
           <h3 className="mb-2 text-sm font-semibold text-zinc-300">Responsáveis</h3>
-          <InfoRow label="Estrategista">{client.strategist?.name ?? "—"}</InfoRow>
-          <InfoRow label="Gestor 1">{client.trafficManager1?.name ?? "—"}</InfoRow>
+          <InfoRow label="Gestor 1 (responsável principal)">{client.trafficManager1?.name ?? "—"}</InfoRow>
           <InfoRow label="Gestor 2">{client.trafficManager2?.name ?? "—"}</InfoRow>
-          <InfoRow label="Responsável principal">{client.mainResponsible?.name ?? "—"}</InfoRow>
+          <InfoRow label="Estrategista">{client.strategist?.name ?? "—"}</InfoRow>
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
           <h3 className="mb-2 text-sm font-semibold text-zinc-300">Resumo operacional</h3>

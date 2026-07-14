@@ -92,6 +92,13 @@
       "when": 1784042913087,
       "tag": "0012_omniscient_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784046368661,
+      "tag": "0013_classy_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

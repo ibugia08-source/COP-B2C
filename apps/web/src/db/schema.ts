@@ -31,12 +31,6 @@ export const CLIENT_STATUSES = [
 ] as const;
 export const HEALTH_STATUSES = ["ESTAVEL", "OBSERVACAO", "CRITICO"] as const;
 export const ADS_STATUSES = ["ATIVO", "PAUSADO", "SEM_CAMPANHA"] as const;
-export const PIPELINE_STAGE_STATUSES = [
-  "PENDENTE",
-  "EM_ANDAMENTO",
-  "CONCLUIDA",
-  "NAO_APLICAVEL",
-] as const;
 // Etapas do Kanban operacional (ciclo de vida do cliente na operação)
 export const PIPELINE_STAGES = [
   "NOVO_CLIENTE",
@@ -263,7 +257,6 @@ export const AUTOMATION_ACTIONS = [
   "CHANGE_CLIENT_HEALTH",
   "MARK_CLIENT_AS_RISK",
 ] as const;
-export const AUTOMATION_SCOPES = ["GLOBAL", "OPERACIONAL"] as const;
 export const AUTOMATION_EXEC_STATUSES = ["SUCESSO", "ERRO", "IGNORADA"] as const;
 export const ROLE_NAMES = [
   "OWNER",
@@ -414,7 +407,6 @@ export const clients = pgTable(
     strategistId: text("strategist_id").references(() => users.id),
     trafficManager1Id: text("traffic_manager_1_id").references(() => users.id),
     trafficManager2Id: text("traffic_manager_2_id").references(() => users.id),
-    mainResponsibleId: text("main_responsible_id").references(() => users.id),
     startDate: timestamp("start_date", { mode: "date" }),
     churnDate: timestamp("churn_date", { mode: "date" }),
     churnReason: text("churn_reason"),
@@ -435,7 +427,6 @@ export const clients = pgTable(
     index("clients_strategist_idx").on(t.strategistId),
     index("clients_tm1_idx").on(t.trafficManager1Id),
     index("clients_tm2_idx").on(t.trafficManager2Id),
-    index("clients_responsible_idx").on(t.mainResponsibleId),
     index("clients_pipeline_idx").on(t.pipelineStage),
   ],
 );
@@ -495,26 +486,6 @@ export const clientHealthLogs = pgTable(
   (t) => [index("client_health_logs_client_idx").on(t.clientId)],
 );
 
-// Etapas de implantação (ex-status do ClickUp: criação de grupo, integração
-// Meta/Google, pesquisa de mercado, diagnóstico, estudo de funil...)
-export const clientPipelineStages = pgTable(
-  "client_pipeline_stages",
-  {
-    id: id(),
-    clientId: text("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    order: integer("order").notNull().default(0),
-    status: text("status", { enum: PIPELINE_STAGE_STATUSES })
-      .notNull()
-      .default("PENDENTE"),
-    completedAt: timestamp("completed_at", { mode: "date" }),
-    completedById: text("completed_by_id").references(() => users.id),
-    createdAt: createdAt(),
-  },
-  (t) => [index("client_pipeline_stages_client_idx").on(t.clientId)],
-);
 
 // ---------------------------------------------------------------------------
 // Projetos e tarefas
@@ -989,7 +960,6 @@ export const automationRules = pgTable("automation_rules", {
     { type: (typeof AUTOMATION_ACTIONS)[number]; params?: Record<string, unknown> }[]
   >(),
   enabled: boolean("enabled").notNull().default(true),
-  scope: text("scope", { enum: AUTOMATION_SCOPES }).notNull().default("GLOBAL"),
   createdById: text("created_by_id").references(() => users.id),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -1488,17 +1458,12 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
     fields: [clients.trafficManager2Id],
     references: [users.id],
   }),
-  mainResponsible: one(users, {
-    fields: [clients.mainResponsibleId],
-    references: [users.id],
-  }),
   contacts: many(clientContacts),
   operationalProfile: one(clientOperationalProfiles, {
     fields: [clients.id],
     references: [clientOperationalProfiles.clientId],
   }),
   healthLogs: many(clientHealthLogs),
-  pipelineStages: many(clientPipelineStages),
   tasks: many(tasks),
   digitalAssets: many(digitalAssets),
   meetings: many(clientMeetings),
@@ -1535,12 +1500,6 @@ export const clientHealthLogsRelations = relations(clientHealthLogs, ({ one }) =
   changedBy: one(users, { fields: [clientHealthLogs.changedById], references: [users.id] }),
 }));
 
-export const clientPipelineStagesRelations = relations(clientPipelineStages, ({ one }) => ({
-  client: one(clients, {
-    fields: [clientPipelineStages.clientId],
-    references: [clients.id],
-  }),
-}));
 
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   client: one(clients, { fields: [tasks.clientId], references: [clients.id] }),
@@ -1722,7 +1681,6 @@ export type NewClient = typeof clients.$inferInsert;
 export type ClientContact = typeof clientContacts.$inferSelect;
 export type ClientOperationalProfile = typeof clientOperationalProfiles.$inferSelect;
 export type ClientHealthLog = typeof clientHealthLogs.$inferSelect;
-export type ClientPipelineStage = typeof clientPipelineStages.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;

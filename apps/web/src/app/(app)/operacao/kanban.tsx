@@ -130,7 +130,8 @@ export function OperationKanban({
                   {stageClients.length}
                 </span>
               </div>
-              <div className="flex min-h-24 flex-1 flex-col gap-2 p-2">
+              <div className="flex flex-col gap-2 p-2">
+                <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto pr-0.5">
                 {stageClients.length === 0 && (
                   <p className="py-3 text-center text-[11px] text-zinc-600">vazio</p>
                 )}
@@ -176,6 +177,7 @@ export function OperationKanban({
                     )}
                   </div>
                 ))}
+                </div>
                 {canCreate && col.value !== "__outros__" && (
                   <Link
                     href={`/clientes/novo?etapa=${encodeURIComponent(col.value)}`}

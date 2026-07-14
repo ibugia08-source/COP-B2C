@@ -431,7 +431,8 @@ export function TasksKanban({
                   {columnTasks.length}
                 </span>
               </div>
-              <div className="flex min-h-24 flex-1 flex-col gap-2 p-2">
+              <div className="flex flex-col gap-2 p-2">
+                <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto pr-0.5">
                 {columnTasks.length === 0 && (
                   <p className="py-3 text-center text-[11px] text-zinc-600">vazio</p>
                 )}
@@ -468,6 +469,7 @@ export function TasksKanban({
                     </div>
                   </div>
                 ))}
+                </div>
                 {canCreate && col.value !== "__outros__" && col.value !== "CANCELADA" && (
                   <KanbanQuickAdd status={col.value} clientId={quickAddClientId} />
                 )}

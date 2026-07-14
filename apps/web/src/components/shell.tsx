@@ -163,7 +163,6 @@ const SEGMENT_LABELS: Record<string, string> = {
   busca: "Busca",
   novo: "Novo",
   editar: "Editar",
-  importacao: "Importação",
   "acesso-negado": "Acesso negado",
 };
 

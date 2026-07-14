@@ -41,13 +41,12 @@ function throwingClient(): ReturnType<typeof postgres> {
 
 let client: ReturnType<typeof postgres>;
 if (isPg) {
-  // prepare:false é necessário para o pooler do Supabase.
-  // max:1 é essencial em serverless (Vercel): sem ele, um request com várias
-  // queries abre VÁRIAS conexões ao pooler, cada uma pagando ~1s de setup
-  // TLS+auth — a causa da lentidão no Kanban. Com max:1 todas as queries
-  // multiplexam numa única conexão reaproveitada (quente entre invocações).
+  // prepare:false é necessário para o pooler do Supabase em modo "transaction".
   // A conexão é lazy: nada é aberto durante o import.
-  client = postgres(url!, { prepare: false, max: 1, idle_timeout: 20 });
+  // NOTA: max:1 foi testado e QUEBROU produção (todas as telas travavam em
+  // "carregando") — provavelmente exaustão do pooler em modo sessão. Reverter
+  // para o default. Reintroduzir performance só com teste em preview.
+  client = postgres(url!, { prepare: false });
 } else if (process.env.NODE_ENV === "production" && !isBuildPhase) {
   // Produção sem banco = crash imediato e explícito no boot — nunca um
   // fallback silencioso apontando para um host fake.

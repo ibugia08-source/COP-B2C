@@ -26,6 +26,7 @@ import {
   denyClientOutOfScope,
   EDITABLE_CLIENT_FIELDS,
 } from "@/lib/clients/rules";
+import { deriveClientStatus } from "@/lib/clients/state";
 import { isValidOptionValue } from "@/lib/config-options";
 import { cascadeSafeDelete } from "@/lib/safe-delete";
 import { clientFormSchema, operationalProfileSchema } from "@/lib/validations/client";
@@ -260,6 +261,58 @@ export async function toggleAdsStatus(clientId: string, newStatus: AdsStatus): P
   revalidatePath(`/clientes/${clientId}`);
   revalidatePath("/clientes");
   return { success: `Status de anúncios alterado para ${newStatus}.` };
+}
+
+/**
+ * Pausa/retoma comercialmente um cliente (eixo ortogonal à etapa da esteira).
+ * Pausar NÃO muda a etapa: ao retomar, o cliente continua onde estava. O
+ * `status` é sempre recalculado por deriveClientStatus.
+ */
+export async function togglePause(
+  clientId: string,
+  pause: boolean,
+  reason?: string,
+): Promise<ActionState> {
+  const auth = await checkPermission("clients.update");
+  if (!auth.ok) return { error: auth.error };
+
+  const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
+  if (!existing) return { error: "Cliente não encontrado." };
+  if (existing.pipelineStage === "CLIENTE_PERDIDO") {
+    return { error: "Cliente perdido não pode ser pausado. Reative-o na esteira primeiro." };
+  }
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "togglePause");
+  if (denied) return denied;
+
+  const status = deriveClientStatus({
+    pipelineStage: existing.pipelineStage,
+    healthStatus: existing.healthStatus,
+    isPaused: pause,
+  });
+
+  await db
+    .update(clients)
+    .set({
+      isPaused: pause,
+      pausedAt: pause ? new Date() : null,
+      pauseReason: pause ? reason?.trim() || null : null,
+      status,
+    })
+    .where(eq(clients.id, clientId));
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: pause ? "client.paused" : "client.resumed",
+    entityType: "client",
+    entityId: clientId,
+    metadata: { reason: reason?.trim() || undefined },
+  });
+
+  revalidatePath(`/clientes/${clientId}`);
+  revalidatePath("/clientes");
+  revalidatePath("/operacao");
+  return { success: pause ? "Cliente pausado." : "Cliente retomado." };
 }
 
 export async function markClientLost(

@@ -6,11 +6,11 @@ import type { AdsStatus, Client } from "@/db/schema";
 import { HEALTH_META } from "@/lib/labels";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal } from "@/components/ui/overlay";
-import { changeClientHealth, markClientLost, toggleAdsStatus } from "../actions";
+import { changeClientHealth, markClientLost, toggleAdsStatus, togglePause } from "../actions";
 
 export function ClientQuickActions({ client, canMoveStatus }: { client: Client; canMoveStatus: boolean }) {
   const router = useRouter();
-  const [modal, setModal] = useState<"saude" | "perdido" | "ads" | null>(null);
+  const [modal, setModal] = useState<"saude" | "perdido" | "ads" | "pausar" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -19,6 +19,7 @@ export function ClientQuickActions({ client, canMoveStatus }: { client: Client; 
   const [healthReason, setHealthReason] = useState("");
   const [churnReason, setChurnReason] = useState("");
   const [churnDate, setChurnDate] = useState("");
+  const [pauseReason, setPauseReason] = useState("");
 
   function run(fn: () => Promise<{ error?: string; success?: string }>) {
     setError(null);
@@ -48,6 +49,17 @@ export function ClientQuickActions({ client, canMoveStatus }: { client: Client; 
       <Button size="sm" variant="secondary" onClick={() => { setError(null); setModal("ads"); }}>
         {client.adsStatus === "ATIVO" ? "Pausar ads" : "Ativar ads"}
       </Button>
+      {client.status !== "PERDIDO" && (
+        client.isPaused ? (
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => togglePause(client.id, false))}>
+            Retomar cliente
+          </Button>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => { setError(null); setPauseReason(""); setModal("pausar"); }}>
+            Pausar cliente
+          </Button>
+        )
+      )}
       {canMoveStatus && client.status !== "PERDIDO" && (
         <Button size="sm" variant="danger" onClick={() => { setError(null); setModal("perdido"); }}>
           Marcar perdido
@@ -109,6 +121,29 @@ export function ClientQuickActions({ client, canMoveStatus }: { client: Client; 
               onClick={() => run(() => markClientLost(client.id, churnReason, churnDate))}
             >
               {pending ? "Salvando..." : "Confirmar perda"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Pausar */}
+      <Modal open={modal === "pausar"} onClose={() => setModal(null)} title="Pausar cliente">
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-400">
+            O cliente fica <strong>pausado</strong> (em espera) sem sair da etapa atual da esteira. É só retomar depois.
+          </p>
+          <Field label="Motivo (opcional)">
+            <Textarea
+              value={pauseReason}
+              onChange={(e) => setPauseReason(e.target.value)}
+              placeholder="Ex.: cliente pediu para pausar durante reforma."
+            />
+          </Field>
+          {error && <Alert>{error}</Alert>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setModal(null)}>Cancelar</Button>
+            <Button disabled={pending} onClick={() => run(() => togglePause(client.id, true, pauseReason))}>
+              {pending ? "Salvando..." : "Pausar cliente"}
             </Button>
           </div>
         </div>

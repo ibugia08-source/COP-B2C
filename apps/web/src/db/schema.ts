@@ -422,6 +422,11 @@ export const clients = pgTable(
     churnDate: timestamp("churn_date", { mode: "date" }),
     churnReason: text("churn_reason"),
     notes: text("notes"),
+    // Pausa comercial: cliente em espera SEM perder a posição na esteira.
+    // Eixo ortogonal a etapa/saúde/ads (ver lib/clients/state.ts).
+    isPaused: boolean("is_paused").notNull().default(false),
+    pausedAt: timestamp("paused_at", { mode: "date" }),
+    pauseReason: text("pause_reason"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

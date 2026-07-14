@@ -2,13 +2,7 @@
 
 import { useActionState } from "react";
 import type { Client } from "@/db/schema";
-import {
-  ADS_META,
-  AGENCY_BRAND_META,
-  BUSINESS_MODEL_LABEL,
-  CLIENT_STATUS_META,
-  HEALTH_META,
-} from "@/lib/labels";
+import { ADS_META, AGENCY_BRAND_META, BUSINESS_MODEL_LABEL, HEALTH_META } from "@/lib/labels";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import type { ActionState } from "./actions";
 
@@ -111,17 +105,12 @@ export function ClientForm({
         </Field>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:grid-cols-3">
-        <h2 className="text-sm font-semibold text-zinc-300 sm:col-span-3">Status e saúde</h2>
-        <Field label="Status do cliente" htmlFor="status">
-          <Select id="status" name="status" defaultValue={client?.status ?? "LEAD"}>
-            {Object.entries(CLIENT_STATUS_META)
-              .filter(([v]) => v !== "PERDIDO" || client?.status === "PERDIDO")
-              .map(([v, m]) => (
-                <option key={v} value={v}>{m.label}</option>
-              ))}
-          </Select>
-        </Field>
+      <section className="grid grid-cols-1 gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:grid-cols-2">
+        <h2 className="text-sm font-semibold text-zinc-300 sm:col-span-2">Saúde e anúncios</h2>
+        <p className="text-[11px] text-zinc-500 sm:col-span-2">
+          O status do cliente (Ativo, Em risco, Pausado, Perdido…) é definido automaticamente
+          pela etapa na esteira, pela saúde e pela pausa — não é escolhido aqui.
+        </p>
         <Field label="Saúde da conta" htmlFor="healthStatus">
           <Select id="healthStatus" name="healthStatus" defaultValue={client?.healthStatus ?? "ESTAVEL"}>
             {Object.entries(HEALTH_META).map(([v, m]) => (

@@ -25,7 +25,7 @@ export type KanbanClient = {
   pendencias: string[];
 };
 
-type PendingMove = { client: KanbanClient; toStage: string; kind: "PERDIDO" | "CRITICO" };
+type PendingMove = { client: KanbanClient; toStage: string; kind: "PERDIDO" };
 
 export function OperationKanban({
   clients,
@@ -48,11 +48,9 @@ export function OperationKanban({
   const [overStage, setOverStage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // campos dos modais obrigatórios
+  // campos do modal obrigatório de churn
   const [churnReason, setChurnReason] = useState("");
   const [churnDate, setChurnDate] = useState("");
-  const [criticalReason, setCriticalReason] = useState("");
-  const [actionPlan, setActionPlan] = useState("");
 
   // clientes cuja etapa não tem coluna ativa (ex.: coluna desativada pelo admin)
   const known = new Set(columns.map((c) => c.value));
@@ -69,10 +67,6 @@ export function OperationKanban({
         setChurnReason("");
         setChurnDate(new Date().toISOString().slice(0, 10));
         setPendingMove({ client, toStage, kind: "PERDIDO" });
-      } else if (result.requires === "CRITICO") {
-        setCriticalReason("");
-        setActionPlan("");
-        setPendingMove({ client, toStage, kind: "CRITICO" });
       } else if (result.error) {
         setToast(null);
         setError(result.error);
@@ -218,32 +212,6 @@ export function OperationKanban({
               onClick={() => pendingMove && doMove(pendingMove.client, pendingMove.toStage, { churnReason, churnDate })}
             >
               {isPending ? "Salvando..." : "Confirmar perda"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal obrigatório: crítico */}
-      <Modal
-        open={pendingMove?.kind === "CRITICO"}
-        onClose={() => setPendingMove(null)}
-        title={`Mover "${pendingMove?.client.name}" para Cliente Crítico`}
-      >
-        <div className="space-y-4">
-          <Field label="Motivo *">
-            <Textarea value={criticalReason} onChange={(e) => setCriticalReason(e.target.value)} placeholder="O que está acontecendo com a conta?" />
-          </Field>
-          <Field label="Plano de ação *">
-            <Textarea value={actionPlan} onChange={(e) => setActionPlan(e.target.value)} placeholder="O que será feito para reverter?" />
-          </Field>
-          {error && <Alert>{error}</Alert>}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setPendingMove(null)}>Cancelar</Button>
-            <Button
-              disabled={isPending}
-              onClick={() => pendingMove && doMove(pendingMove.client, pendingMove.toStage, { criticalReason, actionPlan })}
-            >
-              {isPending ? "Salvando..." : "Confirmar e criar plano de ação"}
             </Button>
           </div>
         </div>

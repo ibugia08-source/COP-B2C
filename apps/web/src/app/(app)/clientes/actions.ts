@@ -48,7 +48,6 @@ function parseClientForm(formData: FormData) {
     decisionMakerName: formData.get("decisionMakerName") ?? undefined,
     decisionMakerPhone: formData.get("decisionMakerPhone") ?? undefined,
     decisionMakerEmail: formData.get("decisionMakerEmail") ?? undefined,
-    status: formData.get("status"),
     healthStatus: formData.get("healthStatus"),
     adsStatus: formData.get("adsStatus"),
     strategistId: formData.get("strategistId") ?? undefined,
@@ -78,11 +77,14 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
     ((PIPELINE_STAGES as readonly string[]).includes(stage) ||
       (await isValidOptionValue("operation", "pipeline", stage)));
 
+  const effectiveStage: PipelineStage = stageValid ? (stage as PipelineStage) : "NOVO_CLIENTE";
   const [client] = await db
     .insert(clients)
     .values({
       ...d,
-      ...(stageValid ? { pipelineStage: stage as PipelineStage } : {}),
+      pipelineStage: effectiveStage,
+      // status é sempre derivado (nunca vem do formulário).
+      status: deriveClientStatus({ pipelineStage: effectiveStage, healthStatus: d.healthStatus, isPaused: false }),
       startDate: d.startDate ? new Date(d.startDate) : null,
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,
@@ -122,9 +124,6 @@ export async function updateClient(
   const denied = await denyClientOutOfScope(auth.session, clientId, "updateClient");
   if (denied) return denied;
 
-  if (d.status === "PERDIDO" && existing.status !== "PERDIDO") {
-    return { error: "Para marcar como PERDIDO use a ação específica, que exige motivo de churn." };
-  }
   const criticalError = assertCriticalNeedsNote(d.healthStatus, d.notes);
   if (criticalError) return { error: criticalError };
 
@@ -132,6 +131,12 @@ export async function updateClient(
     .update(clients)
     .set({
       ...d,
+      // status é sempre derivado — a saúde do form pode mudá-lo (ex.: CRÍTICO → EM_RISCO).
+      status: deriveClientStatus({
+        pipelineStage: existing.pipelineStage,
+        healthStatus: d.healthStatus,
+        isPaused: existing.isPaused,
+      }),
       startDate: d.startDate ? new Date(d.startDate) : null,
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,
@@ -528,10 +533,7 @@ async function applyClientField(
 ): Promise<BulkResult> {
   const userId = session.userId;
   if (!EDITABLE_CLIENT_FIELDS.has(field)) return { ok: 0, fail: 0, error: "Campo não editável." };
-  // Regras que exigem fluxo próprio (motivo) — bloqueadas na edição rápida
-  if (field === "status" && value === "PERDIDO") {
-    return { ok: 0, fail: 0, error: "Para marcar como PERDIDO use a ação de churn na ficha do cliente." };
-  }
+  // Saúde CRÍTICA exige motivo — feito na ficha, não na edição rápida.
   if (field === "healthStatus" && value === "CRITICO") {
     return { ok: 0, fail: 0, error: "Saúde CRÍTICA exige um motivo — altere na ficha do cliente." };
   }
@@ -600,9 +602,6 @@ export async function bulkClientEmpresa(ids: string[], v: string): Promise<BulkR
 }
 export async function bulkClientModelo(ids: string[], v: string): Promise<BulkResult> {
   return bulkField(ids, "businessModel", v);
-}
-export async function bulkClientStatus(ids: string[], v: string): Promise<BulkResult> {
-  return bulkField(ids, "status", v);
 }
 export async function bulkClientSaude(ids: string[], v: string): Promise<BulkResult> {
   return bulkField(ids, "healthStatus", v);

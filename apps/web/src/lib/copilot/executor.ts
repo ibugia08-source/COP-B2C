@@ -205,10 +205,7 @@ export async function executeCopilotAction(
           return { ok: false, error: "Marcar cliente como perdido exige o fluxo específico na ficha do cliente (motivo de churn)." };
         }
         const { moveClientStage } = await import("@/app/(app)/operacao/actions");
-        const result = await moveClientStage(d.clientId, d.pipelineStage, {
-          criticalReason: d.criticalReason,
-          actionPlan: d.actionPlan,
-        });
+        const result = await moveClientStage(d.clientId, d.pipelineStage);
         if (result.error) return { ok: false, error: result.error };
         return { ok: true, resultSummary: `Cliente movido para a etapa ${d.pipelineStage}.`, resultRef: `/clientes/${d.clientId}` };
       }

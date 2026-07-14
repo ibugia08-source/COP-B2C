@@ -1,10 +1,4 @@
-import {
-  ADS_STATUSES,
-  AGENCY_BRANDS,
-  BUSINESS_MODELS,
-  CLIENT_STATUSES,
-  HEALTH_STATUSES,
-} from "@/db/schema";
+import { ADS_STATUSES, AGENCY_BRANDS, BUSINESS_MODELS, HEALTH_STATUSES } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { canAccessClient } from "@/lib/auth/ownership";
 import type { SessionPayload } from "@/lib/auth/session";
@@ -72,11 +66,12 @@ export function assertChurn(
   return null;
 }
 
+// `status` NÃO está aqui de propósito: é derivado (ver lib/clients/state.ts),
+// nunca editado à mão.
 /** Enums aceitos por campo na edição inline/rápida da lista de clientes. */
 export const CLIENT_FIELD_ENUM: Record<string, readonly string[]> = {
   agencyBrand: AGENCY_BRANDS,
   businessModel: BUSINESS_MODELS,
-  status: CLIENT_STATUSES,
   healthStatus: HEALTH_STATUSES,
   adsStatus: ADS_STATUSES,
 };
@@ -86,7 +81,6 @@ export const EDITABLE_CLIENT_FIELDS = new Set([
   "agencyBrand",
   "businessModel",
   "niche",
-  "status",
   "healthStatus",
   "adsStatus",
   "trafficManager1Id",

@@ -6,7 +6,7 @@ import { isAdmin, requirePermission } from "@/lib/auth/guard";
 import { buildManagerDailyContext } from "@/lib/copilot/context";
 import { SUGGESTION_STATUS_META, SUGGESTION_TYPE_LABELS } from "@/lib/copilot/labels";
 import { syncCopilotSuggestions } from "@/lib/copilot/suggestions";
-import { formatDate, HEALTH_META, PIPELINE_STAGE_META, PRIORITY_META } from "@/lib/labels";
+import { formatDate, HEALTH_META, PRIORITY_META } from "@/lib/labels";
 import { Alert, Badge, Card, EmptyState, PageHeader, StatCard, StatusBadge } from "@/components/ui/primitives";
 import { SuggestionCard, type ActionView, type SuggestionView } from "./ui";
 
@@ -204,9 +204,6 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
                     <Link href={`/clientes/${c.id}`} className="truncate text-zinc-200 hover:text-emerald-300">{c.name}</Link>
                     <span className="flex shrink-0 gap-1">
                       <StatusBadge value={c.healthStatus} meta={HEALTH_META} />
-                      {(c.pipelineStage === "CLIENTE_CRITICO" || c.pipelineStage === "EM_OBSERVACAO") && (
-                        <StatusBadge value={c.pipelineStage} meta={PIPELINE_STAGE_META} />
-                      )}
                     </span>
                   </li>
                 ))}

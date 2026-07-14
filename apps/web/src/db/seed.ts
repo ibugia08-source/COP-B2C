@@ -144,8 +144,9 @@ async function seed() {
         createdById: bootstrapOwnerId,
       },
       {
+        // Aplicado pela automação de saúde (CLIENT_HEALTH_CHANGED → CRITICO),
+        // não por etapa — por isso sem pipelineStage.
         name: "Cliente Crítico", slug: "cliente-critico", taskType: "OPERACIONAL",
-        pipelineStage: "CLIENTE_CRITICO",
         items: t([
           { title: "Descrever problema", dueOffsetDays: 1, role: "GESTOR" },
           { title: "Identificar causa provável", dueOffsetDays: 1, role: "GESTOR" },

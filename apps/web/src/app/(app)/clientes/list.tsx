@@ -18,7 +18,6 @@ import {
   bulkClientGestor,
   bulkClientModelo,
   bulkClientSaude,
-  bulkClientStatus,
   bulkDeleteClientsList,
   deleteClientRow,
   updateClientField,
@@ -137,7 +136,6 @@ export function ClientsList({
     ? [
         { label: "Empresa…", options: options.brands, run: bulkClientEmpresa },
         { label: "Modelo…", options: options.models, run: bulkClientModelo },
-        { label: "Status…", options: options.statuses, run: bulkClientStatus },
         { label: "Saúde…", options: options.healths, run: bulkClientSaude },
         { label: "Gestor…", options: [{ value: "", label: "— Sem gestor —" }, ...options.users], run: bulkClientGestor },
       ]
@@ -185,8 +183,8 @@ export function ClientsList({
                 display={<span>{BUSINESS_MODEL_LABEL[c.businessModel] ?? c.businessModel}</span>} />
             </Td>
             <Td>
-              <InlineField id={c.id} field="status" value={c.status} canEdit={canUpdate} options={options.statuses}
-                display={<StatusBadge value={c.status} meta={CLIENT_STATUS_META} />} />
+              {/* status é derivado (etapa + saúde + pausa) — somente leitura */}
+              <StatusBadge value={c.status} meta={CLIENT_STATUS_META} />
             </Td>
             <Td>
               <InlineField id={c.id} field="healthStatus" value={c.healthStatus} canEdit={canUpdate} options={options.healths}

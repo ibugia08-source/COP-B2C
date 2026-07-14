@@ -48,9 +48,6 @@ export const PIPELINE_STAGE_META: Record<string, Meta> = {
   INTEGRACAO_SOCIAL_MEDIA: { label: "Integração Social Media", tone: "blue" },
   CRM: { label: "CRM", tone: "purple" },
   BASE_DE_CLIENTES: { label: "Base de clientes", tone: "green" },
-  EM_OBSERVACAO: { label: "Em observação", tone: "amber" },
-  CLIENTE_CRITICO: { label: "Cliente crítico", tone: "red" },
-  PAUSADO: { label: "Pausado", tone: "zinc" },
   CLIENTE_PERDIDO: { label: "Cliente perdido", tone: "red" },
 };
 

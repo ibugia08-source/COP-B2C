@@ -1,11 +1,5 @@
 import { z } from "zod";
-import {
-  ADS_STATUSES,
-  AGENCY_BRANDS,
-  BUSINESS_MODELS,
-  CLIENT_STATUSES,
-  HEALTH_STATUSES,
-} from "@/db/schema";
+import { ADS_STATUSES, AGENCY_BRANDS, BUSINESS_MODELS, HEALTH_STATUSES } from "@/db/schema";
 
 const optionalStr = z
   .string()
@@ -29,7 +23,6 @@ export const clientFormSchema = z.object({
   decisionMakerName: optionalStr,
   decisionMakerPhone: optionalStr,
   decisionMakerEmail: optionalStr.pipe(z.string().email("E-mail inválido").optional()),
-  status: z.enum(CLIENT_STATUSES),
   healthStatus: z.enum(HEALTH_STATUSES),
   adsStatus: z.enum(ADS_STATUSES),
   strategistId: optionalStr,

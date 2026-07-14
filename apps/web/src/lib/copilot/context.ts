@@ -99,12 +99,8 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
   const clientIds = assignedClients.map((c) => c.id);
   const clientName = new Map(assignedClients.map((c) => [c.id, c.name]));
 
-  const criticalClients = assignedClients.filter(
-    (c) => c.healthStatus === "CRITICO" || c.pipelineStage === "CLIENTE_CRITICO",
-  );
-  const observationClients = assignedClients.filter(
-    (c) => c.healthStatus === "OBSERVACAO" || c.pipelineStage === "EM_OBSERVACAO",
-  );
+  const criticalClients = assignedClients.filter((c) => c.healthStatus === "CRITICO");
+  const observationClients = assignedClients.filter((c) => c.healthStatus === "OBSERVACAO");
 
   // Tarefas do gestor
   const myOpenTasks = await db.query.tasks.findMany({

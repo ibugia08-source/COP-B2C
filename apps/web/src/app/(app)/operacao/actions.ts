@@ -15,31 +15,13 @@ import {
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
-import { canAccessClient } from "@/lib/auth/ownership";
-import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
+import { assertChurn, denyClientOutOfScope } from "@/lib/clients/rules";
 import { isValidOptionValue } from "@/lib/config-options";
 import { cascadeSafeDelete } from "@/lib/safe-delete";
 
 export type MoveResult = { error?: string; success?: string; requires?: "PERDIDO" | "CRITICO" };
 export type BulkResult = { ok: number; fail: number; error?: string; success?: string };
-
-/** Gate de ownership (mesma regra de clientes/actions.ts): negações vão para o ActivityLog. */
-async function denyClientOutOfScope(
-  session: SessionPayload,
-  clientId: string,
-  action: string,
-): Promise<{ error: string } | null> {
-  if (await canAccessClient(session, clientId)) return null;
-  await logActivity({
-    userId: session.userId,
-    action: "client.ownershipDenied",
-    entityType: "client",
-    entityId: clientId,
-    metadata: { action, reason: "ownership_scope" },
-  });
-  return { error: "Você não é responsável por este cliente." };
-}
 
 // Sincronização etapa do pipeline → status macro / saúde do cliente
 const STAGE_TO_STATUS: Partial<Record<PipelineStage, ClientStatus>> = {
@@ -91,9 +73,8 @@ export async function moveClientStage(
 
   // Regras obrigatórias por etapa
   if (toStage === "CLIENTE_PERDIDO") {
-    if (!extras?.churnReason || extras.churnReason.trim().length < 5 || !extras?.churnDate) {
-      return { requires: "PERDIDO", error: "Mover para CLIENTE PERDIDO exige motivo de churn e data da perda." };
-    }
+    const churnError = assertChurn(extras?.churnReason, extras?.churnDate);
+    if (churnError) return { requires: "PERDIDO", error: churnError };
   }
   if (toStage === "CLIENTE_CRITICO") {
     if (!extras?.criticalReason || extras.criticalReason.trim().length < 5 || !extras?.actionPlan || extras.actionPlan.trim().length < 5) {

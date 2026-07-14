@@ -5,21 +5,14 @@ import { agencyServices, clientMeetings, clients, tasks, users } from "@/db/sche
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { clientScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
-import {
-  ADS_META,
-  AGENCY_BRAND_META,
-  formatDate,
-  HEALTH_META,
-  PIPELINE_STAGE_META,
-  type Tone,
-} from "@/lib/labels";
-import { EmptyState, PageHeader, StatusBadge, Table, Td, Th } from "@/components/ui/primitives";
+import { HEALTH_META } from "@/lib/labels";
+import { EmptyState, PageHeader } from "@/components/ui/primitives";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { OperationKanban, type KanbanClient, type StageOption } from "./kanban";
 import { OperationFilters } from "./ui-filters";
 import { ModuleConfig } from "../module-config";
-import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
-import { bulkAssignClients, bulkDeleteClients, bulkMoveClients, bulkSetClientsHealth, deleteClient } from "./actions";
+import { BulkBar, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
+import { bulkAssignClients, bulkDeleteClients, bulkMoveClients, bulkSetClientsHealth } from "./actions";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -72,9 +65,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     ? allRows.filter((c) => (c.operationalProfile?.platforms ?? []).includes(servico))
     : allRows;
 
-  // meta de etapas (built-in + colunas custom) e colunas ativas do Kanban
-  const stageMeta: Record<string, { label: string; tone: Tone }> = { ...PIPELINE_STAGE_META };
-  for (const o of stageOptionsAll) stageMeta[o.value] = { label: o.label, tone: o.color };
+  // colunas ativas do Kanban (built-in + colunas custom)
   const stageActive = stageOptionsAll.filter((o) => o.isActive);
   const kanbanColumns: StageOption[] = stageActive.map((o) => ({ value: o.value, label: o.label, color: o.color }));
 
@@ -241,7 +232,6 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
             </Link>
             <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
               {viewBtn("kanban", "Kanban")}
-              {viewBtn("lista", "Lista")}
               {viewBtn("calendario", "Calendário")}
             </span>
             {canCreate && (
@@ -275,56 +265,6 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
           title="Nenhum cliente no pipeline"
           description="Cadastre clientes ou limpe os filtros para vê-los aqui."
         />
-      ) : visao === "lista" ? (
-        <div>
-          <Table
-            minWidth="840px"
-            head={
-              <>
-                <Th className="w-8"></Th>
-                <Th>Cliente</Th>
-                <Th>Etapa</Th>
-                <Th>Saúde</Th>
-                <Th>Ads</Th>
-                <Th>Empresa</Th>
-                <Th>Gestor 1</Th>
-                <Th>Próximo prazo</Th>
-                <Th>Pendências</Th>
-                {canDelete && <Th className="w-10"></Th>}
-              </>
-            }
-          >
-            {kanbanClients.map((c) => (
-              <tr key={c.id} className="hover:bg-zinc-900/60">
-                <Td><SelectCircle id={c.id} /></Td>
-                <Td>
-                  <Link href={`/clientes/${c.id}`} className="font-medium text-zinc-100 hover:text-emerald-300">
-                    {c.name}
-                  </Link>
-                  {c.niche && <p className="text-xs text-zinc-500">{c.niche}</p>}
-                </Td>
-                <Td><StatusBadge value={c.pipelineStage} meta={stageMeta} /></Td>
-                <Td><StatusBadge value={c.healthStatus} meta={HEALTH_META} /></Td>
-                <Td><StatusBadge value={c.adsStatus} meta={ADS_META} /></Td>
-                <Td><StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} /></Td>
-                <Td className="text-zinc-400">{c.gestor1 ?? "—"}</Td>
-                <Td className={c.nextDue && new Date(c.nextDue) < new Date() ? "text-red-400" : "text-zinc-400"}>
-                  {c.nextDue ? formatDate(new Date(c.nextDue)) : "—"}
-                </Td>
-                <Td className="text-xs text-amber-400">{c.pendencias.join(" · ") || "—"}</Td>
-                {canDelete && <Td className="text-right"><CardTrash id={c.id} deleteAction={deleteClient} label="cliente" /></Td>}
-              </tr>
-            ))}
-          </Table>
-          {canCreate && (
-            <Link
-              href="/clientes/novo"
-              className="mt-2 block rounded-lg border border-dashed border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300"
-            >
-              + Adicionar novo cliente
-            </Link>
-          )}
-        </div>
       ) : (
         <OperationKanban clients={kanbanClients} columns={kanbanColumns} canMove={canMove} canCreate={canCreate} canDelete={canDelete} />
       )}

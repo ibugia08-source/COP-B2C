@@ -5,10 +5,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
-  ADS_STATUSES,
-  AGENCY_BRANDS,
-  BUSINESS_MODELS,
-  CLIENT_STATUSES,
   clientHealthLogs,
   clientMeetings,
   clientOperationalProfiles,
@@ -21,35 +17,20 @@ import {
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
-import { canAccessClient } from "@/lib/auth/ownership";
 import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
+import {
+  assertChurn,
+  assertCriticalNeedsNote,
+  CLIENT_FIELD_ENUM,
+  denyClientOutOfScope,
+  EDITABLE_CLIENT_FIELDS,
+} from "@/lib/clients/rules";
 import { isValidOptionValue } from "@/lib/config-options";
 import { cascadeSafeDelete } from "@/lib/safe-delete";
 import { clientFormSchema, operationalProfileSchema } from "@/lib/validations/client";
 
 export type ActionState = { error?: string; success?: string };
-
-/**
- * Gate de ownership: escrever num cliente exige ser um dos responsáveis
- * (estrategista, gestores, responsável principal) — OWNER/ADMIN operam tudo.
- * Negações são registradas em activityLogs.
- */
-async function denyClientOutOfScope(
-  session: SessionPayload,
-  clientId: string,
-  action: string,
-): Promise<ActionState | null> {
-  if (await canAccessClient(session, clientId)) return null;
-  await logActivity({
-    userId: session.userId,
-    action: "client.ownershipDenied",
-    entityType: "client",
-    entityId: clientId,
-    metadata: { action, reason: "ownership_scope" },
-  });
-  return { error: "Você não é responsável por este cliente." };
-}
 
 function parseClientForm(formData: FormData) {
   return clientFormSchema.safeParse({
@@ -86,9 +67,8 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   const d = parsed.data;
 
-  if (d.healthStatus === "CRITICO" && !d.notes) {
-    return { error: "Cliente com saúde CRÍTICA exige uma observação explicando o motivo." };
-  }
+  const criticalError = assertCriticalNeedsNote(d.healthStatus, d.notes);
+  if (criticalError) return { error: criticalError };
 
   // etapa inicial do pipeline (vinda do Kanban de Operação); padrão do schema se ausente
   const stage = String(formData.get("pipelineStage") || "");
@@ -144,9 +124,8 @@ export async function updateClient(
   if (d.status === "PERDIDO" && existing.status !== "PERDIDO") {
     return { error: "Para marcar como PERDIDO use a ação específica, que exige motivo de churn." };
   }
-  if (d.healthStatus === "CRITICO" && !d.notes) {
-    return { error: "Cliente com saúde CRÍTICA exige uma observação explicando o motivo." };
-  }
+  const criticalError = assertCriticalNeedsNote(d.healthStatus, d.notes);
+  if (criticalError) return { error: criticalError };
 
   await db
     .update(clients)
@@ -232,9 +211,8 @@ export async function changeClientHealth(
   const auth = await checkPermission("clients.update");
   if (!auth.ok) return { error: auth.error };
   if (!HEALTH_STATUSES.includes(newStatus as HealthStatus)) return { error: "Status de saúde inválido." };
-  if (newStatus === "CRITICO" && reason.trim().length < 5) {
-    return { error: "Mudança para CRÍTICO exige uma observação (mínimo 5 caracteres)." };
-  }
+  const criticalError = assertCriticalNeedsNote(newStatus, reason);
+  if (criticalError) return { error: criticalError };
 
   const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!existing) return { error: "Cliente não encontrado." };
@@ -291,8 +269,8 @@ export async function markClientLost(
 ): Promise<ActionState> {
   const auth = await checkPermission("clients.moveStatus");
   if (!auth.ok) return { error: auth.error };
-  if (churnReason.trim().length < 5) return { error: "Informe o motivo do churn (mínimo 5 caracteres)." };
-  if (!churnDate) return { error: "Informe a data da perda." };
+  const churnError = assertChurn(churnReason, churnDate);
+  if (churnError) return { error: churnError };
 
   const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!existing) return { error: "Cliente não encontrado." };
@@ -489,23 +467,6 @@ export async function saveOperationalProfile(
 
 export type BulkResult = { ok: number; fail: number; error?: string; success?: string };
 
-const CLIENT_FIELD_ENUM: Record<string, readonly string[]> = {
-  agencyBrand: AGENCY_BRANDS,
-  businessModel: BUSINESS_MODELS,
-  status: CLIENT_STATUSES,
-  healthStatus: HEALTH_STATUSES,
-  adsStatus: ADS_STATUSES,
-};
-const EDITABLE_FIELDS = new Set([
-  "agencyBrand",
-  "businessModel",
-  "niche",
-  "status",
-  "healthStatus",
-  "adsStatus",
-  "trafficManager1Id",
-]);
-
 async function applyClientField(
   ids: string[],
   field: string,
@@ -513,7 +474,7 @@ async function applyClientField(
   session: SessionPayload,
 ): Promise<BulkResult> {
   const userId = session.userId;
-  if (!EDITABLE_FIELDS.has(field)) return { ok: 0, fail: 0, error: "Campo não editável." };
+  if (!EDITABLE_CLIENT_FIELDS.has(field)) return { ok: 0, fail: 0, error: "Campo não editável." };
   // Regras que exigem fluxo próprio (motivo) — bloqueadas na edição rápida
   if (field === "status" && value === "PERDIDO") {
     return { ok: 0, fail: 0, error: "Para marcar como PERDIDO use a ação de churn na ficha do cliente." };

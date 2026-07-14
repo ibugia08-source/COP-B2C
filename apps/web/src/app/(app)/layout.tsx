@@ -17,14 +17,13 @@ const NAV_GROUPS: NavGroupDef[] = [
     items: [
       { href: "/", label: "Dashboard", icon: "▦" },
       { href: "/copiloto", label: "Co-piloto", icon: "🧭", permission: "tasks.view" },
-      { href: "/operacao", label: "Operação", icon: "🔄", permission: "clients.view" },
+      { href: "/operacao", label: "Clientes & Operação", icon: "🔄", permission: "clients.view" },
       { href: "/tarefas", label: "Tarefas", icon: "☑", permission: "tasks.view" },
     ],
   },
   {
     label: "Gestão",
     items: [
-      { href: "/clientes", label: "Clientes", icon: "👥", permission: "clients.view" },
       { href: "/ativos", label: "Banco de Ativos", icon: "🗄️", permission: "digital_assets.view" },
       { href: "/documentos", label: "Documentos", icon: "📄" },
       { href: "/metas", label: "Metas", icon: "🎯", permission: "goals.view" },
@@ -58,7 +57,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Navegação mobile: 4 primários na bottom bar + o restante na folha "Mais"
   const flatNav = navGroups.flatMap((g) => g.items);
-  const PRIMARY_HREFS = ["/", "/operacao", "/tarefas", "/clientes"];
+  const PRIMARY_HREFS = ["/", "/operacao", "/tarefas", "/ativos"];
   const mobilePrimary = PRIMARY_HREFS.map((h) => flatNav.find((i) => i.href === h)).filter(
     (i): i is NavItem => !!i,
   );

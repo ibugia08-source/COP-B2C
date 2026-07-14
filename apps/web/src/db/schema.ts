@@ -1668,6 +1668,7 @@ export const formSubmissionsRelations = relations(formSubmissions, ({ one }) => 
     references: [formTemplates.id],
   }),
   client: one(clients, { fields: [formSubmissions.clientId], references: [clients.id] }),
+  submittedBy: one(users, { fields: [formSubmissions.submittedById], references: [users.id] }),
 }));
 
 // ---------------------------------------------------------------------------

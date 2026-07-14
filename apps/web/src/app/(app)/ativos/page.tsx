@@ -7,6 +7,7 @@ import { assetScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import {
   ASSET_PLATFORM_LABEL,
+  ASSET_PRIORITY_META,
   ASSET_STATUS_META,
   ASSET_TYPE_LABEL,
   formatDate,
@@ -266,10 +267,11 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
               <Th>Tipo</Th>
               <Th>Plataforma</Th>
               <Th>Status</Th>
+              <Th>Prioridade</Th>
               <Th>Responsável</Th>
               <Th>Revisão</Th>
               <Th>Indicadores</Th>
-              {canDelete && <Th className="w-10"></Th>}
+              {(canUpdate || canDelete) && <Th className="w-28 text-right">Ações</Th>}
             </>
           }
         >
@@ -290,6 +292,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
               <Td className="text-zinc-400">{ASSET_TYPE_LABEL[a.assetType]}</Td>
               <Td className="text-zinc-400">{ASSET_PLATFORM_LABEL[a.platform]}</Td>
               <Td><StatusBadge value={a.status} meta={statusMeta} /></Td>
+              <Td className="text-zinc-400">{ASSET_PRIORITY_META[a.priority]?.label ?? a.priority}</Td>
               <Td>{a.assignedTo ? <UserAvatar name={a.assignedTo.name} size="sm" /> : <span className="text-amber-500">—</span>}</Td>
               <Td className={a.nextReviewAt && a.nextReviewAt < now ? "text-amber-400" : "text-zinc-400"}>
                 {formatDate(a.nextReviewAt)}
@@ -300,7 +303,22 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
                   {a.attachments.length > 0 && <Badge tone="blue">📎 {a.attachments.length}</Badge>}
                 </span>
               </Td>
-              {canDelete && <Td className="text-right"><CardTrash id={a.id} deleteAction={deleteAsset} label="ativo" /></Td>}
+              {(canUpdate || canDelete) && (
+                <Td className="text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    {canUpdate && (
+                      <AssetFormButton
+                        asset={a}
+                        groups={groupOptions}
+                        clients={allClients}
+                        users={allUsers}
+                        canCreateSecrets={canCreateSecrets}
+                      />
+                    )}
+                    {canDelete && <CardTrash id={a.id} deleteAction={deleteAsset} label="ativo" />}
+                  </div>
+                </Td>
+              )}
             </tr>
           ))}
         </Table>

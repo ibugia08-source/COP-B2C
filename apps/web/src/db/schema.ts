@@ -416,6 +416,9 @@ export const clients = pgTable(
     isPaused: boolean("is_paused").notNull().default(false),
     pausedAt: timestamp("paused_at", { mode: "date" }),
     pauseReason: text("pause_reason"),
+    // Ordem manual do card na coluna do Kanban de Operação (menor = topo).
+    // Cliente novo entra com o maior valor (fim da fila); drag-and-drop reordena.
+    boardOrder: integer("board_order").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

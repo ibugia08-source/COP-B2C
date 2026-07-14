@@ -7,7 +7,7 @@ import { ADS_META, AGENCY_BRAND_META, formatDate, HEALTH_META, TONE_CLASSES, typ
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
-import { deleteClient, moveClientStage } from "./actions";
+import { deleteClient, moveClientStage, reorderClientOnBoard } from "./actions";
 
 export type StageOption = { value: string; label: string; color: Tone };
 
@@ -80,13 +80,36 @@ export function OperationKanban({
     });
   }
 
+  function doReorder(clientId: string, beforeClientId: string | null) {
+    setError(null);
+    startTransition(async () => {
+      const result = await reorderClientOnBoard(clientId, beforeClientId);
+      if (result.error) setError(result.error);
+      else router.refresh();
+    });
+  }
+
   function onDrop(stage: string) {
     setOverStage(null);
     if (!dragId || !canMove || stage === "__outros__") return;
     const client = clients.find((c) => c.id === dragId);
     setDragId(null);
-    if (!client || client.pipelineStage === stage) return;
-    doMove(client, stage);
+    if (!client) return;
+    // soltar na área da coluna: mesma coluna = manda para o fim; outra = move etapa
+    if (client.pipelineStage === stage) doReorder(client.id, null);
+    else doMove(client, stage);
+  }
+
+  // soltar SOBRE um card: mesma coluna = reordena antes dele; outra = move etapa
+  function onDropCard(targetId: string, targetStage: string) {
+    setOverStage(null);
+    const draggedId = dragId;
+    setDragId(null);
+    if (!draggedId || !canMove || draggedId === targetId) return;
+    const dragged = clients.find((c) => c.id === draggedId);
+    if (!dragged) return;
+    if (dragged.pipelineStage === targetStage) doReorder(draggedId, targetId);
+    else doMove(dragged, targetStage);
   }
 
   return (
@@ -141,9 +164,21 @@ export function OperationKanban({
                     draggable={canMove}
                     onDragStart={() => setDragId(c.id)}
                     onDragEnd={() => setDragId(null)}
+                    onDragOver={(e) => {
+                      if (canMove && dragId && dragId !== c.id) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.stopPropagation();
+                      onDropCard(c.id, col.value);
+                    }}
                     className={`rounded-lg border border-zinc-800 bg-zinc-900 p-3 shadow-sm transition hover:border-zinc-600 ${
                       canMove ? "cursor-grab active:cursor-grabbing" : ""
-                    } ${dragId === c.id ? "opacity-50" : ""}`}
+                    } ${dragId === c.id ? "opacity-50" : ""} ${
+                      dragId && dragId !== c.id ? "hover:border-emerald-500" : ""
+                    }`}
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <SelectCircle id={c.id} />

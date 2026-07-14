@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -77,6 +77,9 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
       (await isValidOptionValue("operation", "pipeline", stage)));
 
   const effectiveStage: PipelineStage = stageValid ? (stage as PipelineStage) : "NOVO_CLIENTE";
+  // cliente novo entra no fim da fila (maior boardOrder do quadro)
+  const [agg] = await db.select({ m: max(clients.boardOrder) }).from(clients);
+  const nextBoardOrder = (agg?.m ?? 0) + 10;
   const [client] = await db
     .insert(clients)
     .values({
@@ -84,6 +87,7 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
       pipelineStage: effectiveStage,
       // status é sempre derivado (nunca vem do formulário).
       status: deriveClientStatus({ pipelineStage: effectiveStage, healthStatus: d.healthStatus, isPaused: false }),
+      boardOrder: nextBoardOrder,
       startDate: d.startDate ? new Date(d.startDate) : null,
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,

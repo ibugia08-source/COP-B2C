@@ -46,8 +46,8 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     db.query.clients.findMany({
       where: filters.length ? and(...filters) : undefined,
       with: { trafficManager1: true, strategist: true, operationalProfile: true },
-      // fila da esteira: mais antigos no topo, cliente novo entra no fim da coluna
-      orderBy: (c, { asc: a }) => [a(c.createdAt)],
+      // ordem manual do Kanban (boardOrder); cliente novo entra no fim da coluna
+      orderBy: (c, { asc: a }) => [a(c.boardOrder), a(c.createdAt)],
     }),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
     db.selectDistinct({ niche: clients.niche }).from(clients),

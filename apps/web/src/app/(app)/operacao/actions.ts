@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, asc, eq, max, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -61,7 +61,13 @@ export async function moveClientStage(
     healthStatus: client.healthStatus,
     isPaused: client.isPaused,
   });
-  const updates: Partial<typeof clients.$inferInsert> = { pipelineStage: toStage, status };
+  // card movido de coluna entra no fim da coluna destino (maior boardOrder + 10)
+  const [agg] = await db.select({ m: max(clients.boardOrder) }).from(clients);
+  const updates: Partial<typeof clients.$inferInsert> = {
+    pipelineStage: toStage,
+    status,
+    boardOrder: (agg?.m ?? 0) + 10,
+  };
   if (toStage === "CLIENTE_PERDIDO") {
     updates.churnReason = extras!.churnReason!.trim();
     updates.churnDate = new Date(extras!.churnDate!);
@@ -100,6 +106,56 @@ export async function moveClientStage(
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${clientId}`);
   return { success: "Cliente movido de etapa." };
+}
+
+/**
+ * Reordena um cliente DENTRO da sua coluna do Kanban (drag-and-drop).
+ * `beforeClientId` = id do card antes do qual inserir; null = fim da coluna.
+ * Não muda a etapa (mudança de coluna é feita por moveClientStage).
+ */
+export async function reorderClientOnBoard(
+  clientId: string,
+  beforeClientId: string | null,
+): Promise<MoveResult> {
+  const auth = await checkPermission("clients.moveStatus");
+  if (!auth.ok) return { error: auth.error };
+  if (clientId === beforeClientId) return { success: "Sem mudança." };
+
+  const client = await db.query.clients.findFirst({
+    where: eq(clients.id, clientId),
+    columns: { id: true, pipelineStage: true },
+  });
+  if (!client) return { error: "Cliente não encontrado." };
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "reorderClientOnBoard");
+  if (denied) return denied;
+
+  // demais cards da mesma coluna, na ordem atual
+  const col = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.pipelineStage, client.pipelineStage), ne(clients.id, clientId)))
+    .orderBy(asc(clients.boardOrder), asc(clients.createdAt));
+
+  const idx = beforeClientId ? col.findIndex((c) => c.id === beforeClientId) : -1;
+  const insertAt = idx < 0 ? col.length : idx;
+  const orderedIds = [
+    ...col.slice(0, insertAt).map((c) => c.id),
+    clientId,
+    ...col.slice(insertAt).map((c) => c.id),
+  ];
+
+  // renumera a coluna inteira num único UPDATE (VALUES), com folga de 10
+  const values = sql.join(
+    orderedIds.map((id, i) => sql`(${id}::text, ${(i + 1) * 10}::int)`),
+    sql`, `,
+  );
+  await db.execute(
+    sql`UPDATE "clients" AS c SET "board_order" = v.ord FROM (VALUES ${values}) AS v(id, ord) WHERE c.id = v.id`,
+  );
+
+  revalidatePath("/operacao");
+  return { success: "Ordem atualizada." };
 }
 
 // ---------------------------------------------------------------------------

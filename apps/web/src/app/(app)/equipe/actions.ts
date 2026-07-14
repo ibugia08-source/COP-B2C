@@ -11,6 +11,8 @@ import type { SessionPayload } from "@/lib/auth/session";
 import { hashPassword } from "@/lib/auth/password";
 import { PRIVILEGED_ROLES, type PermissionKey } from "@/lib/auth/permissions";
 import { notifyUser } from "@/lib/notify";
+import { buildStorageKey, getStorage, maxUploadBytes } from "@/lib/storage";
+import { UPLOAD_WHITELISTS, validateUpload } from "@/lib/storage/validation";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -365,6 +367,89 @@ export async function deleteTeamMember(userId: string): Promise<ActionState> {
   });
   revalidatePath("/equipe");
   return { success: `${user.name} foi excluído(a) do sistema.` };
+}
+
+/**
+ * Envia (ou substitui) a foto de perfil do colaborador. Valida por conteúdo
+ * (magic bytes), guarda o arquivo no storage (Vercel Blob em prod / disco em
+ * dev) e grava a KEY em users.avatar_url. A foto é servida pela rota autenticada
+ * /equipe/avatar/[id], que funciona nos dois ambientes.
+ */
+export async function uploadMemberAvatar(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const auth = await guardTeam("team.update");
+  if (!auth.ok) return { error: auth.error };
+
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { error: "Colaborador não informado." };
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return { error: "Usuário não encontrado." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Selecione uma imagem." };
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const valid = await validateUpload({
+    buffer,
+    fileName: file.name,
+    allowed: UPLOAD_WHITELISTS.avatars,
+    maxBytes: maxUploadBytes(),
+  });
+  if (!valid.ok) return { error: valid.error };
+
+  const { key } = buildStorageKey("avatars", file.name);
+  await getStorage().upload({ path: key, body: buffer, contentType: valid.mime });
+
+  const previousKey = user.avatarUrl;
+  await db.update(users).set({ avatarUrl: key }).where(eq(users.id, userId));
+  // remove a foto antiga (best-effort; não bloqueia se falhar)
+  if (previousKey && previousKey !== key) {
+    try {
+      await getStorage().delete(previousKey);
+    } catch {
+      /* arquivo antigo já removido */
+    }
+  }
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "team.avatarUpdated",
+    entityType: "user",
+    entityId: userId,
+    metadata: { email: user.email },
+  });
+  revalidatePath("/equipe");
+  return { success: "Foto atualizada." };
+}
+
+/** Remove a foto de perfil do colaborador (volta às iniciais). */
+export async function removeMemberAvatar(userId: string): Promise<ActionState> {
+  const auth = await guardTeam("team.update");
+  if (!auth.ok) return { error: auth.error };
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return { error: "Usuário não encontrado." };
+  if (!user.avatarUrl) return { success: "Sem foto para remover." };
+
+  const key = user.avatarUrl;
+  await db.update(users).set({ avatarUrl: null }).where(eq(users.id, userId));
+  try {
+    await getStorage().delete(key);
+  } catch {
+    /* arquivo já removido */
+  }
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "team.avatarRemoved",
+    entityType: "user",
+    entityId: userId,
+    metadata: { email: user.email },
+  });
+  revalidatePath("/equipe");
+  return { success: "Foto removida." };
 }
 
 export async function toggleMemberActive(userId: string): Promise<ActionState> {

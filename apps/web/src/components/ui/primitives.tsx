@@ -263,12 +263,27 @@ export function UserAvatar({
   name,
   size = "md",
   title,
+  src,
 }: {
   name: string | null | undefined;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   title?: string;
+  /** URL/rota da foto; ausente ou nula cai no fallback de iniciais. */
+  src?: string | null;
 }) {
   if (!name) return <span className="text-zinc-500">—</span>;
+  const sz = size === "sm" ? "h-6 w-6 text-[10px]" : size === "lg" ? "h-16 w-16 text-lg" : "h-8 w-8 text-xs";
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        title={title ?? name}
+        className={`inline-block shrink-0 rounded-full object-cover ${sz}`}
+      />
+    );
+  }
   const initials = name
     .split(" ")
     .filter(Boolean)
@@ -276,7 +291,6 @@ export function UserAvatar({
     .map((p) => p[0]!.toUpperCase())
     .join("");
   const color = AVATAR_COLORS[(name.charCodeAt(0) + name.length) % AVATAR_COLORS.length];
-  const sz = size === "sm" ? "h-6 w-6 text-[10px]" : "h-8 w-8 text-xs";
   return (
     <span
       title={title ?? name}

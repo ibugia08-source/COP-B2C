@@ -78,6 +78,10 @@ export default async function EquipePage() {
                     phone: member.teamMember?.phone ?? null,
                     roles: member.userRoles.map((ur) => ur.role.name as RoleName),
                     isSelf: member.id === session.userId,
+                    // rota autenticada; ?v muda a cada upload (busta o cache do browser)
+                    avatarUrl: member.avatarUrl
+                      ? `/equipe/avatar/${member.id}?v=${member.avatarUrl.split("/").pop()?.split("__")[0]?.slice(0, 8) ?? ""}`
+                      : null,
                   }}
                   canUpdate={canUpdate}
                   canDeactivate={canDeactivate}

@@ -1,18 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { ROLE_NAMES, type RoleName } from "@/db/schema";
 import { ACCESS_LEVEL_PRESETS, ROLE_LABELS } from "@/lib/auth/permissions";
-import { Alert, Badge, Button } from "@/components/ui/primitives";
+import { Alert, Badge, Button, UserAvatar } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal } from "@/components/ui/overlay";
 import {
   approveUser,
   createTeamMember,
   deleteTeamMember,
   rejectUser,
+  removeMemberAvatar,
   toggleMemberActive,
   updateMemberProfile,
+  uploadMemberAvatar,
   updateUserRoles,
   type ActionState,
 } from "./actions";
@@ -209,7 +211,53 @@ type MemberInfo = {
   phone: string | null;
   roles: RoleName[];
   isSelf: boolean;
+  avatarUrl: string | null;
 };
+
+// Editor de foto de perfil (upload por magic bytes; remove volta às iniciais).
+function AvatarEditor({ member }: { member: MemberInfo }) {
+  const router = useRouter();
+  const [state, formAction, pending] = useActionState<ActionState, FormData>(uploadMemberAvatar, {});
+  const [removing, startRemove] = useTransition();
+
+  useEffect(() => {
+    if (state.success) router.refresh();
+  }, [state.success, router]);
+
+  return (
+    <div className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+      <UserAvatar name={member.name} src={member.avatarUrl} size="lg" />
+      <div className="space-y-1.5">
+        <form action={formAction} className="flex items-center gap-2">
+          <input type="hidden" name="userId" value={member.id} />
+          <label className="cursor-pointer rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-emerald-600 hover:text-emerald-300">
+            {pending ? "Enviando..." : member.avatarUrl ? "Trocar foto" : "Enviar foto"}
+            <input
+              type="file"
+              name="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={pending}
+              onChange={(e) => e.currentTarget.form?.requestSubmit()}
+              className="hidden"
+            />
+          </label>
+          {member.avatarUrl && (
+            <button
+              type="button"
+              disabled={removing}
+              onClick={() => startRemove(async () => { await removeMemberAvatar(member.id); router.refresh(); })}
+              className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 transition hover:text-red-400"
+            >
+              {removing ? "..." : "Remover"}
+            </button>
+          )}
+        </form>
+        <p className="text-[11px] text-zinc-600">PNG, JPG ou WEBP.</p>
+        {state.error && <p className="text-[11px] text-red-500">{state.error}</p>}
+      </div>
+    </div>
+  );
+}
 
 export function MemberRow({
   member,
@@ -271,8 +319,13 @@ export function MemberRow({
   return (
     <tr className={member.isActive ? "" : "opacity-60"}>
       <td className="px-4 py-3 font-medium">
-        {member.name}
-        {member.isSelf && <span className="ml-2 text-xs text-zinc-500">(você)</span>}
+        <div className="flex items-center gap-2.5">
+          <UserAvatar name={member.name} src={member.avatarUrl} size="sm" />
+          <span>
+            {member.name}
+            {member.isSelf && <span className="ml-2 text-xs text-zinc-500">(você)</span>}
+          </span>
+        </div>
       </td>
       <td className="px-4 py-3 text-zinc-400">{member.email}</td>
       <td className="px-4 py-3 text-zinc-400">{member.position ?? "—"}</td>
@@ -321,6 +374,7 @@ export function MemberRow({
           {/* Editar: nome, cargo, telefone e nível de acesso */}
           <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Editar — ${member.name}`} wide>
             <div className="space-y-4 text-left">
+              <AvatarEditor member={member} />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm text-zinc-300">Nome *</label>

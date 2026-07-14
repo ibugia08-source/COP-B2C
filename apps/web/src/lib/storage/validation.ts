@@ -7,6 +7,7 @@ import { fileTypeFromBuffer } from "file-type";
 export const UPLOAD_WHITELISTS = {
   ativos: ["png", "jpg", "webp", "pdf", "txt", "csv", "xlsx", "docx", "mp4"],
   documentos: ["png", "jpg", "webp", "pdf", "txt", "csv", "xlsx", "docx", "mp4"],
+  avatars: ["png", "jpg", "webp"],
 } as const satisfies Record<string, readonly string[]>;
 
 /** Formatos texto sem assinatura binária — validados por extensão + conteúdo textual. */

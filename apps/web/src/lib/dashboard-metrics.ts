@@ -44,10 +44,10 @@ export type MetricDef = {
 };
 
 export const METRIC_CATALOG: MetricDef[] = [
-  { key: "clientes_ativos", label: "Clientes ativos", category: "Clientes", tone: "text-emerald-400", href: "/clientes?status=ATIVO", permission: "clients.view" },
-  { key: "clientes_criticos", label: "Clientes críticos", category: "Clientes", tone: "text-red-400", href: "/clientes?saude=CRITICO", permission: "clients.view", alert: true },
-  { key: "clientes_observacao", label: "Clientes em observação", category: "Clientes", tone: "text-amber-400", href: "/clientes?saude=OBSERVACAO", permission: "clients.view" },
-  { key: "clientes_ads_pausado", label: "Clientes com ads pausado", category: "Clientes", tone: "text-amber-400", href: "/clientes?ads=PAUSADO", permission: "clients.view", alert: true },
+  { key: "clientes_ativos", label: "Clientes ativos", category: "Clientes", tone: "text-emerald-400", href: "/operacao?modo=clientes&status=ATIVO", permission: "clients.view" },
+  { key: "clientes_criticos", label: "Clientes críticos", category: "Clientes", tone: "text-red-400", href: "/operacao?modo=clientes&saude=CRITICO", permission: "clients.view", alert: true },
+  { key: "clientes_observacao", label: "Clientes em observação", category: "Clientes", tone: "text-amber-400", href: "/operacao?modo=clientes&saude=OBSERVACAO", permission: "clients.view" },
+  { key: "clientes_ads_pausado", label: "Clientes com ads pausado", category: "Clientes", tone: "text-amber-400", href: "/operacao?modo=clientes&ads=PAUSADO", permission: "clients.view", alert: true },
   { key: "tarefas_atrasadas", label: "Tarefas atrasadas", category: "Tarefas", tone: "text-red-400", href: "/tarefas?visao=atrasadas", permission: "tasks.view", alert: true },
   { key: "tarefas_sem_responsavel", label: "Tarefas sem responsável", category: "Tarefas", tone: "text-amber-400", href: "/tarefas?visao=sem-responsavel", permission: "tasks.view", alert: true },
   { key: "minhas_tarefas_pendentes", label: "Minhas tarefas pendentes", category: "Tarefas", tone: "text-sky-400", href: "/tarefas?visao=minhas", permission: "tasks.view", personal: true },
@@ -61,7 +61,7 @@ export const METRIC_CATALOG: MetricDef[] = [
   { key: "ativos_revisao_pendente", label: "Revisões pendentes de ativos", category: "Ativos digitais", tone: "text-purple-400", href: "/ativos?revisao=pendente", permission: "digital_assets.view", alert: true },
   { key: "metas_andamento", label: "Metas em andamento", category: "Metas", tone: "text-sky-400", href: "/metas", permission: "goals.view" },
   { key: "metas_prazo", label: "Metas próximas do prazo", category: "Metas", tone: "text-amber-400", href: "/metas", permission: "goals.view", alert: true },
-  { key: "alertas_operacionais", label: "Alertas operacionais", category: "Alertas", tone: "text-red-400", href: "/clientes", permission: "clients.view", hint: "pendências que exigem ação", alert: true },
+  { key: "alertas_operacionais", label: "Alertas operacionais", category: "Alertas", tone: "text-red-400", href: "/operacao", permission: "clients.view", hint: "pendências que exigem ação", alert: true },
 ];
 
 export const METRIC_BY_KEY: Record<MetricKey, MetricDef> = Object.fromEntries(

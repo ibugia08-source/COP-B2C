@@ -172,6 +172,7 @@ export async function updateClient(
 
   revalidatePath(`/clientes/${clientId}`);
   revalidatePath("/clientes");
+  revalidatePath("/operacao");
   return { success: "Cliente atualizado." };
 }
 
@@ -237,6 +238,7 @@ export async function changeClientHealth(
 
   revalidatePath(`/clientes/${clientId}`);
   revalidatePath("/clientes");
+  revalidatePath("/operacao");
   return { success: "Saúde da conta atualizada." };
 }
 
@@ -261,6 +263,7 @@ export async function toggleAdsStatus(clientId: string, newStatus: AdsStatus): P
 
   revalidatePath(`/clientes/${clientId}`);
   revalidatePath("/clientes");
+  revalidatePath("/operacao");
   return { success: `Status de anúncios alterado para ${newStatus}.` };
 }
 

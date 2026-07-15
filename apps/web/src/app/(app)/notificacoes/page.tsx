@@ -44,12 +44,21 @@ async function markRead(formData: FormData) {
   revalidatePath("/");
 }
 
-const ENTITY_LINK: Record<string, string> = {
-  goal: "/metas",
-  task: "/tarefas",
-  digitalAsset: "/ativos",
-  client: "/clientes",
-};
+// Link direto para o registro específico (não só o índice) quando há entityId.
+function entityHref(type: string | null, id: string | null): string | undefined {
+  switch (type) {
+    case "client":
+      return id ? `/clientes/${id}` : "/operacao";
+    case "task":
+      return id ? `/tarefas/${id}` : "/tarefas";
+    case "digitalAsset":
+      return id ? `/ativos/${id}` : "/ativos";
+    case "goal":
+      return "/metas";
+    default:
+      return undefined;
+  }
+}
 
 export default async function NotificacoesPage() {
   const session = await requireSession();
@@ -84,7 +93,7 @@ export default async function NotificacoesPage() {
       ) : (
         <div className="space-y-2">
           {rows.map((n) => {
-            const link = n.entityType ? ENTITY_LINK[n.entityType] : undefined;
+            const link = entityHref(n.entityType, n.entityId);
             return (
               <div
                 key={n.id}

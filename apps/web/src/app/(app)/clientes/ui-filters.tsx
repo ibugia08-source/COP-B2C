@@ -126,7 +126,16 @@ export function ClientFilters({
       {hasFilters && (
         <button
           type="button"
-          onClick={() => startTransition(() => router.replace(pathname))}
+          onClick={() => {
+            // preserva o modo de visualização e a visão (Kanban/Calendário) ao limpar
+            const next = new URLSearchParams();
+            const m = params.get("modo");
+            if (m) next.set("modo", m);
+            const v = params.get("visao");
+            if (v) next.set("visao", v);
+            const qs = next.toString();
+            startTransition(() => router.replace(qs ? `${pathname}?${qs}` : pathname));
+          }}
           className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 hover:text-white"
         >
           Limpar filtros

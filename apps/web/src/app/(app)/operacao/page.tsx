@@ -78,14 +78,14 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       orderBy: (c, { asc: a }) => [a(c.boardOrder), a(c.createdAt)],
     }),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
-    db.selectDistinct({ niche: clients.niche }).from(clients),
+    db.selectDistinct({ niche: clients.niche }).from(clients).where(scope),
     db
       .select({ name: agencyServices.name })
       .from(agencyServices)
       .where(eq(agencyServices.isActive, true))
       .orderBy(asc(agencyServices.order), asc(agencyServices.name)),
     resolveOptions("operation", "pipeline"),
-    db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
+    db.select({ id: clients.id, name: clients.name }).from(clients).where(scope).orderBy(asc(clients.name)),
   ]);
 
   // serviço utilizado: filtra sobre o perfil operacional (lista de serviços do cliente)
@@ -260,6 +260,8 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   }
   const listOrderBy = SORTS[str(sp.ordenar) ?? "recente"] ?? SORTS.recente;
 
+  // conta respeitando o escopo de ownership (gestor restrito só conta a própria carteira)
+  const sc = (c: SQL) => (scope ? and(scope, c) : c);
   const [listClients, clientNiches, totals] = await Promise.all([
     db.query.clients.findMany({
       where: listFilters.length ? and(...listFilters) : undefined,
@@ -268,12 +270,12 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     }),
     resolveOptions("clients", "niche", { activeOnly: true }),
     Promise.all([
-      db.select({ n: count() }).from(clients),
-      db.select({ n: count() }).from(clients).where(eq(clients.status, "ATIVO")),
-      db.select({ n: count() }).from(clients).where(eq(clients.healthStatus, "OBSERVACAO")),
-      db.select({ n: count() }).from(clients).where(eq(clients.healthStatus, "CRITICO")),
-      db.select({ n: count() }).from(clients).where(eq(clients.status, "PERDIDO")),
-      db.select({ n: count() }).from(clients).where(eq(clients.adsStatus, "PAUSADO")),
+      db.select({ n: count() }).from(clients).where(scope),
+      db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "ATIVO"))),
+      db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "OBSERVACAO"))),
+      db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "CRITICO"))),
+      db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "PERDIDO"))),
+      db.select({ n: count() }).from(clients).where(sc(eq(clients.adsStatus, "PAUSADO"))),
     ]),
   ]);
   const [total, ativos, observacao, criticos, perdidos, adsPausado] = totals.map((t) => t[0].n);
@@ -330,6 +332,14 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       {label}
     </Link>
   );
+  // href de um StatCard: mantém o modo atual e aplica um filtro limpo
+  const carteiraHref = (patch: Record<string, string>) => {
+    const p = new URLSearchParams();
+    if (modo !== "geral") p.set("modo", modo);
+    for (const [k, v] of Object.entries(patch)) p.set(k, v);
+    const s = p.toString();
+    return s ? `/operacao?${s}` : "/operacao";
+  };
 
   return (
     <div>
@@ -417,12 +427,12 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
         </div>
 
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Total de clientes" value={total} href="/operacao" />
-          <StatCard label="Ativos" value={ativos} tone="text-emerald-400" href="/operacao?status=ATIVO" />
-          <StatCard label="Em observação" value={observacao} tone="text-amber-400" href="/operacao?saude=OBSERVACAO" />
-          <StatCard label="Críticos" value={criticos} tone="text-red-400" href="/operacao?saude=CRITICO" />
-          <StatCard label="Perdidos" value={perdidos} tone="text-zinc-400" href="/operacao?status=PERDIDO" />
-          <StatCard label="Ads pausado" value={adsPausado} tone="text-amber-400" href="/operacao?ads=PAUSADO" />
+          <StatCard label="Total de clientes" value={total} href={carteiraHref({})} />
+          <StatCard label="Ativos" value={ativos} tone="text-emerald-400" href={carteiraHref({ status: "ATIVO" })} />
+          <StatCard label="Em observação" value={observacao} tone="text-amber-400" href={carteiraHref({ saude: "OBSERVACAO" })} />
+          <StatCard label="Críticos" value={criticos} tone="text-red-400" href={carteiraHref({ saude: "CRITICO" })} />
+          <StatCard label="Perdidos" value={perdidos} tone="text-zinc-400" href={carteiraHref({ status: "PERDIDO" })} />
+          <StatCard label="Ads pausado" value={adsPausado} tone="text-amber-400" href={carteiraHref({ ads: "PAUSADO" })} />
         </div>
 
         <ClientFilters

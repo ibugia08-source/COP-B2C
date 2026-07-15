@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Icon, type IconName } from "@/components/ui/icon";
 
-export type NavItem = { href: string; label: string; icon: string };
+export type NavItem = { href: string; label: string; icon: IconName };
 export type NavGroup = { label: string; items: NavItem[] };
 
 // ---------------------------------------------------------------------------
@@ -44,14 +45,14 @@ export function MobileBottomNav({
           const active = isActive(item.href);
           return (
             <Link key={item.href} href={item.href} className={itemCls(active)} aria-current={active ? "page" : undefined}>
-              <span className="text-lg leading-none">{item.icon}</span>
+              <Icon name={item.icon} className="text-lg" />
               <span className="max-w-full truncate px-1">{item.label}</span>
             </Link>
           );
         })}
         {more.length > 0 && (
           <button type="button" onClick={() => setOpen(true)} className={itemCls(moreActive)} aria-label="Mais módulos">
-            <span className="text-lg leading-none">☰</span>
+            <Icon name="menu" className="text-lg" />
             <span>Mais</span>
           </button>
         )}
@@ -66,7 +67,7 @@ export function MobileBottomNav({
                 <p className="truncate text-[11px] text-zinc-500">{roles}</p>
               </div>
               <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900">
-                ✕
+                <Icon name="close" />
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2 p-4">
@@ -81,7 +82,7 @@ export function MobileBottomNav({
                       active ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-zinc-800 bg-zinc-950 text-zinc-500 hover:border-zinc-700 hover:text-zinc-900"
                     }`}
                   >
-                    <span className="text-2xl leading-none">{item.icon}</span>
+                    <Icon name={item.icon} className="text-2xl" />
                     <span className="leading-tight">{item.label}</span>
                   </Link>
                 );
@@ -110,37 +111,73 @@ export function MobileBottomNav({
 
 export function AppNav({ groups }: { groups: NavGroup[] }) {
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // restaura os grupos recolhidos do último acesso
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("nav_collapsed");
+      if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* localStorage indisponível */
+    }
+  }, []);
+
+  const toggle = (label: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      try {
+        localStorage.setItem("nav_collapsed", JSON.stringify([...next]));
+      } catch {
+        /* ignora */
+      }
+      return next;
+    });
+
   return (
-    <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
-      {groups.map((group) => (
-        <div key={group.label}>
-          <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 max-lg:hidden">
-            {group.label}
-          </p>
-          <div className="space-y-0.5">
-            {group.items.map((item) => {
-              const active =
-                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  title={item.label}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition max-lg:justify-center max-lg:px-0 ${
-                    active
-                      ? "bg-emerald-50 font-semibold text-emerald-700"
-                      : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900"
-                  }`}
-                >
-                  <span className="w-4 shrink-0 text-center text-sm">{item.icon}</span>
-                  <span className="max-lg:hidden">{item.label}</span>
-                </Link>
-              );
-            })}
+    <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
+      {groups.map((group) => {
+        const isCollapsed = collapsed.has(group.label);
+        return (
+          <div key={group.label}>
+            <button
+              type="button"
+              onClick={() => toggle(group.label)}
+              aria-expanded={!isCollapsed}
+              className="flex w-full items-center justify-between px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 transition hover:text-zinc-300"
+            >
+              {group.label}
+              <Icon name="chevronDown" className={`text-[8px] transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+            </button>
+            {!isCollapsed && (
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active =
+                    item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={item.label}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+                        active
+                          ? "bg-emerald-50 font-semibold text-emerald-700"
+                          : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900"
+                      }`}
+                    >
+                      <Icon name={item.icon} fixedWidth className="text-sm" />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }
@@ -212,7 +249,7 @@ export function GlobalSearch() {
       }}
     >
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
-        🔍
+        <Icon name="search" />
       </span>
       <input
         value={q}

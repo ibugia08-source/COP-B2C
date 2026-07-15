@@ -7,6 +7,7 @@ import { requireSession, sessionPermissions } from "@/lib/auth/guard";
 import type { PermissionKey } from "@/lib/auth/permissions";
 import { AppNav, Breadcrumbs, GlobalSearch, MobileBottomNav, type NavGroup, type NavItem } from "@/components/shell";
 import { UserAvatar } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 
 type NavDef = NavItem & { permission?: PermissionKey };
 type NavGroupDef = { label: string; items: NavDef[] };
@@ -15,27 +16,27 @@ const NAV_GROUPS: NavGroupDef[] = [
   {
     label: "Rotina",
     items: [
-      { href: "/", label: "Dashboard", icon: "▦" },
-      { href: "/copiloto", label: "Co-piloto", icon: "🧭", permission: "tasks.view" },
-      { href: "/operacao", label: "Clientes & Operação", icon: "🔄", permission: "clients.view" },
-      { href: "/tarefas", label: "Tarefas", icon: "☑", permission: "tasks.view" },
+      { href: "/", label: "Dashboard", icon: "dashboard" },
+      { href: "/copiloto", label: "Co-piloto", icon: "copilot", permission: "tasks.view" },
+      { href: "/operacao", label: "Clientes & Operação", icon: "operation", permission: "clients.view" },
+      { href: "/tarefas", label: "Tarefas", icon: "tasks", permission: "tasks.view" },
     ],
   },
   {
     label: "Gestão",
     items: [
-      { href: "/ativos", label: "Banco de Ativos", icon: "🗄️", permission: "digital_assets.view" },
-      { href: "/documentos", label: "Documentos", icon: "📄" },
-      { href: "/metas", label: "Metas", icon: "🎯", permission: "goals.view" },
-      { href: "/formularios", label: "Formulários", icon: "📝" },
+      { href: "/ativos", label: "Banco de Ativos", icon: "assets", permission: "digital_assets.view" },
+      { href: "/documentos", label: "Documentos", icon: "documents" },
+      { href: "/metas", label: "Metas", icon: "goals", permission: "goals.view" },
+      { href: "/formularios", label: "Formulários", icon: "forms" },
     ],
   },
   {
     label: "Administração",
     items: [
-      { href: "/equipe", label: "Equipe", icon: "🧑‍💼", permission: "team.view" },
-      { href: "/automacoes", label: "Automações", icon: "⚡", permission: "automations.view" },
-      { href: "/configuracoes", label: "Configurações", icon: "⚙", permission: "settings.view" },
+      { href: "/equipe", label: "Equipe", icon: "team", permission: "team.view" },
+      { href: "/automacoes", label: "Automações", icon: "automations", permission: "automations.view" },
+      { href: "/configuracoes", label: "Configurações", icon: "settings", permission: "settings.view" },
     ],
   },
 ];
@@ -89,7 +90,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               className="w-full rounded-lg border border-zinc-700 px-2 py-1.5 text-xs text-zinc-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
             >
               <span className="max-lg:hidden">Sair</span>
-              <span className="hidden max-lg:inline">⎋</span>
+              <span className="hidden max-lg:inline"><Icon name="logout" /></span>
             </button>
           </form>
         </div>
@@ -111,7 +112,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               title="Notificações"
               aria-label={unread > 0 ? `Notificações (${unread} não lidas)` : "Notificações"}
             >
-              🔔
+              <Icon name="bell" />
               {unread > 0 && (
                 <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
                   {unread > 9 ? "9+" : unread}

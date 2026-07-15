@@ -16,6 +16,9 @@
     "db:seed": "tsx --env-file=.env src/db/seed.ts"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.0",
+    "@fortawesome/free-solid-svg-icons": "^7.3.0",
+    "@fortawesome/react-fontawesome": "^3.4.0",
     "@vercel/blob": "^2.6.1",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",

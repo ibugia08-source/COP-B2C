@@ -10,6 +10,7 @@ import {
   useTransition,
   type ReactNode,
 } from "react";
+import { Icon } from "@/components/ui/icon";
 
 // ---------------------------------------------------------------------------
 // Seleção múltipla + ações em massa (lixeira por card/linha + barra flutuante)
@@ -71,7 +72,7 @@ export function SelectCircle({ id, className = "" }: { id: string; className?: s
         checked ? "border-emerald-600 bg-emerald-600 text-white" : "border-zinc-600 bg-zinc-900 text-transparent hover:border-emerald-500"
       } ${className}`}
     >
-      <span className="text-[11px] leading-none">✓</span>
+      <Icon name="check" className="text-[11px]" />
     </button>
   );
 }
@@ -116,7 +117,7 @@ export function CardTrash({
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirming(false); }}
           className="rounded-md px-1.5 py-0.5 text-[11px] text-zinc-500 hover:text-zinc-900"
         >
-          ✕
+          <Icon name="close" />
         </button>
       </span>
     );
@@ -129,7 +130,7 @@ export function CardTrash({
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirming(true); }}
       className={`rounded-md p-1 text-zinc-500 transition hover:bg-red-50 hover:text-red-600 ${className}`}
     >
-      🗑
+      <Icon name="trash" />
     </button>
   );
 }
@@ -227,7 +228,7 @@ export function BulkBar({
               onClick={() => setConfirmDel(true)}
               className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
             >
-              🗑 Excluir
+              <Icon name="trash" /> Excluir
             </button>
           ))}
 

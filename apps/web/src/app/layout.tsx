@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { config } from "@fortawesome/fontawesome-svg-core";
+import "@fortawesome/fontawesome-svg-core/styles.css";
 import "./globals.css";
+
+// Importamos o CSS do Font Awesome manualmente; desliga a injeção automática
+// (que causaria "flash" de ícone gigante antes da hidratação no App Router).
+config.autoAddCss = false;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

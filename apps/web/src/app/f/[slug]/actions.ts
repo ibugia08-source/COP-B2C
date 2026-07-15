@@ -1,13 +1,19 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
 import { db } from "@/db";
 import { formSubmissions, formTemplates } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { emitEvent } from "@/lib/automations/engine";
+import { checkMemoryRateLimit } from "@/lib/rate-limit-memory";
 import type { FieldDef } from "@/app/(app)/formularios/field-types";
 
 export type PublicFormState = { error?: string; success?: string };
+
+// no máximo 5 envios por IP+formulário a cada 10 minutos
+const PUBLIC_FORM_MAX = 5;
+const PUBLIC_FORM_WINDOW_MS = 10 * 60_000;
 
 // Submissão PÚBLICA (sem sessão). Guardas: só templates ativos, honeypot
 // anti-bot, limites de tamanho, e NUNCA expõe/aceita vínculo de cliente.
@@ -19,6 +25,14 @@ export async function submitPublicForm(
   // honeypot: bots preenchem o campo escondido "website" — respondemos ok sem gravar
   if (String(formData.get("website") ?? "").trim()) {
     return { success: "Resposta enviada. Obrigado!" };
+  }
+
+  // rate-limit por IP + formulário (anti-flood), antes de qualquer trabalho no banco
+  const h = await headers();
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
+  const rl = checkMemoryRateLimit(`form:${slug}:${ip}`, PUBLIC_FORM_MAX, PUBLIC_FORM_WINDOW_MS, Date.now());
+  if (!rl.allowed) {
+    return { error: "Muitos envios em pouco tempo. Aguarde alguns minutos e tente novamente." };
   }
 
   const template = await db.query.formTemplates.findFirst({ where: eq(formTemplates.slug, slug) });

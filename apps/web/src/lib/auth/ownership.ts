@@ -1,18 +1,18 @@
-import { and, eq, inArray, isNull, or, type SQL } from "drizzle-orm";
+import { eq, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, digitalAssetGroups, digitalAssets, taskAssignees, tasks } from "@/db/schema";
+import { clients, digitalAssetGroups, digitalAssets, documents, tasks } from "@/db/schema";
 import type { SessionPayload } from "./session";
+import { can, canActOnAll, isAdminGeral } from "./access";
+import type { PermissionKey } from "./permissions";
 
-// Escopo de ownership: além da permissão (RBAC), operações sensíveis exigem
-// que o usuário seja responsável pelo cliente/ativo/tarefa em questão.
-// OWNER/ADMIN enxergam e operam tudo. As funções *Check são puras (testáveis
-// sem banco); can* resolvem a entidade e delegam para elas.
-
-type Roles = readonly string[];
-
-export function isElevated(roles: Roles): boolean {
-  return roles.some((r) => r === "OWNER" || r === "ADMIN");
-}
+// Escopo de ownership (RBAC 2.0).
+// - LEITURA de clientes e tarefas é ABERTA a todos (requisito): as condições de
+//   escopo devolvem `undefined` (sem filtro).
+// - ESCRITA usa o par próprio/amplo: quem tem a variante `_all` da ação (ou é
+//   Administrador Geral) age sobre QUALQUER entidade; senão precisa ser dono.
+// - Ativos e Documentos mantêm escopo por cliente (dados sensíveis): quem não
+//   é dono precisa de `*.access_all` (ou ser Admin Geral) para operar/ver.
+// As funções is*Owner são puras (membership), testáveis sem banco.
 
 export type ClientOwnershipInput = {
   strategistId: string | null;
@@ -20,19 +20,13 @@ export type ClientOwnershipInput = {
   trafficManager2Id: string | null;
 };
 
-/** Regra pura: OWNER/ADMIN sempre; demais precisam ser um dos responsáveis. */
-export function clientOwnershipCheck(
-  roles: Roles,
+/** Membership pura: o usuário é um dos responsáveis pelo cliente? */
+export function isClientOwner(
   userId: string,
   client: ClientOwnershipInput | null | undefined,
 ): boolean {
-  if (isElevated(roles)) return true;
   if (!client) return false;
-  return [
-    client.strategistId,
-    client.trafficManager1Id,
-    client.trafficManager2Id,
-  ].includes(userId);
+  return [client.strategistId, client.trafficManager1Id, client.trafficManager2Id].includes(userId);
 }
 
 export type AssetOwnershipInput = {
@@ -42,21 +36,17 @@ export type AssetOwnershipInput = {
 };
 
 /**
- * Regra pura para ativos: com cliente vinculado, vale o ownership do cliente.
- * Sem cliente (INTERNO/PLATAFORMA/backup da agência) o escopo é restrito a
- * OWNER/ADMIN/GESTOR_OPERACIONAL.
- * SECURITY DECISION: ativo sem cliente é infraestrutura da agência — na dúvida,
- * o acesso é o mais restritivo possível sem travar a operação interna.
+ * Membership pura para ativos: com cliente vinculado, vale o ownership do
+ * cliente. Ativo sem cliente (INTERNO/infra da agência) não tem dono — só
+ * Admin Geral / `digital_assets.access_all` operam (resolvido no chamador).
  */
-export function assetOwnershipCheck(
-  roles: Roles,
+export function isAssetOwner(
   userId: string,
   asset: AssetOwnershipInput | null | undefined,
 ): boolean {
-  if (isElevated(roles)) return true;
   if (!asset) return false;
-  if (!asset.clientId) return roles.includes("GESTOR_OPERACIONAL");
-  return clientOwnershipCheck(roles, userId, asset.client);
+  if (!asset.clientId) return false;
+  return isClientOwner(userId, asset.client);
 }
 
 export type TaskOwnershipInput = {
@@ -67,27 +57,23 @@ export type TaskOwnershipInput = {
 };
 
 /**
- * Regra pura para tarefas: responsável, responsável adicional, criador,
- * ou responsável pelo cliente da tarefa. Tarefa sem cliente e sem responsáveis
- * é interna — qualquer papel com a permissão pode escrever.
+ * Membership pura para tarefas: responsável, responsável adicional, criador, ou
+ * responsável pelo cliente da tarefa. Tarefa interna sem cliente e sem
+ * responsável é colaborativa (qualquer um edita).
  */
-export function taskOwnershipCheck(
-  roles: Roles,
+export function isTaskOwner(
   userId: string,
   task: TaskOwnershipInput | null | undefined,
 ): boolean {
-  if (isElevated(roles)) return true;
   if (!task) return false;
   if (task.assignedToId === userId || task.createdById === userId) return true;
   if (task.assigneeIds.includes(userId)) return true;
-  if (task.client) return clientOwnershipCheck(roles, userId, task.client);
-  // sem cliente vinculado: tarefa interna sem dono — não bloqueia colaboração
+  if (task.client) return isClientOwner(userId, task.client);
   return !task.assignedToId && task.assigneeIds.length === 0;
 }
 
 // ---------------------------------------------------------------------------
-// Condições SQL para as listagens (page.tsx): OWNER/ADMIN veem tudo
-// (undefined = sem filtro); demais veem só o que gerenciam.
+// Condições SQL para as listagens (page.tsx)
 // ---------------------------------------------------------------------------
 
 function managedClientsCondition(userId: string): SQL {
@@ -98,37 +84,48 @@ function managedClientsCondition(userId: string): SQL {
   )!;
 }
 
-/** Filtro de escopo para listagens de clientes. */
-export function clientScopeCondition(session: SessionPayload): SQL | undefined {
-  if (isElevated(session.roles)) return undefined;
-  return managedClientsCondition(session.userId);
+/** Clientes: LEITURA aberta a todos — sem filtro. */
+export function clientScopeCondition(_session: SessionPayload): SQL | undefined {
+  return undefined;
 }
 
-/** Filtro de escopo para listagens de tarefas. */
-export function taskScopeCondition(session: SessionPayload): SQL | undefined {
-  if (isElevated(session.roles)) return undefined;
+/** Tarefas: LEITURA aberta a todos — sem filtro. */
+export function taskScopeCondition(_session: SessionPayload): SQL | undefined {
+  return undefined;
+}
+
+/** true se a sessão enxerga QUALQUER ativo (Admin Geral ou access_all). */
+function seesAllAssets(session: SessionPayload): boolean {
+  return isAdminGeral(session) || can(session, "digital_assets.access_all");
+}
+
+/** true se a sessão enxerga QUALQUER documento (Admin Geral ou access_all). */
+function seesAllDocs(session: SessionPayload): boolean {
+  return isAdminGeral(session) || can(session, "documents.access_all");
+}
+
+/**
+ * Documentos: escopo por cliente, salvo Admin Geral / documents.access_all.
+ * Sem access_all, o usuário vê documentos internos (sem cliente), os dos
+ * clientes que gerencia, e os que ele mesmo criou.
+ */
+export function documentScopeCondition(session: SessionPayload): SQL | undefined {
+  if (seesAllDocs(session)) return undefined;
   const uid = session.userId;
   const managedClients = db
     .select({ id: clients.id })
     .from(clients)
     .where(managedClientsCondition(uid));
-  const asExtraAssignee = db
-    .select({ id: taskAssignees.taskId })
-    .from(taskAssignees)
-    .where(eq(taskAssignees.userId, uid));
   return or(
-    eq(tasks.assignedToId, uid),
-    eq(tasks.createdById, uid),
-    inArray(tasks.id, asExtraAssignee),
-    inArray(tasks.clientId, managedClients),
-    // tarefa interna sem cliente e sem responsável: visível à equipe
-    and(isNull(tasks.clientId), isNull(tasks.assignedToId)),
+    isNull(documents.clientId),
+    inArray(documents.clientId, managedClients),
+    eq(documents.createdById, uid),
   );
 }
 
-/** Filtro de escopo para listagens de ativos digitais. */
+/** Ativos: escopo por cliente, salvo Admin Geral / access_all. */
 export function assetScopeCondition(session: SessionPayload): SQL | undefined {
-  if (isElevated(session.roles)) return undefined;
+  if (seesAllAssets(session)) return undefined;
   const uid = session.userId;
   const managedClients = db
     .select({ id: clients.id })
@@ -138,56 +135,48 @@ export function assetScopeCondition(session: SessionPayload): SQL | undefined {
     .select({ id: digitalAssetGroups.id })
     .from(digitalAssetGroups)
     .where(inArray(digitalAssetGroups.clientId, managedClients));
-  const clientLinked = or(
+  // Sem access_all, o usuário só vê ativos ligados aos clientes que gerencia
+  // (ativos internos, sem cliente, ficam restritos a Admin Geral / access_all).
+  return or(
     inArray(digitalAssets.clientId, managedClients),
     inArray(digitalAssets.groupId, groupsOfManagedClients),
-  )!;
-  if (!session.roles.includes("GESTOR_OPERACIONAL")) return clientLinked;
-  // GESTOR_OPERACIONAL também vê ativos internos (sem cliente no ativo e no grupo)
-  const groupsWithoutClient = db
-    .select({ id: digitalAssetGroups.id })
-    .from(digitalAssetGroups)
-    .where(isNull(digitalAssetGroups.clientId));
-  return or(
-    clientLinked,
-    and(isNull(digitalAssets.clientId), inArray(digitalAssets.groupId, groupsWithoutClient)),
   );
 }
 
-/** true se o usuário pode operar sobre o cliente. */
+// ---------------------------------------------------------------------------
+// Resolvedores por entidade (async): usados nas actions/rotas de ESCRITA
+// ---------------------------------------------------------------------------
+
+/**
+ * true se o usuário pode operar sobre o cliente para a ação indicada.
+ * `allKey` é a chave-base da ação (ex.: "clients.update"): quem tiver a
+ * variante `_all` age sobre qualquer cliente. Sem `allKey`, exige ser dono
+ * (ou Admin Geral).
+ */
 export async function canAccessClient(
   session: SessionPayload,
   clientId: string,
+  allKey: PermissionKey = "clients.update",
 ): Promise<boolean> {
-  if (isElevated(session.roles)) return true;
+  if (isAdminGeral(session)) return true;
+  if (canActOnAll(session, allKey)) return true;
   const client = await db.query.clients.findFirst({
     where: eq(clients.id, clientId),
-    columns: {
-      strategistId: true,
-      trafficManager1Id: true,
-      trafficManager2Id: true,
-    },
+    columns: { strategistId: true, trafficManager1Id: true, trafficManager2Id: true },
   });
-  return clientOwnershipCheck(session.roles, session.userId, client);
+  return isClientOwner(session.userId, client);
 }
 
-/** true se o usuário pode operar sobre o ativo digital (via cliente do ativo/grupo). */
-export async function canAccessAsset(
-  session: SessionPayload,
-  assetId: string,
-): Promise<boolean> {
-  if (isElevated(session.roles)) return true;
+/** true se o usuário pode operar sobre o ativo (via cliente do ativo/grupo). */
+export async function canAccessAsset(session: SessionPayload, assetId: string): Promise<boolean> {
+  if (seesAllAssets(session)) return true;
   const asset = await db.query.digitalAssets.findFirst({
     where: eq(digitalAssets.id, assetId),
     columns: { clientId: true },
     with: {
       group: { columns: { clientId: true } },
       client: {
-        columns: {
-          strategistId: true,
-          trafficManager1Id: true,
-          trafficManager2Id: true,
-        },
+        columns: { strategistId: true, trafficManager1Id: true, trafficManager2Id: true },
       },
     },
   });
@@ -198,23 +187,15 @@ export async function canAccessAsset(
     client =
       (await db.query.clients.findFirst({
         where: eq(clients.id, effectiveClientId),
-        columns: {
-          strategistId: true,
-          trafficManager1Id: true,
-          trafficManager2Id: true,
-        },
+        columns: { strategistId: true, trafficManager1Id: true, trafficManager2Id: true },
       })) ?? null;
   }
-  return assetOwnershipCheck(session.roles, session.userId, {
-    clientId: effectiveClientId,
-    client,
-  });
+  return isAssetOwner(session.userId, { clientId: effectiveClientId, client });
 }
 
 /**
  * Particiona um lote de ativos por acesso, com UMA query (+1 para clientes
- * herdados do grupo) em vez de N — usado pelas ações em massa.
- * `missing` = ids inexistentes (não contam como negação).
+ * herdados do grupo). `missing` = ids inexistentes (não contam como negação).
  */
 export async function partitionAssetsByAccess(
   session: SessionPayload,
@@ -229,28 +210,20 @@ export async function partitionAssetsByAccess(
     with: {
       group: { columns: { clientId: true } },
       client: {
-        columns: {
-          strategistId: true,
-          trafficManager1Id: true,
-          trafficManager2Id: true,
-        },
+        columns: { strategistId: true, trafficManager1Id: true, trafficManager2Id: true },
       },
     },
   });
   const found = new Set(rows.map((r) => r.id));
   const missing = unique.filter((id) => !found.has(id));
 
-  if (isElevated(session.roles)) {
+  if (seesAllAssets(session)) {
     return { allowed: rows.map((r) => r.id), denied: [], missing };
   }
 
   // clientes herdados só do grupo (asset.clientId null): carrega em lote
   const inheritedClientIds = [
-    ...new Set(
-      rows
-        .filter((r) => !r.clientId && r.group?.clientId)
-        .map((r) => r.group!.clientId!),
-    ),
+    ...new Set(rows.filter((r) => !r.clientId && r.group?.clientId).map((r) => r.group!.clientId!)),
   ];
   const inheritedClients = inheritedClientIds.length
     ? await db.query.clients.findMany({
@@ -271,34 +244,36 @@ export async function partitionAssetsByAccess(
     const effectiveClientId = row.clientId ?? row.group?.clientId ?? null;
     const client =
       row.client ?? (effectiveClientId ? (clientById.get(effectiveClientId) ?? null) : null);
-    const ok = assetOwnershipCheck(session.roles, session.userId, {
-      clientId: effectiveClientId,
-      client,
-    });
+    const ok = isAssetOwner(session.userId, { clientId: effectiveClientId, client });
     (ok ? allowed : denied).push(row.id);
   }
   return { allowed, denied, missing };
 }
 
-/** true se o usuário pode escrever na tarefa. */
-export async function canAccessTask(session: SessionPayload, taskId: string): Promise<boolean> {
-  if (isElevated(session.roles)) return true;
+/**
+ * true se o usuário pode escrever na tarefa. `allKey` = chave-base da ação
+ * (ex.: "tasks.update" / "tasks.delete"): a variante `_all` libera qualquer
+ * tarefa; senão exige ser dono (ou Admin Geral).
+ */
+export async function canAccessTask(
+  session: SessionPayload,
+  taskId: string,
+  allKey: PermissionKey = "tasks.update",
+): Promise<boolean> {
+  if (isAdminGeral(session)) return true;
+  if (canActOnAll(session, allKey)) return true;
   const task = await db.query.tasks.findFirst({
     where: eq(tasks.id, taskId),
     columns: { assignedToId: true, createdById: true },
     with: {
       assignees: { columns: { userId: true } },
       client: {
-        columns: {
-          strategistId: true,
-          trafficManager1Id: true,
-          trafficManager2Id: true,
-        },
+        columns: { strategistId: true, trafficManager1Id: true, trafficManager2Id: true },
       },
     },
   });
   if (!task) return false;
-  return taskOwnershipCheck(session.roles, session.userId, {
+  return isTaskOwner(session.userId, {
     assignedToId: task.assignedToId,
     createdById: task.createdById,
     assigneeIds: task.assignees.map((a) => a.userId),

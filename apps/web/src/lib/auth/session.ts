@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import type { RoleName } from "@/db/schema";
+import type { CargoName } from "@/db/schema";
+import type { PermissionKey } from "./permissions";
 
 // Camada de token/cookie da sessão. Este arquivo é importado pelo proxy (edge)
 // e por isso NÃO pode importar o driver do banco — a validação contra o banco
@@ -25,7 +26,10 @@ export type SessionPayload = {
   userId: string;
   name: string;
   email: string;
-  roles: RoleName[];
+  /** Cargo principal (RBAC 2.0). Null enquanto o usuário não tiver cargo. */
+  cargo: CargoName | null;
+  /** Permissões EFETIVAS (padrão do cargo ∪ extras), precomputadas no load. */
+  permissions: PermissionKey[];
 };
 
 function getSecret(): Uint8Array {

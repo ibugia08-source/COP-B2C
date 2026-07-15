@@ -1,4 +1,5 @@
 import { getSession } from "@/lib/auth/session-server";
+import { isAdminGeral } from "@/lib/auth/access";
 import { BUILTIN_GROUPS, resolveOptions, type ModuleKey } from "@/lib/config-options";
 import { ConfigDrawerButton, type DrawerGroup } from "./config-drawer";
 
@@ -17,8 +18,7 @@ export async function ModuleConfig({
 }) {
   const session = await getSession();
   if (!session) return null;
-  const isAdmin = session.roles.some((r) => r === "OWNER" || r === "ADMIN");
-  if (!isAdmin) return null;
+  if (!isAdminGeral(session)) return null;
 
   const builtinGroups = BUILTIN_GROUPS.filter((g) => g.moduleKey === moduleKey);
   const groups: DrawerGroup[] = await Promise.all(

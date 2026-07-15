@@ -2,7 +2,8 @@ import Link from "next/link";
 import { and, asc, desc, eq, like, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssets, documents, tasks, users } from "@/db/schema";
-import { requireSession } from "@/lib/auth/guard";
+import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { documentScopeCondition } from "@/lib/auth/ownership";
 import { getGoogleDriveStatus } from "@/lib/google-drive";
 import { formatDate } from "@/lib/labels";
 import { Badge, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui/primitives";
@@ -20,10 +21,13 @@ const SOURCE_TONE: Record<string, "blue" | "amber" | "green" | "purple" | "zinc"
 };
 
 export default async function DocumentosPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireSession();
+  const session = await requirePermission("documents.view");
+  const canCreate = hasPermission(session, "documents.create");
   const sp = await searchParams;
 
+  const scope = documentScopeCondition(session);
   const filters: SQL[] = [eq(documents.isArchived, str(sp.arquivados) === "1")];
+  if (scope) filters.push(scope);
   if (str(sp.tipo)) filters.push(eq(documents.type, str(sp.tipo) as never));
   if (str(sp.origem)) filters.push(eq(documents.sourceType, str(sp.origem) as never));
   if (str(sp.cliente)) filters.push(eq(documents.clientId, str(sp.cliente)!));
@@ -66,14 +70,16 @@ export default async function DocumentosPage({ searchParams }: { searchParams: P
         title="Documentos"
         description="Wiki, contratos, briefings, uploads e arquivos do Google Drive. Credenciais ficam no Banco de Ativos — nunca aqui."
         actions={
-          <DocumentFormButton
-            clients={allClients}
-            tasks={allTasks}
-            assets={allAssets}
-            defaultClientId={str(sp.cliente)}
-            driveConnected={drive.connected}
-            autoOpen={str(sp.novo) === "1"}
-          />
+          canCreate ? (
+            <DocumentFormButton
+              clients={allClients}
+              tasks={allTasks}
+              assets={allAssets}
+              defaultClientId={str(sp.cliente)}
+              driveConnected={drive.connected}
+              autoOpen={str(sp.novo) === "1"}
+            />
+          ) : undefined
         }
       />
 
@@ -121,7 +127,7 @@ export default async function DocumentosPage({ searchParams }: { searchParams: P
           icon="documents"
           title="Nenhum documento encontrado"
           description="Crie o primeiro documento (texto, upload, link ou Google Drive) ou ajuste os filtros."
-          action={<DocumentFormButton clients={allClients} tasks={allTasks} assets={allAssets} driveConnected={drive.connected} />}
+          action={canCreate ? <DocumentFormButton clients={allClients} tasks={allTasks} assets={allAssets} driveConnected={drive.connected} /> : undefined}
         />
       ) : (
         <Table

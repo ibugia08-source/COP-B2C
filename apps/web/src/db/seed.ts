@@ -48,10 +48,11 @@ async function seed() {
         name: "Owner",
         email: "owner@b2cgestao.com.br",
         passwordHash: await hashPassword("cop123456"),
+        cargo: "ADMINISTRADOR_GERAL",
       })
       .returning();
     await db.insert(userRoles).values({ userId: owner.id, roleId: roleByName.get("OWNER")! });
-    await db.insert(teamMembers).values({ userId: owner.id, position: "Owner", status: "ATIVO" });
+    await db.insert(teamMembers).values({ userId: owner.id, status: "ATIVO" });
     bootstrapOwnerId = owner.id;
     console.log("   ⚠️  OWNER inicial criado: owner@b2cgestao.com.br / cop123456 — TROQUE A SENHA no primeiro login.");
   }

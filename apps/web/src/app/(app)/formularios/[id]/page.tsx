@@ -3,13 +3,13 @@ import { desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { formSubmissions, formTemplates } from "@/db/schema";
-import { requireSession } from "@/lib/auth/guard";
+import { requirePermission } from "@/lib/auth/guard";
 import { formatDate } from "@/lib/labels";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import type { FieldDef } from "../field-types";
 
 export default async function FormResponsesPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  await requirePermission("forms.view_submissions");
   const { id } = await params;
 
   const template = await db.query.formTemplates.findFirst({ where: eq(formTemplates.id, id) });

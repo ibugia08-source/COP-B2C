@@ -29,7 +29,11 @@ export type DashboardData = {
   }[];
 };
 
-export async function getDashboardData(filters: DashboardFilters, userId: string): Promise<DashboardData> {
+export async function getDashboardData(
+  filters: DashboardFilters,
+  userId: string,
+  canGlobal = false,
+): Promise<DashboardData> {
   const now = new Date();
   const in7days = new Date(now.getTime() + 7 * 86400_000);
 
@@ -92,20 +96,24 @@ export async function getDashboardData(filters: DashboardFilters, userId: string
     return false;
   }).length;
 
-  const workload = allUsers
-    .map((u) => {
-      const userTasks = openTasks.filter((t) => t.assignedToId === u.id);
-      return {
-        name: u.name,
-        open: userTasks.length,
-        overdue: userTasks.filter((t) => t.dueDate && t.dueDate < now).length,
-        urgent: userTasks.filter((t) => t.priority === "URGENTE").length,
-        clients: allClients.filter((c) => c.trafficManager1Id === u.id).length,
-        creatives: creativeTasks.filter((t) => t.assignedToId === u.id).length,
-        assets: assets.filter((a) => a.assignedToId === u.id || a.ownerUserId === u.id).length,
-      };
-    })
-    .filter((w) => w.open || w.clients || w.creatives || w.assets);
+  // Carga por colaborador (nomes + volume de todos): visão gerencial —
+  // só para quem tem dashboard.view_global.
+  const workload = !canGlobal
+    ? []
+    : allUsers
+        .map((u) => {
+          const userTasks = openTasks.filter((t) => t.assignedToId === u.id);
+          return {
+            name: u.name,
+            open: userTasks.length,
+            overdue: userTasks.filter((t) => t.dueDate && t.dueDate < now).length,
+            urgent: userTasks.filter((t) => t.priority === "URGENTE").length,
+            clients: allClients.filter((c) => c.trafficManager1Id === u.id).length,
+            creatives: creativeTasks.filter((t) => t.assignedToId === u.id).length,
+            assets: assets.filter((a) => a.assignedToId === u.id || a.ownerUserId === u.id).length,
+          };
+        })
+        .filter((w) => w.open || w.clients || w.creatives || w.assets);
 
   const metrics: Record<MetricKey, number> = {
     clientes_ativos: allClients.filter((c) => c.status === "ATIVO").length,
@@ -132,14 +140,19 @@ export async function getDashboardData(filters: DashboardFilters, userId: string
     metrics,
     clients: {
       byStatus: groupCount(allClients.map((c) => c.status)),
-      byGestor: groupCount(allClients.map((c) => c.trafficManager1?.name ?? "Sem gestor")),
+      // gráficos por nome (gestor/responsável) = visão gerencial
+      byGestor: canGlobal
+        ? groupCount(allClients.map((c) => c.trafficManager1?.name ?? "Sem gestor"))
+        : [],
     },
     tasks: {
-      byAssignee: groupCount(openTasks.map((t) => t.assignedTo?.name ?? "Sem responsável")),
+      byAssignee: canGlobal
+        ? groupCount(openTasks.map((t) => t.assignedTo?.name ?? "Sem responsável"))
+        : [],
       byStatus: groupCount(openTasks.map((t) => t.status)),
     },
     assets: { byStatus: groupCount(assets.map((a) => a.status)) },
-    churnSeries,
+    churnSeries: canGlobal ? churnSeries : [],
     workload,
   };
 }

@@ -45,7 +45,7 @@ export async function moveClientStage(
   if (!client) return { error: "Cliente não encontrado." };
   if (client.pipelineStage === toStage) return { success: "Cliente já está nesta etapa." };
 
-  const denied = await denyClientOutOfScope(auth.session, clientId, "moveClientStage");
+  const denied = await denyClientOutOfScope(auth.session, clientId, "moveClientStage", "clients.moveStatus");
   if (denied) return denied;
 
   // Única etapa com regra obrigatória: perder exige motivo/data de churn.
@@ -127,7 +127,7 @@ export async function reorderClientOnBoard(
   });
   if (!client) return { error: "Cliente não encontrado." };
 
-  const denied = await denyClientOutOfScope(auth.session, clientId, "reorderClientOnBoard");
+  const denied = await denyClientOutOfScope(auth.session, clientId, "reorderClientOnBoard", "clients.moveStatus");
   if (denied) return denied;
 
   // demais cards da mesma coluna, na ordem atual
@@ -168,7 +168,7 @@ export async function deleteClient(clientId: string): Promise<MoveResult> {
   if (!auth.ok) return { error: auth.error };
   const client = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!client) return { error: "Cliente não encontrado." };
-  const denied = await denyClientOutOfScope(auth.session, clientId, "deleteClient");
+  const denied = await denyClientOutOfScope(auth.session, clientId, "deleteClient", "clients.delete");
   if (denied) return denied;
   try {
     await cascadeSafeDelete("clients", clientId);
@@ -192,7 +192,7 @@ export async function bulkDeleteClients(ids: string[]): Promise<BulkResult> {
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
   let ok = 0;
   for (const id of ids) {
-    if (await denyClientOutOfScope(auth.session, id, "bulkDeleteClients")) continue;
+    if (await denyClientOutOfScope(auth.session, id, "bulkDeleteClients", "clients.delete")) continue;
     try {
       await cascadeSafeDelete("clients", id);
       ok++;

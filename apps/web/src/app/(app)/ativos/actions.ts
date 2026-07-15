@@ -24,9 +24,10 @@ import {
 import { logActivity } from "@/lib/activity";
 import { writeAssetAudit, writeAssetAuditBatchStrict, writeAssetAuditStrict } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/access";
 import { canAccessAsset, canAccessClient, partitionAssetsByAccess } from "@/lib/auth/ownership";
 import type { SessionPayload } from "@/lib/auth/session";
-import { RESTRICTED_SECRET_TYPES_FOR_SOCIAL, roleHasPermission } from "@/lib/auth/permissions";
+import { RESTRICTED_SECRET_TYPES } from "@/lib/auth/permissions";
 import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { notifyRole, notifyUser } from "@/lib/notify";
@@ -282,7 +283,7 @@ export async function createAsset(_prev: ActionState, formData: FormData): Promi
 
   // segredos enviados junto no formulário (template): campos secret_<tipo>_<label>
   let secretCount = 0;
-  const canCreateSecrets = roleHasPermission(auth.session.roles, "digital_assets.create_secrets");
+  const canCreateSecrets = can(auth.session, "digital_assets.create_secrets");
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("secret__") || typeof value !== "string" || !value.trim()) continue;
     if (!canCreateSecrets) continue;
@@ -436,7 +437,7 @@ export async function duplicateAsset(assetId: string, copySecrets: boolean): Pro
   if (denied) return denied;
 
   // valida a permissão de segredos ANTES de inserir a cópia (senão sobra ativo órfão)
-  if (copySecrets && !roleHasPermission(auth.session.roles, "digital_assets.create_secrets")) {
+  if (copySecrets && !can(auth.session, "digital_assets.create_secrets")) {
     return { error: "Você não tem permissão para copiar segredos." };
   }
 
@@ -843,13 +844,11 @@ export async function revealSecret(
   });
   if (denied) return { error: denied.error };
 
-  // SOCIAL_MEDIA não revela tokens/API keys/2FA
-  const isPrivileged = auth.session.roles.some((r) =>
-    ["OWNER", "ADMIN", "GESTOR_TRAFEGO"].includes(r),
-  );
+  // Tokens/API keys/2FA exigem a permissão restrita (Social Media não a tem por padrão)
+  const canRevealRestricted = can(auth.session, "digital_assets.reveal_restricted_secrets");
   if (
-    !isPrivileged &&
-    (RESTRICTED_SECRET_TYPES_FOR_SOCIAL as readonly string[]).includes(secret.secretType)
+    !canRevealRestricted &&
+    (RESTRICTED_SECRET_TYPES as readonly string[]).includes(secret.secretType)
   ) {
     await writeAssetAudit({
       assetId: secret.assetId,

@@ -4,14 +4,35 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
-import { DOCUMENT_SOURCES, DOCUMENT_TYPES, documents } from "@/db/schema";
+import { clients, DOCUMENT_SOURCES, DOCUMENT_TYPES, documents } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
+import { can, canActOnAll, isAdminGeral } from "@/lib/auth/access";
+import { isClientOwner } from "@/lib/auth/ownership";
+import type { SessionPayload } from "@/lib/auth/session";
 import { isGoogleDriveUrl, listDriveFiles, parseDriveUrl, type DrivePickResult } from "@/lib/google-drive";
 import { buildStorageKey, getStorage, maxUploadBytes } from "@/lib/storage";
 import { UPLOAD_WHITELISTS, validateUpload } from "@/lib/storage/validation";
 
 export type ActionState = { error?: string; success?: string; documentId?: string };
+
+/**
+ * Documentos mantêm escopo por cliente: para vincular/editar/excluir um
+ * documento de um cliente é preciso ser responsável por ele (ou ter
+ * documents.access_all / ser Admin Geral). Documento sem cliente é interno.
+ */
+async function canReachDocClient(
+  session: SessionPayload,
+  clientId: string | null | undefined,
+): Promise<boolean> {
+  if (!clientId) return true;
+  if (isAdminGeral(session) || can(session, "documents.access_all")) return true;
+  const client = await db.query.clients.findFirst({
+    where: eq(clients.id, clientId),
+    columns: { strategistId: true, trafficManager1Id: true, trafficManager2Id: true },
+  });
+  return isClientOwner(session.userId, client);
+}
 
 const docSchema = z.object({
   title: z.string().trim().min(3, "Título muito curto"),
@@ -51,7 +72,7 @@ function isHttpUrl(url: string): boolean {
 
 /** Busca arquivos no Drive da agência para o seletor do formulário de documentos. */
 export async function searchDriveFiles(query: string): Promise<DrivePickResult> {
-  const auth = await checkPermission("tasks.view"); // mesmo requisito de quem cria documento
+  const auth = await checkPermission("documents.create"); // mesmo requisito de quem cria documento
   if (!auth.ok) return { ok: false, error: auth.error };
   return listDriveFiles(query);
 }
@@ -74,8 +95,9 @@ export async function saveDocument(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const auth = await checkPermission("tasks.view"); // qualquer membro interno da equipe
+  const auth = await checkPermission(documentId ? "documents.update" : "documents.create");
   if (!auth.ok) return { error: auth.error };
+  const session = auth.session;
 
   const parsed = docSchema.safeParse({
     title: formData.get("title"),
@@ -97,6 +119,25 @@ export async function saveDocument(
       error:
         "Este documento parece conter credenciais (senha/token). Credenciais devem ser salvas no Banco de Ativos Digitais, nunca em documentos.",
     };
+  }
+
+  // Escopo por cliente
+  if (documentId) {
+    const existing = await db.query.documents.findFirst({
+      where: eq(documents.id, documentId),
+      columns: { createdById: true, clientId: true },
+    });
+    if (!existing) return { error: "Documento não encontrado." };
+    const owns = existing.createdById === session.userId;
+    const canWrite =
+      canActOnAll(session, "documents.update") || owns || (await canReachDocClient(session, existing.clientId));
+    if (!canWrite) return { error: "Você não pode editar este documento." };
+    // se estiver movendo para outro cliente, precisa alcançar o novo também
+    if (d.clientId && d.clientId !== existing.clientId && !(await canReachDocClient(session, d.clientId))) {
+      return { error: "Você não é responsável pelo cliente de destino." };
+    }
+  } else if (!(await canReachDocClient(session, d.clientId || null))) {
+    return { error: "Você não é responsável por este cliente." };
   }
 
   const values: Partial<typeof documents.$inferInsert> = {
@@ -170,7 +211,7 @@ export async function saveDocument(
 
 /** Criação de documento por upload de arquivo (multipart). */
 export async function uploadDocument(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const auth = await checkPermission("tasks.view");
+  const auth = await checkPermission("documents.create");
   if (!auth.ok) return { error: auth.error };
 
   const title = String(formData.get("title") ?? "").trim();
@@ -181,6 +222,10 @@ export async function uploadDocument(_prev: ActionState, formData: FormData): Pr
   const clientId = String(formData.get("clientId") ?? "") || null;
   const taskId = String(formData.get("taskId") ?? "") || null;
   const digitalAssetId = String(formData.get("digitalAssetId") ?? "") || null;
+
+  if (!(await canReachDocClient(auth.session, clientId))) {
+    return { error: "Você não é responsável por este cliente." };
+  }
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Selecione um arquivo." };
@@ -228,10 +273,14 @@ export async function uploadDocument(_prev: ActionState, formData: FormData): Pr
 }
 
 export async function toggleArchiveDocument(documentId: string): Promise<ActionState> {
-  const auth = await checkPermission("tasks.view");
+  const auth = await checkPermission("documents.update");
   if (!auth.ok) return { error: auth.error };
   const doc = await db.query.documents.findFirst({ where: eq(documents.id, documentId) });
   if (!doc) return { error: "Documento não encontrado." };
+  const owns = doc.createdById === auth.session.userId;
+  if (!(canActOnAll(auth.session, "documents.update") || owns || (await canReachDocClient(auth.session, doc.clientId)))) {
+    return { error: "Você não pode alterar este documento." };
+  }
   await db
     .update(documents)
     .set({ isArchived: !doc.isArchived, updatedById: auth.session.userId })
@@ -248,10 +297,14 @@ export async function toggleArchiveDocument(documentId: string): Promise<ActionS
 }
 
 export async function deleteDocument(documentId: string): Promise<ActionState> {
-  const auth = await checkPermission("tasks.view");
+  const auth = await checkPermission("documents.delete");
   if (!auth.ok) return { error: auth.error };
   const doc = await db.query.documents.findFirst({ where: eq(documents.id, documentId) });
   if (!doc) return { error: "Documento não encontrado." };
+  const owns = doc.createdById === auth.session.userId;
+  if (!(canActOnAll(auth.session, "documents.delete") || owns || (await canReachDocClient(auth.session, doc.clientId)))) {
+    return { error: "Você não pode excluir este documento." };
+  }
   if (doc.storagePath) {
     try {
       await getStorage().delete(doc.storagePath);

@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssets, documents, tasks } from "@/db/schema";
-import { requireSession } from "@/lib/auth/guard";
+import { hasPermission, requirePermission } from "@/lib/auth/guard";
+import { can, canActOnAll, isAdminGeral } from "@/lib/auth/access";
+import { isClientOwner } from "@/lib/auth/ownership";
 import { getGoogleDriveStatus } from "@/lib/google-drive";
 import { formatDate } from "@/lib/labels";
 import { Alert, Badge, buttonClass } from "@/components/ui/primitives";
@@ -11,7 +13,7 @@ import { Icon } from "@/components/ui/icon";
 import { ArchiveDocumentButton, DeleteDocumentButton, DOC_SOURCE_LABELS, DOC_TYPE_LABELS, DocumentFormButton } from "../ui";
 
 export default async function DocumentoPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const session = await requirePermission("documents.view");
   const { id } = await params;
 
   const doc = await db.query.documents.findFirst({
@@ -19,6 +21,19 @@ export default async function DocumentoPage({ params }: { params: Promise<{ id: 
     with: { client: true, task: true, digitalAsset: true, createdBy: true },
   });
   if (!doc) notFound();
+
+  // Escopo por cliente: documento interno, do próprio autor, de cliente que
+  // gerencia, ou com documents.access_all/Admin Geral.
+  const canReach =
+    isAdminGeral(session) ||
+    can(session, "documents.access_all") ||
+    !doc.clientId ||
+    doc.createdById === session.userId ||
+    isClientOwner(session.userId, doc.client);
+  if (!canReach) redirect("/acesso-negado");
+
+  const canEdit = canActOnAll(session, "documents.update") || (hasPermission(session, "documents.update") && canReach);
+  const canDelete = canActOnAll(session, "documents.delete") || (hasPermission(session, "documents.delete") && canReach);
 
   const [allClients, allTasks, allAssets, drive] = await Promise.all([
     db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
@@ -72,15 +87,17 @@ export default async function DocumentoPage({ params }: { params: Promise<{ id: 
               {doc.sourceType === "UPLOAD" ? <>Abrir arquivo <Icon name="externalLink" /></> : <>Abrir <Icon name="externalLink" /></>}
             </a>
           )}
-          <DocumentFormButton
-            document={doc}
-            clients={allClients}
-            tasks={allTasks}
-            assets={allAssets}
-            driveConnected={drive.connected}
-          />
-          <ArchiveDocumentButton documentId={doc.id} isArchived={doc.isArchived} />
-          <DeleteDocumentButton documentId={doc.id} />
+          {canEdit && (
+            <DocumentFormButton
+              document={doc}
+              clients={allClients}
+              tasks={allTasks}
+              assets={allAssets}
+              driveConnected={drive.connected}
+            />
+          )}
+          {canEdit && <ArchiveDocumentButton documentId={doc.id} isArchived={doc.isArchived} />}
+          {canDelete && <DeleteDocumentButton documentId={doc.id} />}
         </div>
       </div>
 

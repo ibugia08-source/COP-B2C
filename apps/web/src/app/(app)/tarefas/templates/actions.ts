@@ -67,7 +67,7 @@ export async function saveTemplate(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const auth = await checkPermission("automations.update");
+  const auth = await checkPermission("tasks.manage_templates");
   if (!auth.ok) return { error: auth.error };
 
   const parsed = templateSchema.safeParse({
@@ -114,7 +114,7 @@ export async function saveTemplate(
 }
 
 export async function toggleTemplate(templateId: string): Promise<ActionState> {
-  const auth = await checkPermission("automations.update");
+  const auth = await checkPermission("tasks.manage_templates");
   if (!auth.ok) return { error: auth.error };
   const t = await db.query.taskTemplates.findFirst({ where: eq(taskTemplates.id, templateId) });
   if (!t) return { error: "Template não encontrado." };

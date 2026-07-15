@@ -1,15 +1,31 @@
 "use server";
 
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { db } from "@/db";
-import { ROLE_NAMES, roles, teamMembers, userRoles, users } from "@/db/schema";
+import {
+  CARGO_NAMES,
+  permissionAuditLogs,
+  teamMembers,
+  users,
+  type CargoName,
+  type PermissionAuditAction,
+} from "@/db/schema";
+import { userPermissions } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission, isAdmin } from "@/lib/auth/guard";
+import { isAdminGeral } from "@/lib/auth/access";
 import type { SessionPayload } from "@/lib/auth/session";
 import { hashPassword } from "@/lib/auth/password";
-import { PRIVILEGED_ROLES, type PermissionKey } from "@/lib/auth/permissions";
+import {
+  ADMIN_ONLY_GRANT,
+  cargoDefaultPermissions,
+  CARGO_LABELS,
+  isPermissionKey,
+  type PermissionKey,
+} from "@/lib/auth/permissions";
 import { notifyUser } from "@/lib/notify";
 import { buildStorageKey, getStorage, maxUploadBytes } from "@/lib/storage";
 import { UPLOAD_WHITELISTS, validateUpload } from "@/lib/storage/validation";
@@ -17,10 +33,9 @@ import { UPLOAD_WHITELISTS, validateUpload } from "@/lib/storage/validation";
 export type ActionState = { error?: string; success?: string };
 
 /**
- * Guarda do módulo Equipe: exige a permissão específica E papel administrativo
- * (OWNER/ADMIN). Dupla verificação no backend — nenhuma action vaza dados de
- * equipe para papéis não administrativos, mesmo que uma permissão seja concedida
- * por engano a outro papel.
+ * Guarda do módulo Equipe: exige a permissão específica E ser Administrador
+ * Geral. Dupla verificação — nenhuma action de equipe/acesso vaza para quem não
+ * é Admin Geral, mesmo que uma permissão de team.* fosse concedida por engano.
  */
 async function guardTeam(
   permission: PermissionKey,
@@ -28,32 +43,49 @@ async function guardTeam(
   const auth = await checkPermission(permission);
   if (!auth.ok) return auth;
   if (!isAdmin(auth.session)) {
-    return { ok: false, error: "Apenas OWNER/ADMIN acessam o módulo Equipe." };
+    return { ok: false, error: "Apenas o Administrador Geral acessa o módulo Equipe." };
   }
   return auth;
 }
 
-const createMemberSchema = z.object({
-  name: z.string().trim().min(2, "Nome muito curto"),
-  email: z.string().trim().toLowerCase().email("E-mail inválido"),
-  phone: z.string().trim().optional(),
-  position: z.string().trim().optional(),
-  password: z.string().min(8, "Senha precisa de pelo menos 8 caracteres"),
-  roles: z.array(z.enum(ROLE_NAMES)).min(1, "Selecione pelo menos um papel"),
-});
+// --------------------------------------------------------------------------
+// Auditoria de acessos (imutável): concessão/remoção de extra e troca de cargo
+// --------------------------------------------------------------------------
 
-/** Só OWNER/ADMIN podem conceder papéis administrativos (OWNER/ADMIN). */
-function ensureCanGrantRoles(
-  sessionRoles: readonly string[],
-  targetRoles: string[],
-): string | null {
-  const grantingPrivileged = targetRoles.some((r) => PRIVILEGED_ROLES.includes(r as never));
-  if (!grantingPrivileged) return null;
-  const isOwnerAdmin = sessionRoles.some((r) => r === "OWNER" || r === "ADMIN");
-  return isOwnerAdmin ? null : "Apenas OWNER/ADMIN podem conceder papéis administrativos.";
+async function requestMeta(): Promise<{ ip: string | null; userAgent: string | null }> {
+  try {
+    const h = await headers();
+    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null;
+    return { ip, userAgent: h.get("user-agent") };
+  } catch {
+    return { ip: null, userAgent: null };
+  }
 }
 
-/** Incrementa users.sessionVersion — invalida na hora as sessões abertas do usuário. */
+async function writePermissionAudit(entry: {
+  actorId: string;
+  targetUserId: string;
+  action: PermissionAuditAction;
+  permission?: string;
+  cargoBefore?: string | null;
+  cargoAfter?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const meta = await requestMeta();
+  await db.insert(permissionAuditLogs).values({
+    actorId: entry.actorId,
+    targetUserId: entry.targetUserId,
+    action: entry.action,
+    permission: entry.permission ?? null,
+    cargoBefore: entry.cargoBefore ?? null,
+    cargoAfter: entry.cargoAfter ?? null,
+    metadata: entry.metadata,
+    ipAddress: meta.ip,
+    userAgent: meta.userAgent,
+  });
+}
+
+/** Incrementa users.sessionVersion — invalida na hora as sessões abertas. */
 async function revokeUserSessions(userId: string) {
   await db
     .update(users)
@@ -61,18 +93,24 @@ async function revokeUserSessions(userId: string) {
     .where(eq(users.id, userId));
 }
 
-async function setUserRoles(userId: string, roleNames: string[]) {
-  const roleRows = await db
-    .select()
-    .from(roles)
-    .where(inArray(roles.name, roleNames as never));
-  await db.delete(userRoles).where(eq(userRoles.userId, userId));
-  if (roleRows.length) {
-    await db.insert(userRoles).values(roleRows.map((r) => ({ userId, roleId: r.id })));
-  }
-  // mudança de papéis derruba sessões antigas (o JWT guarda a sessionVersion)
-  await revokeUserSessions(userId);
+/** Quantos Administradores Gerais ativos existem (excluindo opcionalmente 1). */
+async function countActiveAdmins(excludeUserId?: string): Promise<number> {
+  const where = excludeUserId
+    ? and(eq(users.cargo, "ADMINISTRADOR_GERAL"), eq(users.isActive, true), ne(users.id, excludeUserId))
+    : and(eq(users.cargo, "ADMINISTRADOR_GERAL"), eq(users.isActive, true));
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(users).where(where);
+  return n ?? 0;
 }
+
+const cargoSchema = z.enum(CARGO_NAMES);
+
+const createMemberSchema = z.object({
+  name: z.string().trim().min(2, "Nome muito curto"),
+  email: z.string().trim().toLowerCase().email("E-mail inválido"),
+  phone: z.string().trim().optional(),
+  password: z.string().min(8, "Senha precisa de pelo menos 8 caracteres"),
+  cargo: cargoSchema,
+});
 
 export async function createTeamMember(
   _prev: ActionState,
@@ -85,20 +123,14 @@ export async function createTeamMember(
     name: formData.get("name"),
     email: formData.get("email"),
     phone: formData.get("phone") || undefined,
-    position: formData.get("position") || undefined,
     password: formData.get("password"),
-    roles: formData.getAll("roles"),
+    cargo: formData.get("cargo"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   }
 
-  const grantError = ensureCanGrantRoles(auth.session.roles, parsed.data.roles);
-  if (grantError) return { error: grantError };
-
-  const existing = await db.query.users.findFirst({
-    where: eq(users.email, parsed.data.email),
-  });
+  const existing = await db.query.users.findFirst({ where: eq(users.email, parsed.data.email) });
   if (existing) return { error: "Já existe um usuário com este e-mail." };
 
   const [user] = await db
@@ -110,69 +142,79 @@ export async function createTeamMember(
       status: "ATIVO",
       isActive: true,
       signupSource: "ADMIN",
+      cargo: parsed.data.cargo,
       approvedById: auth.session.userId,
       approvedAt: new Date(),
     })
     .returning();
 
-  await setUserRoles(user.id, parsed.data.roles);
-  await db.insert(teamMembers).values({
-    userId: user.id,
-    phone: parsed.data.phone,
-    position: parsed.data.position,
-    status: "ATIVO",
-  });
+  await db.insert(teamMembers).values({ userId: user.id, phone: parsed.data.phone, status: "ATIVO" });
 
+  await writePermissionAudit({
+    actorId: auth.session.userId,
+    targetUserId: user.id,
+    action: "CARGO_CHANGED",
+    cargoBefore: null,
+    cargoAfter: parsed.data.cargo,
+    metadata: { reason: "created", email: user.email },
+  });
   await logActivity({
     userId: auth.session.userId,
     action: "team.memberCreated",
     entityType: "user",
     entityId: user.id,
-    metadata: { email: user.email, roles: parsed.data.roles },
+    metadata: { email: user.email, cargo: parsed.data.cargo },
   });
 
   revalidatePath("/equipe");
-  return { success: `${user.name} cadastrado(a) com sucesso.` };
+  return { success: `${user.name} cadastrado(a) como ${CARGO_LABELS[parsed.data.cargo]}.` };
 }
 
-const roleListSchema = z.array(z.enum(ROLE_NAMES)).min(1, "Selecione pelo menos um papel");
-
-/** Aprova um cadastro pendente, definindo o nível de acesso (papéis). */
-export async function approveUser(userId: string, roleNames: string[]): Promise<ActionState> {
+/** Aprova um cadastro pendente, definindo o cargo. */
+export async function approveUser(userId: string, cargo: string): Promise<ActionState> {
   const auth = await guardTeam("team.approve");
   if (!auth.ok) return { error: auth.error };
 
-  const parsed = roleListSchema.safeParse(roleNames);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Selecione o nível de acesso." };
-
-  const grantError = ensureCanGrantRoles(auth.session.roles, parsed.data);
-  if (grantError) return { error: grantError };
+  const parsed = cargoSchema.safeParse(cargo);
+  if (!parsed.success) return { error: "Selecione um cargo válido." };
 
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) return { error: "Usuário não encontrado." };
   if (user.status !== "PENDENTE") return { error: "Este cadastro não está pendente de aprovação." };
 
-  await setUserRoles(userId, parsed.data);
   await db
     .update(users)
-    .set({ status: "ATIVO", isActive: true, approvedById: auth.session.userId, approvedAt: new Date() })
+    .set({
+      status: "ATIVO",
+      isActive: true,
+      cargo: parsed.data,
+      approvedById: auth.session.userId,
+      approvedAt: new Date(),
+      sessionVersion: sql`${users.sessionVersion} + 1`,
+    })
     .where(eq(users.id, userId));
 
-  const existingMember = await db.query.teamMembers.findFirst({
-    where: eq(teamMembers.userId, userId),
-  });
+  const existingMember = await db.query.teamMembers.findFirst({ where: eq(teamMembers.userId, userId) });
   if (existingMember) {
     await db.update(teamMembers).set({ status: "ATIVO" }).where(eq(teamMembers.userId, userId));
   } else {
     await db.insert(teamMembers).values({ userId, status: "ATIVO" });
   }
 
+  await writePermissionAudit({
+    actorId: auth.session.userId,
+    targetUserId: userId,
+    action: "CARGO_CHANGED",
+    cargoBefore: null,
+    cargoAfter: parsed.data,
+    metadata: { reason: "approved", email: user.email },
+  });
   await logActivity({
     userId: auth.session.userId,
     action: "team.userApproved",
     entityType: "user",
     entityId: userId,
-    metadata: { email: user.email, roles: parsed.data },
+    metadata: { email: user.email, cargo: parsed.data },
   });
   await notifyUser(userId, {
     title: "Acesso aprovado 🎉",
@@ -209,59 +251,126 @@ export async function rejectUser(userId: string): Promise<ActionState> {
   return { success: `Cadastro de ${user.email} recusado.` };
 }
 
-/** Atualiza o nível de acesso (papéis) de um usuário já existente. */
-export async function updateUserRoles(userId: string, roleNames: string[]): Promise<ActionState> {
-  const auth = await guardTeam("team.update");
+/** Altera o CARGO de um usuário. Só Administrador Geral; protege o último admin. */
+export async function changeCargo(userId: string, cargo: string): Promise<ActionState> {
+  const auth = await guardTeam("team.change_role");
   if (!auth.ok) return { error: auth.error };
-
-  const parsed = roleListSchema.safeParse(roleNames);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Selecione pelo menos um papel." };
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    with: { userRoles: { with: { role: true } } },
-  });
-  if (!user) return { error: "Usuário não encontrado." };
-
-  const currentRoles = user.userRoles.map((ur) => ur.role.name);
-  // proteção: mexer em papéis privilegiados (conceder OU remover) exige OWNER/ADMIN
-  const touchingPrivileged =
-    ensureCanGrantRoles(auth.session.roles, parsed.data) ||
-    ensureCanGrantRoles(auth.session.roles, currentRoles);
-  if (touchingPrivileged) return { error: touchingPrivileged };
-
-  // não permitir que o usuário remova o próprio acesso administrativo
   if (userId === auth.session.userId) {
-    const stillAdmin = parsed.data.some((r) => r === "OWNER" || r === "ADMIN");
-    const wasAdmin = currentRoles.some((r) => r === "OWNER" || r === "ADMIN");
-    if (wasAdmin && !stillAdmin) {
-      return { error: "Você não pode remover o seu próprio acesso administrativo." };
+    return { error: "Você não pode alterar o seu próprio cargo." };
+  }
+
+  const parsed = cargoSchema.safeParse(cargo);
+  if (!parsed.success) return { error: "Selecione um cargo válido." };
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return { error: "Usuário não encontrado." };
+  if (user.cargo === parsed.data) return { success: "Cargo mantido (sem alteração)." };
+
+  // Não deixar o sistema sem nenhum Administrador Geral ativo
+  if (user.cargo === "ADMINISTRADOR_GERAL" && parsed.data !== "ADMINISTRADOR_GERAL") {
+    if ((await countActiveAdmins(userId)) === 0) {
+      return { error: "Não é possível rebaixar o último Administrador Geral do sistema." };
     }
   }
 
-  await setUserRoles(userId, parsed.data);
+  await db.update(users).set({ cargo: parsed.data }).where(eq(users.id, userId));
+  await revokeUserSessions(userId);
+
+  await writePermissionAudit({
+    actorId: auth.session.userId,
+    targetUserId: userId,
+    action: "CARGO_CHANGED",
+    cargoBefore: user.cargo,
+    cargoAfter: parsed.data,
+    metadata: { email: user.email },
+  });
   await logActivity({
     userId: auth.session.userId,
-    action: "team.rolesUpdated",
+    action: "team.cargoChanged",
     entityType: "user",
     entityId: userId,
-    metadata: { email: user.email, from: currentRoles, to: parsed.data },
+    metadata: { email: user.email, from: user.cargo, to: parsed.data },
   });
 
   revalidatePath("/equipe");
-  return { success: "Nível de acesso atualizado." };
+  return { success: `Cargo alterado para ${CARGO_LABELS[parsed.data]}.` };
+}
+
+/** Concede uma permissão EXTRA (grant-only) a um usuário. Só Administrador Geral. */
+export async function grantPermission(userId: string, permission: string): Promise<ActionState> {
+  const auth = await guardTeam("team.grant_permissions");
+  if (!auth.ok) return { error: auth.error };
+  if (userId === auth.session.userId) {
+    return { error: "Você não pode alterar as suas próprias permissões." };
+  }
+  if (!isPermissionKey(permission)) return { error: "Permissão desconhecida." };
+  const key = permission as PermissionKey;
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return { error: "Usuário não encontrado." };
+
+  // Teto de delegação: só o Administrador Geral concede as chaves sensíveis.
+  // (guardTeam já exige Admin Geral; a checagem fica explícita para o futuro.)
+  if (ADMIN_ONLY_GRANT.has(key) && !isAdminGeral(auth.session)) {
+    return { error: "Esta permissão só pode ser concedida pelo Administrador Geral." };
+  }
+  // Já faz parte do pacote padrão do cargo → não precisa conceder.
+  if (cargoDefaultPermissions(user.cargo).includes(key)) {
+    return { error: "Esta permissão já vem do cargo — não precisa conceder." };
+  }
+
+  await db.insert(userPermissions).values({ userId, permission: key, grantedById: auth.session.userId }).onConflictDoNothing();
+  await revokeUserSessions(userId);
+
+  await writePermissionAudit({
+    actorId: auth.session.userId,
+    targetUserId: userId,
+    action: "PERMISSION_GRANTED",
+    permission: key,
+    metadata: { email: user.email },
+  });
+  revalidatePath("/equipe");
+  return { success: "Permissão concedida." };
+}
+
+/** Remove uma permissão EXTRA de um usuário (não afeta o pacote do cargo). */
+export async function revokePermission(userId: string, permission: string): Promise<ActionState> {
+  const auth = await guardTeam("team.grant_permissions");
+  if (!auth.ok) return { error: auth.error };
+  if (userId === auth.session.userId) {
+    return { error: "Você não pode alterar as suas próprias permissões." };
+  }
+  if (!isPermissionKey(permission)) return { error: "Permissão desconhecida." };
+  const key = permission as PermissionKey;
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return { error: "Usuário não encontrado." };
+
+  await db
+    .delete(userPermissions)
+    .where(and(eq(userPermissions.userId, userId), eq(userPermissions.permission, key)));
+  await revokeUserSessions(userId);
+
+  await writePermissionAudit({
+    actorId: auth.session.userId,
+    targetUserId: userId,
+    action: "PERMISSION_REVOKED",
+    permission: key,
+    metadata: { email: user.email },
+  });
+  revalidatePath("/equipe");
+  return { success: "Permissão removida." };
 }
 
 const profileSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto"),
-  position: z.string().trim().optional(),
   phone: z.string().trim().optional(),
 });
 
-/** Edita nome, cargo e telefone do colaborador direto na tela. */
+/** Edita nome e telefone do colaborador. */
 export async function updateMemberProfile(
   userId: string,
-  input: { name: string; position?: string; phone?: string },
+  input: { name: string; phone?: string },
 ): Promise<ActionState> {
   const auth = await guardTeam("team.update");
   if (!auth.ok) return { error: auth.error };
@@ -275,12 +384,9 @@ export async function updateMemberProfile(
   await db.update(users).set({ name: d.name }).where(eq(users.id, userId));
   const member = await db.query.teamMembers.findFirst({ where: eq(teamMembers.userId, userId) });
   if (member) {
-    await db
-      .update(teamMembers)
-      .set({ position: d.position ?? null, phone: d.phone ?? null })
-      .where(eq(teamMembers.userId, userId));
+    await db.update(teamMembers).set({ phone: d.phone ?? null }).where(eq(teamMembers.userId, userId));
   } else {
-    await db.insert(teamMembers).values({ userId, position: d.position, phone: d.phone, status: "ATIVO" });
+    await db.insert(teamMembers).values({ userId, phone: d.phone, status: "ATIVO" });
   }
 
   await logActivity({
@@ -288,7 +394,7 @@ export async function updateMemberProfile(
     action: "team.profileUpdated",
     entityType: "user",
     entityId: userId,
-    metadata: { name: d.name, position: d.position ?? null },
+    metadata: { name: d.name },
   });
   revalidatePath("/equipe");
   return { success: "Dados do colaborador atualizados." };
@@ -297,38 +403,23 @@ export async function updateMemberProfile(
 /**
  * Exclui um colaborador de forma definitiva e segura. Antes de remover, anula
  * as referências (autoria/atribuição) que apontam para o usuário e cujo FK é
- * restritivo — preservando o histórico operacional sem violar integridade.
- * Tudo em transação: se algo falhar, nada é excluído.
+ * restritivo. Tudo em transação.
  */
 export async function deleteTeamMember(userId: string): Promise<ActionState> {
   const auth = await guardTeam("team.delete");
   if (!auth.ok) return { error: auth.error };
   if (userId === auth.session.userId) return { error: "Você não pode excluir a si mesmo." };
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    with: { userRoles: { with: { role: true } } },
-  });
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) return { error: "Usuário não encontrado." };
 
-  const targetRoles = user.userRoles.map((ur) => ur.role.name);
-  // Só OWNER pode excluir OWNER/ADMIN (mesma proteção da concessão de papéis)
-  const touchingPrivileged = ensureCanGrantRoles(auth.session.roles, targetRoles);
-  if (touchingPrivileged) return { error: touchingPrivileged };
-
-  // Nunca deixar o sistema sem nenhum OWNER
-  if (targetRoles.includes("OWNER")) {
-    const [{ n }] = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(userRoles)
-      .innerJoin(roles, eq(userRoles.roleId, roles.id))
-      .where(and(eq(roles.name, "OWNER"), ne(userRoles.userId, userId)));
-    if (!n) return { error: "Não é possível excluir o último OWNER do sistema." };
+  // Nunca deixar o sistema sem nenhum Administrador Geral ativo
+  if (user.cargo === "ADMINISTRADOR_GERAL" && (await countActiveAdmins(userId)) === 0) {
+    return { error: "Não é possível excluir o último Administrador Geral do sistema." };
   }
 
   try {
     await db.transaction(async (tx) => {
-      // Anula referências restritivas (não-CASCADE) que apontam para o usuário
       const fks = (await tx.execute(sql`
         SELECT tc.table_name, kcu.column_name
         FROM information_schema.table_constraints tc
@@ -348,7 +439,6 @@ export async function deleteTeamMember(userId: string): Promise<ActionState> {
           sql`UPDATE ${sql.identifier(r.table_name)} SET ${sql.identifier(r.column_name)} = NULL WHERE ${sql.identifier(r.column_name)} = ${userId}`,
         );
       }
-      // Remove o usuário; tabelas com FK CASCADE (papéis, notificações, etc.) saem juntas
       await tx.delete(users).where(eq(users.id, userId));
     });
   } catch {
@@ -363,7 +453,7 @@ export async function deleteTeamMember(userId: string): Promise<ActionState> {
     action: "team.memberDeleted",
     entityType: "user",
     entityId: userId,
-    metadata: { email: user.email, name: user.name, roles: targetRoles },
+    metadata: { email: user.email, name: user.name, cargo: user.cargo },
   });
   revalidatePath("/equipe");
   return { success: `${user.name} foi excluído(a) do sistema.` };
@@ -371,9 +461,7 @@ export async function deleteTeamMember(userId: string): Promise<ActionState> {
 
 /**
  * Envia (ou substitui) a foto de perfil do colaborador. Valida por conteúdo
- * (magic bytes), guarda o arquivo no storage (Vercel Blob em prod / disco em
- * dev) e grava a KEY em users.avatar_url. A foto é servida pela rota autenticada
- * /equipe/avatar/[id], que funciona nos dois ambientes.
+ * (magic bytes) e grava a KEY em users.avatar_url.
  */
 export async function uploadMemberAvatar(
   _prev: ActionState,
@@ -404,7 +492,6 @@ export async function uploadMemberAvatar(
 
   const previousKey = user.avatarUrl;
   await db.update(users).set({ avatarUrl: key }).where(eq(users.id, userId));
-  // remove a foto antiga (best-effort; não bloqueia se falhar)
   if (previousKey && previousKey !== key) {
     try {
       await getStorage().delete(previousKey);
@@ -467,12 +554,16 @@ export async function toggleMemberActive(userId: string): Promise<ActionState> {
   }
 
   const newActive = !user.isActive;
+  // Não desativar o último Administrador Geral ativo
+  if (!newActive && user.cargo === "ADMINISTRADOR_GERAL" && (await countActiveAdmins(userId)) === 0) {
+    return { error: "Não é possível desativar o último Administrador Geral do sistema." };
+  }
+
   await db
     .update(users)
     .set({
       isActive: newActive,
       status: newActive ? "ATIVO" : "INATIVO",
-      // desativar/reativar invalida sessões abertas imediatamente
       sessionVersion: sql`${users.sessionVersion} + 1`,
     })
     .where(eq(users.id, userId));
@@ -492,3 +583,6 @@ export async function toggleMemberActive(userId: string): Promise<ActionState> {
   revalidatePath("/equipe");
   return { success: newActive ? "Colaborador reativado." : "Colaborador desativado." };
 }
+
+// Reexport tipos úteis para a UI
+export type { CargoName };

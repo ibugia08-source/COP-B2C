@@ -19,7 +19,8 @@ import {
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { checkPermission } from "@/lib/auth/guard";
-import { canAccessClient, canAccessTask } from "@/lib/auth/ownership";
+import { canAccessTask } from "@/lib/auth/ownership";
+import type { PermissionKey } from "@/lib/auth/permissions";
 import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
 import { isValidOptionValue, resolveDefaultValue } from "@/lib/config-options";
@@ -43,8 +44,9 @@ async function denyTaskOutOfScope(
   session: SessionPayload,
   taskId: string,
   action: string,
+  allKey: PermissionKey = "tasks.update",
 ): Promise<ActionState | null> {
-  if (await canAccessTask(session, taskId)) return null;
+  if (await canAccessTask(session, taskId, allKey)) return null;
   await logActivity({
     userId: session.userId,
     action: "task.ownershipDenied",
@@ -55,21 +57,18 @@ async function denyTaskOutOfScope(
   return { error: "Você não é responsável por esta tarefa." };
 }
 
-/** Criar tarefa vinculada a um cliente exige ser responsável por esse cliente. */
+/**
+ * Vincular uma tarefa a um cliente. Todos os colaboradores podem criar tarefas
+ * para qualquer cliente/setor (requisito), então este gate não bloqueia mais —
+ * a permissão `tasks.create` já é verificada na action. Mantido como ponto único
+ * caso volte a existir restrição no futuro.
+ */
 async function denyClientScopeForTask(
-  session: SessionPayload,
-  clientId: string,
-  action: string,
+  _session: SessionPayload,
+  _clientId: string,
+  _action: string,
 ): Promise<ActionState | null> {
-  if (await canAccessClient(session, clientId)) return null;
-  await logActivity({
-    userId: session.userId,
-    action: "task.ownershipDenied",
-    entityType: "client",
-    entityId: clientId,
-    metadata: { action, reason: "ownership_scope" },
-  });
-  return { error: "Você não é responsável por este cliente." };
+  return null;
 }
 
 const taskSchema = z.object({
@@ -346,7 +345,7 @@ export async function deleteTask(taskId: string): Promise<ActionState> {
   const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!existing) return { error: "Tarefa não encontrada." };
 
-  const denied = await denyTaskOutOfScope(auth.session, taskId, "deleteTask");
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "deleteTask", "tasks.delete");
   if (denied) return denied;
 
   await db.delete(tasks).where(eq(tasks.id, taskId));
@@ -586,7 +585,7 @@ export async function bulkDeleteTasks(ids: string[]): Promise<BulkResult> {
   for (const id of ids) {
     const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
     if (!existing) continue;
-    if (await denyTaskOutOfScope(auth.session, id, "bulkDeleteTasks")) continue;
+    if (await denyTaskOutOfScope(auth.session, id, "bulkDeleteTasks", "tasks.delete")) continue;
     await db.delete(tasks).where(eq(tasks.parentTaskId, id));
     await db.delete(tasks).where(eq(tasks.id, id));
     if (existing.clientId) clientIds.add(existing.clientId);

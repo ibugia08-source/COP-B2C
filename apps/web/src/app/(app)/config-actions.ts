@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { configOptionGroups, configOptions } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { getSession } from "@/lib/auth/session-server";
+import { isAdminGeral } from "@/lib/auth/access";
 import { getBuiltinGroup } from "@/lib/config-options";
 
 export type ActionState = { error?: string; success?: string };
@@ -15,8 +16,8 @@ const TONES = ["green", "amber", "red", "blue", "purple", "zinc", "cyan"];
 async function requireAdmin() {
   const session = await getSession();
   if (!session) return { ok: false as const, error: "Sessão expirada." };
-  if (!session.roles.some((r) => r === "OWNER" || r === "ADMIN")) {
-    return { ok: false as const, error: "Apenas administradores configuram opções." };
+  if (!isAdminGeral(session)) {
+    return { ok: false as const, error: "Apenas o Administrador Geral configura opções." };
   }
   return { ok: true as const, session };
 }

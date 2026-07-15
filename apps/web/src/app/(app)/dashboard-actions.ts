@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { appSettings, userDashboardConfigs } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { getSession } from "@/lib/auth/session-server";
+import { isAdminGeral } from "@/lib/auth/access";
 import {
   BUILTIN_DEFAULT_METRICS,
   isValidMetricKey,
@@ -17,10 +18,6 @@ import { DEFAULT_COLUMNS } from "@/lib/dashboard-config";
 export type ActionState = { error?: string; success?: string };
 
 const GLOBAL_DEFAULT_KEY = "default_dashboard";
-
-function isAdmin(roles: readonly string[]): boolean {
-  return roles.some((r) => r === "OWNER" || r === "ADMIN");
-}
 
 /** Lê a config atual do usuário ou monta uma a partir dos defaults salvos. */
 async function currentConfig(userId: string) {
@@ -131,7 +128,7 @@ export async function restoreDefault(): Promise<ActionState> {
 export async function setGlobalDefault(): Promise<ActionState> {
   const session = await getSession();
   if (!session) return { error: "Sessão expirada." };
-  if (!isAdmin(session.roles)) return { error: "Apenas administradores podem definir o padrão global." };
+  if (!isAdminGeral(session)) return { error: "Apenas o Administrador Geral pode definir o padrão global." };
 
   const cfg = await currentConfig(session.userId);
   await db
@@ -163,7 +160,7 @@ export async function setGlobalDefault(): Promise<ActionState> {
 export async function restoreGlobalDefault(): Promise<ActionState> {
   const session = await getSession();
   if (!session) return { error: "Sessão expirada." };
-  if (!isAdmin(session.roles)) return { error: "Apenas administradores podem restaurar o padrão global." };
+  if (!isAdminGeral(session)) return { error: "Apenas o Administrador Geral pode restaurar o padrão global." };
   await db.delete(appSettings).where(eq(appSettings.key, GLOBAL_DEFAULT_KEY));
   await logActivity({
     userId: session.userId,

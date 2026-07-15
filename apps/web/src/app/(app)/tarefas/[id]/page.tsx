@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { taskTemplates, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
-import { taskOwnershipCheck } from "@/lib/auth/ownership";
+import { canActOnAll, isAdminGeral } from "@/lib/auth/access";
+import { isTaskOwner } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import {
   CLIENT_STATUS_META,
@@ -55,18 +56,21 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
   });
   if (!task) notFound();
 
-  // escopo de ownership: quem não é OWNER/ADMIN só abre tarefas suas ou de clientes que gerencia
-  const inScope = taskOwnershipCheck(session.roles, session.userId, {
-    assignedToId: task.assignedToId,
-    createdById: task.createdById,
-    assigneeIds: task.assignees.map((a) => a.userId),
-    client: task.client ?? null,
-  });
-  if (!inScope) redirect("/acesso-negado");
-
-  const canUpdate = hasPermission(session, "tasks.update");
-  const canComplete = hasPermission(session, "tasks.complete");
-  const canAssign = hasPermission(session, "tasks.assign");
+  // Leitura é aberta (todos veem todas as tarefas). A ESCRITA depende de ser
+  // dono desta tarefa OU ter a variante ampla da ação (ou ser Admin Geral).
+  const ownsTask =
+    isAdminGeral(session) ||
+    isTaskOwner(session.userId, {
+      assignedToId: task.assignedToId,
+      createdById: task.createdById,
+      assigneeIds: task.assignees.map((a) => a.userId),
+      client: task.client ?? null,
+    });
+  const editAny = canActOnAll(session, "tasks.update");
+  const canUpdate = editAny || (hasPermission(session, "tasks.update") && ownsTask);
+  const canComplete =
+    canActOnAll(session, "tasks.complete") || (hasPermission(session, "tasks.complete") && ownsTask);
+  const canAssign = hasPermission(session, "tasks.assign") && (ownsTask || editAny);
   const canCreate = hasPermission(session, "tasks.create");
 
   const [allUsers, allClients, templates, statusOptionsAll] = await Promise.all([

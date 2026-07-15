@@ -17,7 +17,8 @@ import {
   type TaskPriority,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { roleHasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { type PermissionKey } from "@/lib/auth/permissions";
+import { can } from "@/lib/auth/access";
 import type { SessionPayload } from "@/lib/auth/session";
 import { notifyUser } from "@/lib/notify";
 import { buildClientReport, type ReportKind } from "./reports";
@@ -125,7 +126,7 @@ export async function executeCopilotAction(
 ): Promise<ExecResult> {
   // 1) permissão do aprovador
   const permission = ACTION_PERMISSIONS[action.actionType];
-  if (!permission || !roleHasPermission(session.roles, permission)) {
+  if (!permission || !can(session, permission)) {
     return { ok: false, error: `Você não tem a permissão necessária (${permission ?? action.actionType}) para executar esta ação.` };
   }
 

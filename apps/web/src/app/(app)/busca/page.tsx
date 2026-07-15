@@ -3,7 +3,7 @@ import { and, like, or } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, documents, tasks } from "@/db/schema";
 import { hasPermission, requireSession } from "@/lib/auth/guard";
-import { clientScopeCondition, taskScopeCondition } from "@/lib/auth/ownership";
+import { clientScopeCondition, documentScopeCondition, taskScopeCondition } from "@/lib/auth/ownership";
 import { CLIENT_STATUS_META, TASK_STATUS_META } from "@/lib/labels";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui/primitives";
 import { Icon } from "@/components/ui/icon";
@@ -27,10 +27,12 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
   const pattern = `%${q}%`;
   const canClients = hasPermission(session, "clients.view");
   const canTasks = hasPermission(session, "tasks.view");
+  const canDocs = hasPermission(session, "documents.view");
 
-  // respeita o escopo de ownership: papéis restritos só acham o que gerenciam
+  // respeita o escopo: clientes/tarefas são abertos; documentos por cliente
   const clientScope = clientScopeCondition(session);
   const taskScope = taskScopeCondition(session);
+  const docScope = documentScopeCondition(session);
   const [foundClients, foundTasks, foundDocs] = await Promise.all([
     canClients
       ? db.query.clients.findMany({
@@ -44,10 +46,12 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
           limit: 10,
         })
       : Promise.resolve([]),
-    db.query.documents.findMany({
-      where: or(like(documents.title, pattern), like(documents.content, pattern)),
-      limit: 10,
-    }),
+    canDocs
+      ? db.query.documents.findMany({
+          where: and(docScope, or(like(documents.title, pattern), like(documents.content, pattern))),
+          limit: 10,
+        })
+      : Promise.resolve([]),
   ]);
 
   const total = foundClients.length + foundTasks.length + foundDocs.length;

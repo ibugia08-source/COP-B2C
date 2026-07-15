@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, notifications, users } from "@/db/schema";
 import { hasPermission, requireSession } from "@/lib/auth/guard";
+import { isAdminGeral } from "@/lib/auth/access";
 import { getDashboardData, type DashboardFilters } from "@/lib/dashboard";
 import { resolveDashboard } from "@/lib/dashboard-config";
 import { syncGoalReminders } from "@/lib/goals/reminders";
@@ -70,7 +71,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const canClients = hasPermission(session, "clients.view");
   const canTasks = hasPermission(session, "tasks.view");
   const canAssets = hasPermission(session, "digital_assets.view");
-  const isAdmin = session.roles.some((r) => r === "OWNER" || r === "ADMIN");
+  const isAdmin = isAdminGeral(session);
+  const canGlobal = hasPermission(session, "dashboard.view_global");
 
   const dash = await resolveDashboard(session);
 
@@ -85,7 +87,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   };
 
   const [data, allUsers, niches, reminders] = await Promise.all([
-    getDashboardData(filters, session.userId),
+    getDashboardData(filters, session.userId, canGlobal),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)).orderBy(asc(users.name)),
     db.selectDistinct({ niche: clients.niche }).from(clients),
     db.query.notifications.findMany({
@@ -193,20 +195,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {canClients && (
           <>
             <BarList title="Clientes por status" data={data.clients.byStatus} meta={CLIENT_STATUS_META} />
-            <BarList title="Clientes por gestor" data={data.clients.byGestor} />
+            {canGlobal && <BarList title="Clientes por gestor" data={data.clients.byGestor} />}
           </>
         )}
         {canTasks && (
           <>
-            <BarList title="Tarefas abertas por responsável" data={data.tasks.byAssignee} />
+            {canGlobal && <BarList title="Tarefas abertas por responsável" data={data.tasks.byAssignee} />}
             <BarList title="Tarefas por status" data={data.tasks.byStatus} meta={TASK_STATUS_META} />
           </>
         )}
         {canAssets && <BarList title="Ativos por status" data={data.assets.byStatus} meta={ASSET_STATUS_META} />}
-        {canClients && <BarList title="Evolução de churn (6 meses)" data={data.churnSeries} />}
+        {canGlobal && <BarList title="Evolução de churn (6 meses)" data={data.churnSeries} />}
       </div>
 
-      {canTasks && (
+      {canGlobal && (
         <section className="mt-6">
           <h2 className="mb-3 text-sm font-semibold text-zinc-300">Carga de trabalho por colaborador</h2>
           {data.workload.length === 0 ? (

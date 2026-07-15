@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
-import { clientOwnershipCheck } from "@/lib/auth/ownership";
+import { canActOnAll, isAdminGeral } from "@/lib/auth/access";
+import { isClientOwner } from "@/lib/auth/ownership";
 import {
   ADS_META,
   AGENCY_BRAND_META,
@@ -74,13 +75,17 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   });
   if (!client) notFound();
 
-  // escopo de ownership: quem não é OWNER/ADMIN só abre clientes que gerencia
-  if (!clientOwnershipCheck(session.roles, session.userId, client)) redirect("/acesso-negado");
+  // Leitura é aberta (todos veem todos os clientes). A ESCRITA depende de ser
+  // dono deste cliente OU ter a variante ampla da ação (ou ser Admin Geral).
+  const ownsClient = isAdminGeral(session) || isClientOwner(session.userId, client);
+  const canUpdate =
+    canActOnAll(session, "clients.update") || (hasPermission(session, "clients.update") && ownsClient);
+  const canMoveStatus =
+    canActOnAll(session, "clients.moveStatus") ||
+    (hasPermission(session, "clients.moveStatus") && ownsClient);
 
   const canAssets = hasPermission(session, "digital_assets.view");
   const canCreateAsset = hasPermission(session, "digital_assets.create");
-  const canUpdate = hasPermission(session, "clients.update");
-  const canMoveStatus = hasPermission(session, "clients.moveStatus");
   const canCreateTask = hasPermission(session, "tasks.create");
   const [timeline, services, meetUsers, meetEnabled, taskStatusMetaResolved, assetStatusMetaResolved] = await Promise.all([
     getClientTimeline(client.id),

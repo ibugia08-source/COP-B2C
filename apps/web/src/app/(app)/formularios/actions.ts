@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { formSubmissions, formTemplates } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { checkAdmin, checkPermission } from "@/lib/auth/guard";
+import { checkPermission } from "@/lib/auth/guard";
 import { emitEvent } from "@/lib/automations/engine";
 import { isFieldType, slugify, typeHasOptions, type FieldDef } from "./field-types";
 
@@ -17,7 +17,7 @@ export async function submitForm(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const auth = await checkPermission("tasks.view"); // qualquer membro interno
+  const auth = await checkPermission("forms.submit"); // qualquer membro interno
   if (!auth.ok) return { error: auth.error };
 
   const template = await db.query.formTemplates.findFirst({
@@ -85,7 +85,7 @@ async function uniqueSlug(base: string): Promise<string> {
 
 /** Cria ou atualiza um template de formulário (definição de campos em JSONB). */
 export async function saveTemplate(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const auth = await checkAdmin();
+  const auth = await checkPermission("forms.manage_templates");
   if (!auth.ok) return { error: auth.error };
 
   const id = String(formData.get("id") ?? "") || null;
@@ -162,7 +162,7 @@ export async function saveTemplate(_prev: ActionState, formData: FormData): Prom
 
 /** Exclui um template — bloqueado se já houver respostas (preserva histórico). */
 export async function deleteTemplate(id: string): Promise<ActionState> {
-  const auth = await checkAdmin();
+  const auth = await checkPermission("forms.manage_templates");
   if (!auth.ok) return { error: auth.error };
 
   const [{ n }] = await db
@@ -189,7 +189,7 @@ export async function deleteTemplate(id: string): Promise<ActionState> {
 
 /** Ativa/desativa um formulário (some da URL pública quando inativo). */
 export async function toggleTemplateActive(id: string): Promise<ActionState> {
-  const auth = await checkAdmin();
+  const auth = await checkPermission("forms.manage_templates");
   if (!auth.ok) return { error: auth.error };
 
   const tpl = await db.query.formTemplates.findFirst({ where: eq(formTemplates.id, id) });

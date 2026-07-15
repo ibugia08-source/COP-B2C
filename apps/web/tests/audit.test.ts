@@ -54,7 +54,17 @@ vi.mock("@/db", () => {
 vi.mock("@/lib/auth/guard", () => ({
   checkPermission: async () => ({
     ok: true,
-    session: { userId: "u1", name: "Admin", email: "a@b.c", roles: ["ADMIN"] },
+    session: {
+      userId: "u1",
+      name: "Admin",
+      email: "a@b.c",
+      cargo: "ADMINISTRADOR_GERAL",
+      permissions: [
+        "digital_assets.reveal_secrets",
+        "digital_assets.reveal_restricted_secrets",
+        "digital_assets.copy_secrets",
+      ],
+    },
   }),
 }));
 

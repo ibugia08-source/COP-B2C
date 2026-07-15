@@ -1,21 +1,31 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState, useTransition } from "react";
-import { ROLE_NAMES, type RoleName } from "@/db/schema";
-import { ACCESS_LEVEL_PRESETS, ROLE_LABELS } from "@/lib/auth/permissions";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { CARGO_NAMES, type CargoName } from "@/db/schema";
+import {
+  cargoDefaultPermissions,
+  CARGO_LABELS,
+  FEATURE_LABELS,
+  FEATURES,
+  PERMISSION_KEYS,
+  PERMISSION_META,
+  type PermissionKey,
+} from "@/lib/auth/permissions";
 import { Alert, Badge, Button, UserAvatar } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal } from "@/components/ui/overlay";
 import {
   approveUser,
+  changeCargo,
   createTeamMember,
   deleteTeamMember,
+  grantPermission,
   rejectUser,
   removeMemberAvatar,
+  revokePermission,
   toggleMemberActive,
   updateMemberProfile,
   uploadMemberAvatar,
-  updateUserRoles,
   type ActionState,
 } from "./actions";
 
@@ -29,48 +39,137 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   REJEITADO: { label: "Recusado", cls: "bg-red-950 text-red-300" },
 };
 
-// Seletor de nível de acesso reutilizado em criação, aprovação e edição.
-function RoleSelector({
-  selected,
+// Seletor de cargo único.
+function CargoSelect({
+  value,
   onChange,
+  disabled,
 }: {
-  selected: RoleName[];
-  onChange: (roles: RoleName[]) => void;
+  value: CargoName | "";
+  onChange: (c: CargoName) => void;
+  disabled?: boolean;
 }) {
-  function toggle(role: RoleName) {
-    onChange(selected.includes(role) ? selected.filter((r) => r !== role) : [...selected, role]);
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value as CargoName)}
+      className={inputClass}
+    >
+      <option value="" disabled>
+        Selecione o cargo…
+      </option>
+      {CARGO_NAMES.map((c) => (
+        <option key={c} value={c}>
+          {CARGO_LABELS[c]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// Painel de permissões: mostra as que vêm do cargo (padrão, travadas) e permite
+// conceder/remover as EXTRAS. Organizado por feature, com busca.
+function PermissionsPanel({
+  userId,
+  cargo,
+  extras,
+}: {
+  userId: string;
+  cargo: CargoName | null;
+  extras: string[];
+}) {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  const defaults = useMemo(() => new Set(cargoDefaultPermissions(cargo)), [cargo]);
+  const extraSet = useMemo(() => new Set(extras), [extras]);
+  const q = query.trim().toLowerCase();
+
+  function toggle(key: PermissionKey, grant: boolean) {
+    setError(null);
+    setPendingKey(key);
+    startTransition(async () => {
+      const res = grant ? await grantPermission(userId, key) : await revokePermission(userId, key);
+      setPendingKey(null);
+      if (res.error) setError(res.error);
+      else router.refresh();
+    });
   }
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {ACCESS_LEVEL_PRESETS.map((preset) => (
-          <button
-            key={preset.key}
-            type="button"
-            onClick={() => onChange(preset.roles)}
-            title={preset.description}
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-emerald-600 hover:text-emerald-300"
-          >
-            {preset.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-zinc-300">Permissões extras (além do cargo)</span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar permissão…"
+          className="w-48 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-emerald-500"
+        />
       </div>
-      <div className="flex flex-wrap gap-2">
-        {ROLE_NAMES.map((role) => (
-          <label
-            key={role}
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-300 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-300"
-          >
-            <input
-              type="checkbox"
-              checked={selected.includes(role)}
-              onChange={() => toggle(role)}
-              className="accent-emerald-500"
-            />
-            {ROLE_LABELS[role]}
-          </label>
-        ))}
+      {error && <Alert>{error}</Alert>}
+
+      <div className="max-h-80 space-y-4 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+        {FEATURES.map((feature) => {
+          const keys = PERMISSION_KEYS.filter(
+            (k) =>
+              PERMISSION_META[k].feature === feature &&
+              (!q || PERMISSION_META[k].label.toLowerCase().includes(q) || k.includes(q)),
+          );
+          if (keys.length === 0) return null;
+          return (
+            <div key={feature}>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                {FEATURE_LABELS[feature]}
+              </p>
+              <div className="space-y-1">
+                {keys.map((key) => {
+                  const meta = PERMISSION_META[key];
+                  const isDefault = defaults.has(key);
+                  const isExtra = extraSet.has(key);
+                  const checked = isDefault || isExtra;
+                  const busy = pendingKey === key;
+                  return (
+                    <label
+                      key={key}
+                      className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm ${
+                        isDefault ? "opacity-70" : "hover:bg-zinc-900"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={isDefault || busy}
+                          onChange={(e) => toggle(key, e.target.checked)}
+                          className="accent-emerald-500"
+                        />
+                        <span className={meta.risk === "high" ? "text-amber-300" : "text-zinc-200"}>
+                          {meta.label}
+                        </span>
+                        {meta.risk === "high" && <span title="Alto risco" className="text-[10px] text-amber-500">●</span>}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        {isDefault && <Badge tone="zinc">padrão</Badge>}
+                        {isExtra && !isDefault && <Badge tone="green">concedida</Badge>}
+                        {busy && <span className="text-[10px] text-zinc-500">…</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
+      <p className="text-[11px] text-zinc-600">
+        As permissões marcadas como “padrão” vêm do cargo e não podem ser removidas aqui — para
+        tirá-las, altere o cargo. As “concedidas” são extras individuais.
+      </p>
     </div>
   );
 }
@@ -81,7 +180,7 @@ function RoleSelector({
 
 export function MemberForm() {
   const [open, setOpen] = useState(false);
-  const [roles, setRoles] = useState<RoleName[]>([]);
+  const [cargo, setCargo] = useState<CargoName | "">("");
   const [state, formAction, pending] = useActionState<ActionState, FormData>(createTeamMember, {});
 
   return (
@@ -96,9 +195,7 @@ export function MemberForm() {
 
       {open && (
         <form action={formAction} className="mt-4 grid grid-cols-1 gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:grid-cols-2">
-          {roles.map((r) => (
-            <input key={r} type="hidden" name="roles" value={r} />
-          ))}
+          <input type="hidden" name="cargo" value={cargo} />
           <div>
             <label className="mb-1 block text-sm text-zinc-300" htmlFor="name">Nome *</label>
             <input id="name" name="name" required className={inputClass} placeholder="Nome completo" />
@@ -112,16 +209,15 @@ export function MemberForm() {
             <input id="phone" name="phone" className={inputClass} placeholder="(11) 99999-9999" />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-300" htmlFor="position">Cargo</label>
-            <input id="position" name="position" className={inputClass} placeholder="Ex.: Gestor de Tráfego" />
-          </div>
-          <div>
             <label className="mb-1 block text-sm text-zinc-300" htmlFor="password">Senha inicial *</label>
             <input id="password" name="password" type="password" required minLength={8} className={inputClass} placeholder="Mínimo 8 caracteres" />
           </div>
           <div className="sm:col-span-2">
-            <span className="mb-1 block text-sm text-zinc-300">Nível de acesso *</span>
-            <RoleSelector selected={roles} onChange={setRoles} />
+            <span className="mb-1 block text-sm text-zinc-300">Cargo *</span>
+            <CargoSelect value={cargo} onChange={setCargo} />
+            <p className="mt-1 text-[11px] text-zinc-600">
+              O cargo define o pacote padrão de permissões. Extras podem ser concedidas depois.
+            </p>
           </div>
 
           {state.error && <div className="sm:col-span-2"><Alert>{state.error}</Alert></div>}
@@ -130,7 +226,7 @@ export function MemberForm() {
           <div className="sm:col-span-2">
             <button
               type="submit"
-              disabled={pending}
+              disabled={pending || !cargo}
               className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
             >
               {pending ? "Salvando..." : "Cadastrar colaborador"}
@@ -149,7 +245,7 @@ export function MemberForm() {
 export function PendingRow({ user }: { user: { id: string; email: string; name: string } }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [roles, setRoles] = useState<RoleName[]>(["GESTOR_TRAFEGO"]);
+  const [cargo, setCargo] = useState<CargoName | "">("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -182,12 +278,12 @@ export function PendingRow({ user }: { user: { id: string; email: string; name: 
 
       <Modal open={open} onClose={() => setOpen(false)} title={`Aprovar acesso — ${user.email}`}>
         <div className="space-y-4">
-          <p className="text-sm text-zinc-400">Defina o nível de acesso do novo usuário:</p>
-          <RoleSelector selected={roles} onChange={setRoles} />
+          <p className="text-sm text-zinc-400">Defina o cargo do novo usuário:</p>
+          <CargoSelect value={cargo} onChange={setCargo} />
           {error && <Alert>{error}</Alert>}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button disabled={pending} onClick={() => run(() => approveUser(user.id, roles))}>
+            <Button disabled={pending || !cargo} onClick={() => run(() => approveUser(user.id, cargo))}>
               {pending ? "Aprovando..." : "Aprovar acesso"}
             </Button>
           </div>
@@ -198,7 +294,7 @@ export function PendingRow({ user }: { user: { id: string; email: string; name: 
 }
 
 // ---------------------------------------------------------------------------
-// Linha de membro (status + editar nível + ativar/desativar)
+// Linha de membro
 // ---------------------------------------------------------------------------
 
 type MemberInfo = {
@@ -207,9 +303,9 @@ type MemberInfo = {
   email: string;
   status: string;
   isActive: boolean;
-  position: string | null;
+  cargo: CargoName | null;
   phone: string | null;
-  roles: RoleName[];
+  extras: string[];
   isSelf: boolean;
   avatarUrl: string | null;
 };
@@ -275,9 +371,8 @@ export function MemberRow({
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [roles, setRoles] = useState<RoleName[]>(member.roles);
+  const [cargo, setCargo] = useState<CargoName | "">(member.cargo ?? "");
   const [name, setName] = useState(member.name);
-  const [position, setPosition] = useState(member.position ?? "");
   const [phone, setPhone] = useState(member.phone ?? "");
   const meta = STATUS_META[member.status] ?? STATUS_META.INATIVO;
   const hasActions = canUpdate || canDeactivate || canDelete;
@@ -294,14 +389,16 @@ export function MemberRow({
     });
   }
 
-  // Salva perfil (nome/cargo/telefone) e, em seguida, o nível de acesso.
+  // Salva perfil (nome/telefone) e, se mudou, o cargo.
   function saveAll() {
     setError(null);
     startTransition(async () => {
-      const profile = await updateMemberProfile(member.id, { name, position, phone });
+      const profile = await updateMemberProfile(member.id, { name, phone });
       if (profile.error) return setError(profile.error);
-      const rolesResult = await updateUserRoles(member.id, roles);
-      if (rolesResult.error) return setError(rolesResult.error);
+      if (cargo && cargo !== member.cargo) {
+        const cargoRes = await changeCargo(member.id, cargo);
+        if (cargoRes.error) return setError(cargoRes.error);
+      }
       setEditOpen(false);
       router.refresh();
     });
@@ -310,9 +407,8 @@ export function MemberRow({
   function openEdit() {
     setError(null);
     setName(member.name);
-    setPosition(member.position ?? "");
     setPhone(member.phone ?? "");
-    setRoles(member.roles);
+    setCargo(member.cargo ?? "");
     setEditOpen(true);
   }
 
@@ -328,14 +424,15 @@ export function MemberRow({
         </div>
       </td>
       <td className="px-4 py-3 text-zinc-400">{member.email}</td>
-      <td className="px-4 py-3 text-zinc-400">{member.position ?? "—"}</td>
       <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-1">
-          {member.roles.length === 0 && <span className="text-xs text-zinc-600">sem papel</span>}
-          {member.roles.map((role) => (
-            <Badge key={role} tone="zinc">{ROLE_LABELS[role] ?? role}</Badge>
-          ))}
-        </div>
+        {member.cargo ? (
+          <Badge tone="zinc">{CARGO_LABELS[member.cargo]}</Badge>
+        ) : (
+          <span className="text-xs text-zinc-600">sem cargo</span>
+        )}
+        {member.extras.length > 0 && (
+          <span className="ml-1 text-[10px] text-emerald-400">+{member.extras.length} extra(s)</span>
+        )}
       </td>
       <td className="px-4 py-3">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${meta.cls}`}>{meta.label}</span>
@@ -371,7 +468,7 @@ export function MemberRow({
           </div>
           {error && !editOpen && !deleteOpen && <p className="mt-1 text-right text-xs text-red-600">{error}</p>}
 
-          {/* Editar: nome, cargo, telefone e nível de acesso */}
+          {/* Editar: nome, telefone, cargo e permissões extras */}
           <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Editar — ${member.name}`} wide>
             <div className="space-y-4 text-left">
               <AvatarEditor member={member} />
@@ -385,23 +482,29 @@ export function MemberRow({
                   <input value={member.email} disabled className={`${inputClass} opacity-60`} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-zinc-300">Cargo</label>
-                  <input value={position} onChange={(e) => setPosition(e.target.value)} className={inputClass} placeholder="Ex.: Gestor de Tráfego" />
-                </div>
-                <div>
                   <label className="mb-1 block text-sm text-zinc-300">Telefone</label>
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} placeholder="(11) 99999-9999" />
                 </div>
+                <div>
+                  <label className="mb-1 block text-sm text-zinc-300">Cargo</label>
+                  <CargoSelect value={cargo} onChange={setCargo} disabled={member.isSelf} />
+                  {member.isSelf && <p className="mt-1 text-[11px] text-zinc-600">Você não pode alterar o próprio cargo.</p>}
+                </div>
               </div>
-              <div>
-                <span className="mb-1 block text-sm text-zinc-300">Nível de acesso / permissões</span>
-                <RoleSelector selected={roles} onChange={setRoles} />
-              </div>
+
+              {member.isSelf ? (
+                <p className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-500">
+                  Você não pode alterar as suas próprias permissões.
+                </p>
+              ) : (
+                <PermissionsPanel userId={member.id} cargo={member.cargo} extras={member.extras} />
+              )}
+
               {error && <Alert>{error}</Alert>}
               <div className="flex justify-end gap-2">
-                <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancelar</Button>
+                <Button variant="secondary" onClick={() => setEditOpen(false)}>Fechar</Button>
                 <Button disabled={pending || name.trim().length < 2} onClick={saveAll}>
-                  {pending ? "Salvando..." : "Salvar alterações"}
+                  {pending ? "Salvando..." : "Salvar nome/cargo"}
                 </Button>
               </div>
             </div>
@@ -418,7 +521,6 @@ export function MemberRow({
             danger
             pending={pending}
           />
-          {(editOpen || deleteOpen) && error && <p className="mt-1 text-right text-xs text-red-600">{error}</p>}
         </td>
       )}
     </tr>

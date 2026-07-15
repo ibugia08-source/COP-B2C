@@ -3,24 +3,30 @@ import { headers } from "next/headers";
 import { asc, count, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, formSubmissions, formTemplates } from "@/db/schema";
-import { isAdmin, requireSession } from "@/lib/auth/guard";
+import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { formatDate } from "@/lib/labels";
 import { Badge, Card, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui/primitives";
 import { CardAdminActions, FillFormButton, TemplateBuilderButton } from "./ui";
 
 export default async function FormulariosPage() {
-  const session = await requireSession();
-  const admin = isAdmin(session);
+  const session = await requirePermission("forms.view");
+  const admin = hasPermission(session, "forms.manage_templates");
+  const canViewSubs = hasPermission(session, "forms.view_submissions");
+  const canSubmit = hasPermission(session, "forms.submit");
 
   const [templates, submissions, allClients, counts] = await Promise.all([
     db.query.formTemplates.findMany({ orderBy: [asc(formTemplates.name)] }),
-    db.query.formSubmissions.findMany({
-      orderBy: [desc(formSubmissions.createdAt)],
-      with: { template: true, client: true },
-      limit: 30,
-    }),
+    canViewSubs
+      ? db.query.formSubmissions.findMany({
+          orderBy: [desc(formSubmissions.createdAt)],
+          with: { template: true, client: true },
+          limit: 30,
+        })
+      : Promise.resolve([]),
     db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
-    db.select({ templateId: formSubmissions.templateId, n: count() }).from(formSubmissions).groupBy(formSubmissions.templateId),
+    canViewSubs
+      ? db.select({ templateId: formSubmissions.templateId, n: count() }).from(formSubmissions).groupBy(formSubmissions.templateId)
+      : Promise.resolve([]),
   ]);
   const countByTemplate = new Map(counts.map((c) => [c.templateId, c.n]));
 
@@ -60,10 +66,12 @@ export default async function FormulariosPage() {
                 </p>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {t.isActive && <FillFormButton template={t} clients={allClients} />}
-                  <Link href={`/formularios/${t.id}`} className="text-xs text-zinc-400 hover:text-emerald-300">
-                    Ver respostas ({n})
-                  </Link>
+                  {t.isActive && canSubmit && <FillFormButton template={t} clients={allClients} />}
+                  {canViewSubs && (
+                    <Link href={`/formularios/${t.id}`} className="text-xs text-zinc-400 hover:text-emerald-300">
+                      Ver respostas ({n})
+                    </Link>
+                  )}
                 </div>
 
                 {t.isActive && (
@@ -85,6 +93,7 @@ export default async function FormulariosPage() {
         </div>
       )}
 
+      {canViewSubs && (
       <section className="mt-8">
         <h2 className="mb-3 text-sm font-semibold text-zinc-300">Envios recentes</h2>
         {submissions.length === 0 ? (
@@ -124,6 +133,7 @@ export default async function FormulariosPage() {
           </Table>
         )}
       </section>
+      )}
     </div>
   );
 }

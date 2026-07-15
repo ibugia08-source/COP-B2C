@@ -1,103 +1,133 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_ONLY_GRANT,
+  allVariantOf,
+  baseOfAll,
+  CARGO_DEFAULT_PERMISSIONS,
+  cargoDefaultPermissions,
+  effectivePermissions,
   PERMISSION_KEYS,
-  ROLE_PERMISSIONS,
-  roleHasPermission,
 } from "@/lib/auth/permissions";
-import {
-  assetOwnershipCheck,
-  clientOwnershipCheck,
-  taskOwnershipCheck,
-} from "@/lib/auth/ownership";
-import { ROLE_NAMES } from "@/db/schema";
+import { isAssetOwner, isClientOwner, isTaskOwner } from "@/lib/auth/ownership";
+import { CARGO_NAMES } from "@/db/schema";
 
-describe("matriz de permissões", () => {
-  it("OWNER tem todas as permissões", () => {
-    for (const key of PERMISSION_KEYS) {
-      expect(roleHasPermission(["OWNER"], key)).toBe(true);
-    }
-  });
-
-  it("ADMIN tem tudo exceto settings.update", () => {
-    expect(roleHasPermission(["ADMIN"], "settings.update")).toBe(false);
-    expect(roleHasPermission(["ADMIN"], "settings.view")).toBe(true);
-    expect(roleHasPermission(["ADMIN"], "digital_assets.reveal_secrets")).toBe(true);
-    expect(roleHasPermission(["ADMIN"], "digital_assets.view_audit_logs")).toBe(true);
-  });
-
-  it("módulo Equipe é exclusivo de administradores (OWNER/ADMIN)", () => {
-    expect(roleHasPermission(["OWNER"], "team.view")).toBe(true);
-    expect(roleHasPermission(["ADMIN"], "team.view")).toBe(true);
-    expect(roleHasPermission(["OWNER"], "team.approve")).toBe(true);
-    expect(roleHasPermission(["ADMIN"], "team.approve")).toBe(true);
-    for (const role of ["GESTOR_OPERACIONAL", "GESTOR_TRAFEGO", "SOCIAL_MEDIA", "DESIGNER", "COMERCIAL"] as const) {
-      expect(roleHasPermission([role], "team.view")).toBe(false);
-      expect(roleHasPermission([role], "team.create")).toBe(false);
-      expect(roleHasPermission([role], "team.approve")).toBe(false);
-    }
-  });
-
-  it("não existe mais nenhuma permissão financeira nem papel FINANCEIRO", () => {
-    expect(PERMISSION_KEYS.some((k) => k.startsWith("finance."))).toBe(false);
-    expect(PERMISSION_KEYS.some((k) => k.startsWith("vault."))).toBe(false);
-    expect((ROLE_NAMES as readonly string[]).includes("FINANCEIRO")).toBe(false);
-  });
-
-  it("GESTOR_OPERACIONAL gerencia ativos e grupos mas NÃO revela segredos", () => {
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "digital_assets.view")).toBe(true);
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "digital_assets.create")).toBe(true);
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "digital_assets.manage_groups")).toBe(true);
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "digital_assets.reveal_secrets")).toBe(false);
-    expect(roleHasPermission(["GESTOR_OPERACIONAL"], "digital_assets.copy_secrets")).toBe(false);
-  });
-
-  it("GESTOR_TRAFEGO revela e copia segredos", () => {
-    expect(roleHasPermission(["GESTOR_TRAFEGO"], "digital_assets.reveal_secrets")).toBe(true);
-    expect(roleHasPermission(["GESTOR_TRAFEGO"], "digital_assets.copy_secrets")).toBe(true);
-    expect(roleHasPermission(["GESTOR_TRAFEGO"], "digital_assets.view_audit_logs")).toBe(false);
-  });
-
-  it("SOCIAL_MEDIA revela segredos mas não copia nem gerencia grupos", () => {
-    expect(roleHasPermission(["SOCIAL_MEDIA"], "digital_assets.reveal_secrets")).toBe(true);
-    expect(roleHasPermission(["SOCIAL_MEDIA"], "digital_assets.copy_secrets")).toBe(false);
-    expect(roleHasPermission(["SOCIAL_MEDIA"], "digital_assets.manage_groups")).toBe(false);
-  });
-
-  it("DESIGNER só vê ativos e baixa anexos — sem metadados de segredos", () => {
-    expect(roleHasPermission(["DESIGNER"], "digital_assets.view")).toBe(true);
-    expect(roleHasPermission(["DESIGNER"], "digital_assets.download_attachments")).toBe(true);
-    expect(roleHasPermission(["DESIGNER"], "digital_assets.view_secrets_metadata")).toBe(false);
-    expect(roleHasPermission(["DESIGNER"], "digital_assets.reveal_secrets")).toBe(false);
-    expect(roleHasPermission(["DESIGNER"], "clients.view")).toBe(false);
-  });
-
-  it("COMERCIAL vê ativos básicos sem segredos", () => {
-    expect(roleHasPermission(["COMERCIAL"], "digital_assets.view")).toBe(true);
-    expect(roleHasPermission(["COMERCIAL"], "digital_assets.view_secrets_metadata")).toBe(false);
-    expect(roleHasPermission(["COMERCIAL"], "digital_assets.reveal_secrets")).toBe(false);
-  });
-
-  it("CLIENTE_CONVIDADO não acessa nada do Banco de Ativos", () => {
-    for (const key of PERMISSION_KEYS) {
-      expect(roleHasPermission(["CLIENTE_CONVIDADO"], key)).toBe(false);
-    }
-  });
-
-  it("múltiplos papéis somam permissões", () => {
-    expect(roleHasPermission(["DESIGNER", "GESTOR_TRAFEGO"], "digital_assets.reveal_secrets")).toBe(true);
-  });
-
-  it("todos os papéis declarados têm entrada na matriz e só referenciam permissões existentes", () => {
+describe("catálogo e pacotes padrão por cargo", () => {
+  it("todo cargo tem pacote e só referencia chaves existentes", () => {
     const valid = new Set<string>(PERMISSION_KEYS);
-    for (const role of ROLE_NAMES) {
-      expect(ROLE_PERMISSIONS[role]).toBeDefined();
-      for (const key of ROLE_PERMISSIONS[role]) expect(valid.has(key)).toBe(true);
+    for (const cargo of CARGO_NAMES) {
+      expect(CARGO_DEFAULT_PERMISSIONS[cargo]).toBeDefined();
+      for (const key of CARGO_DEFAULT_PERMISSIONS[cargo]) expect(valid.has(key)).toBe(true);
+    }
+  });
+
+  it("ADMINISTRADOR_GERAL tem todas as permissões", () => {
+    for (const key of PERMISSION_KEYS) {
+      expect(CARGO_DEFAULT_PERMISSIONS.ADMINISTRADOR_GERAL.includes(key)).toBe(true);
+    }
+  });
+
+  it("base universal: todos os cargos veem clientes/tarefas e criam/atribuem tarefas", () => {
+    for (const cargo of CARGO_NAMES) {
+      const perms = new Set(cargoDefaultPermissions(cargo));
+      for (const key of ["clients.view", "tasks.view", "tasks.create", "tasks.assign"] as const) {
+        expect(perms.has(key)).toBe(true);
+      }
+    }
+  });
+
+  it("GESTOR_TRAFEGO revela e copia segredos, inclusive restritos", () => {
+    const p = new Set(cargoDefaultPermissions("GESTOR_TRAFEGO"));
+    expect(p.has("digital_assets.reveal_secrets")).toBe(true);
+    expect(p.has("digital_assets.copy_secrets")).toBe(true);
+    expect(p.has("digital_assets.reveal_restricted_secrets")).toBe(true);
+  });
+
+  it("SOCIAL_MEDIA revela segredos comuns mas NÃO os restritos (tokens/API/2FA)", () => {
+    const p = new Set(cargoDefaultPermissions("SOCIAL_MEDIA"));
+    expect(p.has("digital_assets.reveal_secrets")).toBe(true);
+    expect(p.has("digital_assets.reveal_restricted_secrets")).toBe(false);
+    expect(p.has("digital_assets.copy_secrets")).toBe(false);
+  });
+
+  it("DIRETOR_CRIATIVO gerencia QUALQUER tarefa do time (variantes _all)", () => {
+    const p = new Set(cargoDefaultPermissions("DIRETOR_CRIATIVO"));
+    expect(p.has("tasks.update_all")).toBe(true);
+    expect(p.has("tasks.complete_all")).toBe(true);
+    // sem segredos por padrão
+    expect(p.has("digital_assets.reveal_secrets")).toBe(false);
+  });
+
+  it("COMERCIAL cadastra clientes; DESIGNER é enxuto", () => {
+    expect(cargoDefaultPermissions("COMERCIAL")).toContain("clients.create");
+    const designer = new Set(cargoDefaultPermissions("DESIGNER"));
+    expect(designer.has("digital_assets.download_attachments")).toBe(true);
+    expect(designer.has("clients.create")).toBe(false);
+    expect(designer.has("digital_assets.reveal_secrets")).toBe(false);
+  });
+
+  it("nenhum cargo (exceto Admin Geral) tem team.* ou settings.* por padrão", () => {
+    for (const cargo of CARGO_NAMES) {
+      if (cargo === "ADMINISTRADOR_GERAL") continue;
+      const p = new Set(cargoDefaultPermissions(cargo));
+      for (const key of PERMISSION_KEYS) {
+        if (key.startsWith("team.") || key.startsWith("settings.")) {
+          expect(p.has(key)).toBe(false);
+        }
+      }
+    }
+  });
+});
+
+describe("permissões efetivas (cargo ∪ extras, grant-only)", () => {
+  it("extras adicionam ao pacote do cargo", () => {
+    const eff = new Set(effectivePermissions("DESIGNER", ["clients.update_all"]));
+    expect(eff.has("clients.update_all")).toBe(true);
+    // mantém o padrão do cargo
+    expect(eff.has("tasks.view")).toBe(true);
+  });
+
+  it("chaves extras inexistentes são ignoradas", () => {
+    const eff = effectivePermissions("DESIGNER", ["nao.existe", "finance.tudo"]);
+    expect(eff.some((k) => (k as string) === "nao.existe")).toBe(false);
+  });
+
+  it("cargo nulo sem extras = nenhuma permissão", () => {
+    expect(effectivePermissions(null)).toEqual([]);
+  });
+});
+
+describe("escopo próprio × amplo", () => {
+  it("baseOfAll e allVariantOf são inversos quando a variante existe", () => {
+    expect(allVariantOf("tasks.update")).toBe("tasks.update_all");
+    expect(baseOfAll("tasks.update_all")).toBe("tasks.update");
+    expect(allVariantOf("tasks.view")).toBeNull(); // sem variante ampla
+    expect(baseOfAll("tasks.view")).toBeNull();
+  });
+});
+
+describe("teto de delegação (ADMIN_ONLY_GRANT)", () => {
+  it("inclui as chaves sensíveis", () => {
+    for (const key of [
+      "team.grant_permissions",
+      "team.change_role",
+      "settings.update",
+      "integrations.manage",
+      "digital_assets.create_secrets",
+      "digital_assets.reveal_restricted_secrets",
+    ] as const) {
+      expect(ADMIN_ONLY_GRANT.has(key)).toBe(true);
+    }
+  });
+
+  it("não inclui permissões operacionais comuns", () => {
+    for (const key of ["tasks.create", "clients.view", "digital_assets.view"] as const) {
+      expect(ADMIN_ONLY_GRANT.has(key)).toBe(false);
     }
   });
 });
 
 // ---------------------------------------------------------------------------
-// Escopo de ownership (P0.2): além do RBAC, operar exige ser responsável
+// Ownership: agora membership PURA (elevação por _all/Admin fica no resolvedor)
 // ---------------------------------------------------------------------------
 
 const CLIENT = {
@@ -106,77 +136,50 @@ const CLIENT = {
   trafficManager2Id: "u-gestor2",
 };
 
-describe("ownership de clientes (clientOwnershipCheck)", () => {
-  it("OWNER e ADMIN acessam qualquer cliente, mesmo sem serem responsáveis", () => {
-    expect(clientOwnershipCheck(["OWNER"], "u-qualquer", CLIENT)).toBe(true);
-    expect(clientOwnershipCheck(["ADMIN"], "u-qualquer", CLIENT)).toBe(true);
+describe("isClientOwner (membership)", () => {
+  it("cada um dos 3 responsáveis é dono; um terceiro não", () => {
+    expect(isClientOwner("u-estrategista", CLIENT)).toBe(true);
+    expect(isClientOwner("u-gestor1", CLIENT)).toBe(true);
+    expect(isClientOwner("u-gestor2", CLIENT)).toBe(true);
+    expect(isClientOwner("u-intruso", CLIENT)).toBe(false);
   });
 
-  it("cada um dos 3 responsáveis acessa; um terceiro não", () => {
-    for (const role of ["GESTOR_TRAFEGO", "GESTOR_OPERACIONAL", "SOCIAL_MEDIA", "COMERCIAL"] as const) {
-      expect(clientOwnershipCheck([role], "u-estrategista", CLIENT)).toBe(true);
-      expect(clientOwnershipCheck([role], "u-gestor1", CLIENT)).toBe(true);
-      expect(clientOwnershipCheck([role], "u-gestor2", CLIENT)).toBe(true);
-      expect(clientOwnershipCheck([role], "u-intruso", CLIENT)).toBe(false);
-    }
-  });
-
-  it("cliente inexistente ou sem responsáveis nega para não-admin", () => {
-    expect(clientOwnershipCheck(["GESTOR_TRAFEGO"], "u1", null)).toBe(false);
+  it("cliente nulo/sem responsáveis nega", () => {
+    expect(isClientOwner("u1", null)).toBe(false);
     expect(
-      clientOwnershipCheck(["GESTOR_TRAFEGO"], "u1", {
-        strategistId: null,
-        trafficManager1Id: null,
-        trafficManager2Id: null,
-      }),
+      isClientOwner("u1", { strategistId: null, trafficManager1Id: null, trafficManager2Id: null }),
     ).toBe(false);
   });
 });
 
-describe("ownership de ativos digitais (assetOwnershipCheck)", () => {
-  it("ativo de cliente: responsável acessa, terceiro não", () => {
+describe("isAssetOwner (membership)", () => {
+  it("ativo de cliente: responsável é dono, terceiro não", () => {
     const asset = { clientId: "c1", client: CLIENT };
-    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u-gestor1", asset)).toBe(true);
-    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u-estrategista", asset)).toBe(true);
-    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u-intruso", asset)).toBe(false);
-    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u-intruso", asset)).toBe(false);
+    expect(isAssetOwner("u-gestor1", asset)).toBe(true);
+    expect(isAssetOwner("u-intruso", asset)).toBe(false);
   });
 
-  it("ativo interno (sem cliente): só OWNER/ADMIN/GESTOR_OPERACIONAL", () => {
-    const internal = { clientId: null, client: null };
-    expect(assetOwnershipCheck(["OWNER"], "u1", internal)).toBe(true);
-    expect(assetOwnershipCheck(["ADMIN"], "u1", internal)).toBe(true);
-    expect(assetOwnershipCheck(["GESTOR_OPERACIONAL"], "u1", internal)).toBe(true);
-    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u1", internal)).toBe(false);
-    expect(assetOwnershipCheck(["SOCIAL_MEDIA"], "u1", internal)).toBe(false);
-    expect(assetOwnershipCheck(["DESIGNER"], "u1", internal)).toBe(false);
-  });
-
-  it("OWNER/ADMIN acessam qualquer ativo; ativo inexistente nega", () => {
-    expect(assetOwnershipCheck(["ADMIN"], "u1", { clientId: "c1", client: CLIENT })).toBe(true);
-    expect(assetOwnershipCheck(["GESTOR_TRAFEGO"], "u1", null)).toBe(false);
+  it("ativo interno (sem cliente) não tem dono — elevação fica no resolvedor", () => {
+    expect(isAssetOwner("u1", { clientId: null, client: null })).toBe(false);
   });
 });
 
-describe("ownership de tarefas (taskOwnershipCheck)", () => {
+describe("isTaskOwner (membership)", () => {
   const base = { assignedToId: null, createdById: null, assigneeIds: [] as string[], client: null };
 
-  it("responsável, adicional e criador escrevem", () => {
-    expect(taskOwnershipCheck(["DESIGNER"], "u1", { ...base, assignedToId: "u1" })).toBe(true);
-    expect(taskOwnershipCheck(["DESIGNER"], "u1", { ...base, createdById: "u1" })).toBe(true);
-    expect(taskOwnershipCheck(["DESIGNER"], "u1", { ...base, assigneeIds: ["u2", "u1"] })).toBe(true);
+  it("responsável, adicional e criador são donos", () => {
+    expect(isTaskOwner("u1", { ...base, assignedToId: "u1" })).toBe(true);
+    expect(isTaskOwner("u1", { ...base, createdById: "u1" })).toBe(true);
+    expect(isTaskOwner("u1", { ...base, assigneeIds: ["u2", "u1"] })).toBe(true);
   });
 
-  it("responsável pelo cliente da tarefa escreve; terceiro não", () => {
-    expect(taskOwnershipCheck(["GESTOR_TRAFEGO"], "u-gestor1", { ...base, client: CLIENT })).toBe(true);
-    expect(
-      taskOwnershipCheck(["GESTOR_TRAFEGO"], "u-intruso", { ...base, assignedToId: "u2", client: CLIENT }),
-    ).toBe(false);
+  it("responsável pelo cliente da tarefa é dono; terceiro não", () => {
+    expect(isTaskOwner("u-gestor1", { ...base, client: CLIENT })).toBe(true);
+    expect(isTaskOwner("u-intruso", { ...base, assignedToId: "u2", client: CLIENT })).toBe(false);
   });
 
-  it("tarefa interna sem dono é colaborativa; com dono, só o dono/admins", () => {
-    expect(taskOwnershipCheck(["SOCIAL_MEDIA"], "u1", base)).toBe(true);
-    expect(taskOwnershipCheck(["SOCIAL_MEDIA"], "u1", { ...base, assignedToId: "u2" })).toBe(false);
-    expect(taskOwnershipCheck(["ADMIN"], "u1", { ...base, assignedToId: "u2" })).toBe(true);
+  it("tarefa interna sem dono é colaborativa; com dono, só o dono", () => {
+    expect(isTaskOwner("u1", base)).toBe(true);
+    expect(isTaskOwner("u1", { ...base, assignedToId: "u2" })).toBe(false);
   });
 });

@@ -2,7 +2,8 @@ import { cache } from "react";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { users, type RoleName } from "@/db/schema";
+import { users } from "@/db/schema";
+import { effectivePermissions } from "./permissions";
 import {
   SESSION_COOKIE,
   isSessionUserValid,
@@ -25,7 +26,7 @@ export type SessionState = {
 const loadSessionUser = cache(async (userId: string) => {
   return db.query.users.findFirst({
     where: eq(users.id, userId),
-    with: { userRoles: { with: { role: true } } },
+    with: { userPermissions: { columns: { permission: true } } },
   });
 });
 
@@ -47,7 +48,11 @@ export const getSessionState = cache(async (): Promise<SessionState> => {
       userId: user!.id,
       name: user!.name,
       email: user!.email,
-      roles: user!.userRoles.map((ur) => ur.role.name as RoleName),
+      cargo: user!.cargo,
+      permissions: effectivePermissions(
+        user!.cargo,
+        user!.userPermissions.map((p) => p.permission),
+      ),
     },
     revoked: false,
   };

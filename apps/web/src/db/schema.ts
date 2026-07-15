@@ -269,6 +269,26 @@ export const ROLE_NAMES = [
   "CLIENTE_CONVIDADO",
 ] as const;
 
+// Cargos oficiais (RBAC 2.0): cada usuário tem UM cargo principal, que fornece
+// o pacote padrão de permissões. Substitui o modelo N:N de papéis. A tabela
+// `roles`/`userRoles` acima é mantida (dead) para rollback durante a transição.
+export const CARGO_NAMES = [
+  "ADMINISTRADOR_GERAL",
+  "GESTOR_TRAFEGO",
+  "SOCIAL_MEDIA",
+  "DIRETOR_CRIATIVO",
+  "COMERCIAL",
+  "DESIGNER",
+] as const;
+
+// Ações registradas na auditoria de acessos (concessão/remoção de permissão e
+// troca de cargo). Logs não são excluíveis pela aplicação.
+export const PERMISSION_AUDIT_ACTIONS = [
+  "PERMISSION_GRANTED",
+  "PERMISSION_REVOKED",
+  "CARGO_CHANGED",
+] as const;
+
 const id = () =>
   text("id")
     .primaryKey()
@@ -302,7 +322,11 @@ export const users = pgTable(
     signupSource: text("signup_source", { enum: ["SELF_SIGNUP", "ADMIN"] })
       .notNull()
       .default("ADMIN"),
-    // incrementada a cada mudança de papéis/status — invalida JWTs emitidos antes
+    // Cargo principal (RBAC 2.0). Nullable durante a transição/backfill; a UI de
+    // Equipe passa a exigir. Fornece o pacote padrão de permissões (no código).
+    cargo: text("cargo", { enum: CARGO_NAMES }),
+    // incrementada a cada mudança de papéis/cargo/permissões/status — invalida
+    // JWTs emitidos antes
     sessionVersion: integer("session_version").notNull().default(0),
     approvedById: text("approved_by_id"),
     approvedAt: timestamp("approved_at", { mode: "date" }),
@@ -335,6 +359,50 @@ export const userRoles = pgTable(
       .references(() => roles.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ columns: [t.userId, t.roleId] })],
+);
+
+// Permissões EXTRAS concedidas individualmente por um Administrador Geral, por
+// cima do pacote padrão do cargo. Modelo grant-only: só ADICIONAM. A chave é
+// validada contra PERMISSION_KEYS na aplicação (texto para não acoplar o enum
+// do banco ao catálogo, que evolui no código).
+export const userPermissions = pgTable(
+  "user_permissions",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    permission: text("permission").notNull(),
+    grantedById: text("granted_by_id").references(() => users.id, { onDelete: "set null" }),
+    grantedAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.permission] }),
+    index("user_permissions_user_idx").on(t.userId),
+  ],
+);
+
+// Auditoria de acessos: concessão/remoção de permissão extra e troca de cargo.
+// Registro imutável (a aplicação não expõe exclusão).
+export const permissionAuditLogs = pgTable(
+  "permission_audit_logs",
+  {
+    id: id(),
+    actorId: text("actor_id").references(() => users.id, { onDelete: "set null" }),
+    targetUserId: text("target_user_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action", { enum: PERMISSION_AUDIT_ACTIONS }).notNull(),
+    permission: text("permission"), // preenchido em GRANTED/REVOKED
+    cargoBefore: text("cargo_before"), // preenchido em CARGO_CHANGED
+    cargoAfter: text("cargo_after"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("perm_audit_target_idx").on(t.targetUserId),
+    index("perm_audit_actor_idx").on(t.actorId),
+    index("perm_audit_created_idx").on(t.createdAt),
+  ],
 );
 
 // Tentativas de login (rate limiting / lockout). Limpa registros >7 dias no
@@ -1436,6 +1504,12 @@ export const importLogs = pgTable("import_logs", {
 export const usersRelations = relations(users, ({ one, many }) => ({
   teamMember: one(teamMembers, { fields: [users.id], references: [teamMembers.userId] }),
   userRoles: many(userRoles),
+  userPermissions: many(userPermissions),
+}));
+
+export const userPermissionsRelations = relations(userPermissions, ({ one }) => ({
+  user: one(users, { fields: [userPermissions.userId], references: [users.id] }),
+  grantedBy: one(users, { fields: [userPermissions.grantedById], references: [users.id] }),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({
@@ -1725,6 +1799,10 @@ export type ConfigOptionGroup = typeof configOptionGroups.$inferSelect;
 export type ConfigOption = typeof configOptions.$inferSelect;
 
 export type RoleName = (typeof ROLE_NAMES)[number];
+export type CargoName = (typeof CARGO_NAMES)[number];
+export type UserPermission = typeof userPermissions.$inferSelect;
+export type PermissionAuditLog = typeof permissionAuditLogs.$inferSelect;
+export type PermissionAuditAction = (typeof PERMISSION_AUDIT_ACTIONS)[number];
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];
 export type HealthStatus = (typeof HEALTH_STATUSES)[number];
 export type AdsStatus = (typeof ADS_STATUSES)[number];

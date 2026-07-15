@@ -1,6 +1,7 @@
 import { ADS_STATUSES, AGENCY_BRANDS, BUSINESS_MODELS, HEALTH_STATUSES } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { canAccessClient } from "@/lib/auth/ownership";
+import type { PermissionKey } from "@/lib/auth/permissions";
 import type { SessionPayload } from "@/lib/auth/session";
 
 /**
@@ -23,8 +24,9 @@ export async function denyClientOutOfScope(
   session: SessionPayload,
   clientId: string,
   action: string,
+  allKey: PermissionKey = "clients.update",
 ): Promise<{ error: string } | null> {
-  if (await canAccessClient(session, clientId)) return null;
+  if (await canAccessClient(session, clientId, allKey)) return null;
   await logActivity({
     userId: session.userId,
     action: "client.ownershipDenied",

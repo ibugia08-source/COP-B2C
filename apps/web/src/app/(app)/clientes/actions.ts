@@ -340,7 +340,7 @@ export async function markClientLost(
   const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!existing) return { error: "Cliente não encontrado." };
 
-  const denied = await denyClientOutOfScope(auth.session, clientId, "markClientLost");
+  const denied = await denyClientOutOfScope(auth.session, clientId, "markClientLost", "clients.moveStatus");
   if (denied) return denied;
 
   await db
@@ -635,7 +635,7 @@ export async function deleteClientRow(clientId: string): Promise<ActionState> {
   if (!auth.ok) return { error: auth.error };
   const c = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!c) return { error: "Cliente não encontrado." };
-  const denied = await denyClientOutOfScope(auth.session, clientId, "deleteClientRow");
+  const denied = await denyClientOutOfScope(auth.session, clientId, "deleteClientRow", "clients.delete");
   if (denied) return denied;
   try {
     await cascadeSafeDelete("clients", clientId);
@@ -653,7 +653,7 @@ export async function bulkDeleteClientsList(ids: string[]): Promise<BulkResult> 
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
   let ok = 0;
   for (const id of ids) {
-    if (await denyClientOutOfScope(auth.session, id, "bulkDeleteClientsList")) continue;
+    if (await denyClientOutOfScope(auth.session, id, "bulkDeleteClientsList", "clients.delete")) continue;
     try {
       await cascadeSafeDelete("clients", id);
       ok++;

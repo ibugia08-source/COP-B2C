@@ -1,11 +1,10 @@
 import { db } from "@/db";
-import type { RoleName } from "@/db/schema";
 import { hasPermission, requireAdmin } from "@/lib/auth/guard";
 import { PageHeader } from "@/components/ui/primitives";
 import { MemberForm, MemberRow, PendingRow } from "./ui";
 
 export default async function EquipePage() {
-  // Módulo Equipe é restrito a OWNER/ADMIN (verificação de papel no servidor).
+  // Módulo Equipe é restrito ao Administrador Geral (verificação no servidor).
   const session = await requireAdmin();
   const canCreate = hasPermission(session, "team.create");
   const canUpdate = hasPermission(session, "team.update");
@@ -16,7 +15,7 @@ export default async function EquipePage() {
   const allUsers = await db.query.users.findMany({
     with: {
       teamMember: true,
-      userRoles: { with: { role: true } },
+      userPermissions: { columns: { permission: true } },
     },
     orderBy: (u, { asc }) => [asc(u.name)],
   });
@@ -28,7 +27,7 @@ export default async function EquipePage() {
     <div>
       <PageHeader
         title="Equipe & Acessos"
-        description="Colaboradores, níveis de acesso e aprovação de novos cadastros."
+        description="Colaboradores, cargos, permissões extras e aprovação de novos cadastros."
       />
 
       {canApprove && pending.length > 0 && (
@@ -59,7 +58,6 @@ export default async function EquipePage() {
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">E-mail</th>
                 <th className="px-4 py-3">Cargo</th>
-                <th className="px-4 py-3">Nível de acesso</th>
                 <th className="px-4 py-3">Status</th>
                 {(canUpdate || canDeactivate || canDelete) && <th className="px-4 py-3 text-right">Ações</th>}
               </tr>
@@ -74,9 +72,9 @@ export default async function EquipePage() {
                     email: member.email,
                     status: member.status,
                     isActive: member.isActive,
-                    position: member.teamMember?.position ?? null,
+                    cargo: member.cargo,
                     phone: member.teamMember?.phone ?? null,
-                    roles: member.userRoles.map((ur) => ur.role.name as RoleName),
+                    extras: member.userPermissions.map((p) => p.permission),
                     isSelf: member.id === session.userId,
                     // rota autenticada; ?v muda a cada upload (busta o cache do browser)
                     avatarUrl: member.avatarUrl

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { notifications } from "@/db/schema";
 import { logout } from "@/lib/auth/actions";
 import { requireSession, sessionPermissions } from "@/lib/auth/guard";
-import type { PermissionKey } from "@/lib/auth/permissions";
+import { CARGO_LABELS, type PermissionKey } from "@/lib/auth/permissions";
 import { AppNav, Breadcrumbs, GlobalSearch, MobileBottomNav, type NavGroup, type NavItem } from "@/components/shell";
 import { UserAvatar } from "@/components/ui/primitives";
 import { Icon } from "@/components/ui/icon";
@@ -26,9 +26,9 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: "Gestão",
     items: [
       { href: "/ativos", label: "Banco de Ativos", icon: "assets", permission: "digital_assets.view" },
-      { href: "/documentos", label: "Documentos", icon: "documents" },
+      { href: "/documentos", label: "Documentos", icon: "documents", permission: "documents.view" },
       { href: "/metas", label: "Metas", icon: "goals", permission: "goals.view" },
-      { href: "/formularios", label: "Formulários", icon: "forms" },
+      { href: "/formularios", label: "Formulários", icon: "forms", permission: "forms.view" },
     ],
   },
   {
@@ -44,6 +44,7 @@ const NAV_GROUPS: NavGroupDef[] = [
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
   const perms = sessionPermissions(session);
+  const cargoLabel = session.cargo ? CARGO_LABELS[session.cargo] : "Sem cargo";
   const navGroups: NavGroup[] = NAV_GROUPS.map((g) => ({
     label: g.label,
     items: g.items
@@ -81,7 +82,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <UserAvatar name={session.name} size="sm" />
             <div className="min-w-0 max-lg:hidden">
               <p className="truncate text-xs font-medium text-zinc-100">{session.name}</p>
-              <p className="truncate text-[10px] text-zinc-500">{session.roles.join(", ")}</p>
+              <p className="truncate text-[10px] text-zinc-500">{cargoLabel}</p>
             </div>
           </div>
           <form action={logout}>
@@ -130,7 +131,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         primary={mobilePrimary}
         more={mobileMore}
         userName={session.name}
-        roles={session.roles.join(", ")}
+        roles={cargoLabel}
         logoutAction={logout}
       />
     </div>

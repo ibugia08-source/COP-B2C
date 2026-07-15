@@ -8,7 +8,7 @@ import { TemplateBadges, TemplateEditor, TemplateRowActions } from "./ui";
 
 export default async function TemplatesPage() {
   const session = await requirePermission("tasks.view");
-  const canEdit = hasPermission(session, "automations.update");
+  const canEdit = hasPermission(session, "tasks.manage_templates");
   const canApply = hasPermission(session, "tasks.create");
 
   const [templates, allClients] = await Promise.all([

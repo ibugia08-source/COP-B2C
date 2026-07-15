@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
 import type { SessionPayload } from "./session";
 import { getSession, getSessionState } from "./session-server";
-import { roleHasPermission, ROLE_PERMISSIONS, type PermissionKey } from "./permissions";
+import { type PermissionKey } from "./permissions";
+import { isAdminGeral } from "./access";
+
+// Guards de sessão/permissão. A decisão de acesso vive em ./access.ts (can /
+// isAdminGeral). Aqui ficam apenas os wrappers de página (redirect) e de
+// action/route (retornam erro). As permissões efetivas já vêm precomputadas na
+// sessão (padrão do cargo ∪ extras) — ver session-server.ts.
 
 /** Exige sessão ativa; senão redireciona para /login. */
 export async function requireSession(): Promise<SessionPayload> {
@@ -13,7 +19,7 @@ export async function requireSession(): Promise<SessionPayload> {
 /** Exige sessão + permissão; senão redireciona para /acesso-negado. */
 export async function requirePermission(permission: PermissionKey): Promise<SessionPayload> {
   const session = await requireSession();
-  if (!roleHasPermission(session.roles, permission)) redirect("/acesso-negado");
+  if (!session.permissions.includes(permission)) redirect("/acesso-negado");
   return session;
 }
 
@@ -23,42 +29,38 @@ export async function checkPermission(
 ): Promise<{ ok: true; session: SessionPayload } | { ok: false; error: string }> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Sessão expirada. Faça login novamente." };
-  if (!roleHasPermission(session.roles, permission)) {
+  if (!session.permissions.includes(permission)) {
     return { ok: false, error: "Você não tem permissão para esta ação." };
   }
   return { ok: true, session };
 }
 
-/** OWNER ou ADMIN — usado por módulos restritos a administradores (ex.: Equipe). */
+/** Administrador Geral — usado por módulos restritos (Equipe, config, acessos). */
 export function isAdmin(session: SessionPayload): boolean {
-  return session.roles.some((r) => r === "OWNER" || r === "ADMIN");
+  return isAdminGeral(session);
 }
 
-/** Exige sessão + papel administrativo; senão redireciona para /acesso-negado. */
+/** Exige sessão + Administrador Geral; senão redireciona para /acesso-negado. */
 export async function requireAdmin(): Promise<SessionPayload> {
   const session = await requireSession();
-  if (!isAdmin(session)) redirect("/acesso-negado");
+  if (!isAdminGeral(session)) redirect("/acesso-negado");
   return session;
 }
 
-/** Versão para server actions/APIs: exige papel administrativo, sem redirecionar. */
+/** Versão para server actions/APIs: exige Administrador Geral, sem redirecionar. */
 export async function checkAdmin(): Promise<
   { ok: true; session: SessionPayload } | { ok: false; error: string }
 > {
   const session = await getSession();
   if (!session) return { ok: false, error: "Sessão expirada. Faça login novamente." };
-  if (!isAdmin(session)) return { ok: false, error: "Apenas administradores acessam este recurso." };
+  if (!isAdminGeral(session)) return { ok: false, error: "Apenas o Administrador Geral acessa este recurso." };
   return { ok: true, session };
 }
 
 export function sessionPermissions(session: SessionPayload): Set<PermissionKey> {
-  const keys = new Set<PermissionKey>();
-  for (const role of session.roles) {
-    for (const key of ROLE_PERMISSIONS[role] ?? []) keys.add(key);
-  }
-  return keys;
+  return new Set(session.permissions);
 }
 
 export function hasPermission(session: SessionPayload, permission: PermissionKey): boolean {
-  return roleHasPermission(session.roles, permission);
+  return session.permissions.includes(permission);
 }

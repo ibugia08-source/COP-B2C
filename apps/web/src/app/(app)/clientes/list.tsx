@@ -126,11 +126,14 @@ export function ClientsList({
   options,
   canUpdate,
   canDelete,
+  bulkRaised = false,
 }: {
   rows: ClientRow[];
   options: Options;
   canUpdate: boolean;
   canDelete: boolean;
+  /** eleva a barra de ações em massa (quando o Kanban da mesma tela também tem a sua). */
+  bulkRaised?: boolean;
 }) {
   const bulkMenus: BulkMenu[] = canUpdate
     ? [
@@ -212,7 +215,7 @@ export function ClientsList({
           </tr>
         ))}
       </Table>
-      <BulkBar entityLabel="clientes" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteClientsList : undefined} />
+      <BulkBar entityLabel="clientes" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteClientsList : undefined} raised={bulkRaised} />
     </SelectionProvider>
   );
 }

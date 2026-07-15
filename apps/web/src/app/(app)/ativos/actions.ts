@@ -349,6 +349,21 @@ export async function updateAsset(
   const denied = await denyOutOfScope(auth.session, assetId, { action: "updateAsset" });
   if (denied) return denied;
 
+  // mover o ativo para um cliente fora do seu escopo é bloqueado (como no create)
+  if (
+    parsed.data.clientId &&
+    parsed.data.clientId !== existing.clientId &&
+    !(await canAccessClient(auth.session, parsed.data.clientId))
+  ) {
+    await writeAssetAudit({
+      assetId,
+      userId: auth.session.userId,
+      action: "PERMISSION_DENIED",
+      metadata: { action: "updateAsset", clientId: parsed.data.clientId, reason: "ownership_scope" },
+    });
+    return { error: "Você não é responsável por este cliente." };
+  }
+
   const values = assetValues(parsed.data, auth.session.userId);
   // mudança de status pelo form de edição também gera histórico
   if (values.status !== existing.status) {
@@ -420,6 +435,11 @@ export async function duplicateAsset(assetId: string, copySecrets: boolean): Pro
   const denied = await denyOutOfScope(auth.session, assetId, { action: "duplicateAsset" });
   if (denied) return denied;
 
+  // valida a permissão de segredos ANTES de inserir a cópia (senão sobra ativo órfão)
+  if (copySecrets && !roleHasPermission(auth.session.roles, "digital_assets.create_secrets")) {
+    return { error: "Você não tem permissão para copiar segredos." };
+  }
+
   const { id: _id, createdAt: _c, updatedAt: _u, secrets, ...rest } = existing;
   void _id; void _c; void _u;
   const [copy] = await db
@@ -434,8 +454,6 @@ export async function duplicateAsset(assetId: string, copySecrets: boolean): Pro
     .returning();
 
   if (copySecrets) {
-    const canCreateSecrets = roleHasPermission(auth.session.roles, "digital_assets.create_secrets");
-    if (!canCreateSecrets) return { error: "Você não tem permissão para copiar segredos." };
     for (const s of secrets) {
       // O AAD vincula o ciphertext ao (secretId, assetId) de origem — para
       // copiar é preciso decriptar e recriptar com o contexto do novo registro.

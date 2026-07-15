@@ -226,7 +226,15 @@ export async function changeClientHealth(
 
   await db
     .update(clients)
-    .set({ healthStatus: newStatus as HealthStatus })
+    .set({
+      healthStatus: newStatus as HealthStatus,
+      // status é derivado: mudar a saúde precisa recomputar (ex.: CRITICO → EM_RISCO)
+      status: deriveClientStatus({
+        pipelineStage: existing.pipelineStage,
+        healthStatus: newStatus as HealthStatus,
+        isPaused: existing.isPaused,
+      }),
+    })
     .where(eq(clients.id, clientId));
   await registerHealthChange(
     clientId,
@@ -549,7 +557,16 @@ async function applyClientField(
     const existing = await db.query.clients.findFirst({ where: eq(clients.id, id) });
     if (!existing) continue;
     if (await denyClientOutOfScope(session, id, `applyClientField:${field}`)) continue;
-    await db.update(clients).set({ [field]: dbValue } as Partial<typeof clients.$inferInsert>).where(eq(clients.id, id));
+    const setObj = { [field]: dbValue } as Partial<typeof clients.$inferInsert>;
+    // saúde é eixo do status derivado — recomputa junto (ex.: sair de CRITICO)
+    if (field === "healthStatus") {
+      setObj.status = deriveClientStatus({
+        pipelineStage: existing.pipelineStage,
+        healthStatus: dbValue as HealthStatus,
+        isPaused: existing.isPaused,
+      });
+    }
+    await db.update(clients).set(setObj).where(eq(clients.id, id));
     if (field === "healthStatus" && existing.healthStatus !== dbValue) {
       await db.insert(clientHealthLogs).values({
         clientId: id,

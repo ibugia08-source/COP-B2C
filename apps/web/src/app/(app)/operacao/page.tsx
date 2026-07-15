@@ -452,7 +452,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
             description="Cadastre clientes ou limpe os filtros da carteira para vê-los aqui."
           />
         ) : (
-          <ClientsList rows={listRows} options={listOptions} canUpdate={canUpdate} canDelete={canDelete} />
+          <ClientsList rows={listRows} options={listOptions} canUpdate={canUpdate} canDelete={canDelete} bulkRaised={showKanban} />
         )}
       </section>
       )}

@@ -230,6 +230,12 @@ export async function updateTask(
   const denied = await denyTaskOutOfScope(auth.session, taskId, "updateTask");
   if (denied) return denied;
 
+  // reatribuir a tarefa para um cliente que você não gerencia é bloqueado (como no create)
+  if (d.clientId && d.clientId !== existing.clientId) {
+    const clientDenied = await denyClientScopeForTask(auth.session, d.clientId, "updateTask");
+    if (clientDenied) return clientDenied;
+  }
+
   await db
     .update(tasks)
     .set({

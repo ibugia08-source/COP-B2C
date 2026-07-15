@@ -258,7 +258,18 @@ export async function bulkEditClients(
     const existing = await db.query.clients.findFirst({ where: eq(clients.id, id) });
     if (!existing) continue;
     if (await denyClientOutOfScope(auth.session, id, "bulkEditClients")) continue;
-    await db.update(clients).set(set).where(eq(clients.id, id));
+    // saúde é eixo do status derivado — recomputa por cliente (etapa/pausa variam)
+    const perClientSet = set.healthStatus
+      ? {
+          ...set,
+          status: deriveClientStatus({
+            pipelineStage: existing.pipelineStage,
+            healthStatus: set.healthStatus,
+            isPaused: existing.isPaused,
+          }),
+        }
+      : set;
+    await db.update(clients).set(perClientSet).where(eq(clients.id, id));
     if (set.healthStatus && existing.healthStatus !== set.healthStatus) {
       await db.insert(clientHealthLogs).values({
         clientId: id,

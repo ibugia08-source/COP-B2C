@@ -9,7 +9,6 @@ import {
   faBolt,
   faBoxArchive,
   faBrain,
-  faBriefcase,
   faBullhorn,
   faBullseye,
   faCalendar,
@@ -61,6 +60,7 @@ import {
   faUpload,
   faUser,
   faUsers,
+  faUserTie,
   faWandMagicSparkles,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
@@ -81,7 +81,7 @@ const ICONS = {
   documents: faFileLines, // 📄
   goals: faBullseye, // 🎯
   forms: faPenToSquare, // 📝
-  team: faBriefcase, // 🧑‍💼 / 💼
+  team: faUserTie, // 🧑‍💼 / 💼 — Equipe (pessoa)
   automations: faBolt, // ⚡
   settings: faGear, // ⚙
   // ações / estados

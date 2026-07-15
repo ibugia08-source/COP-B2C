@@ -315,6 +315,22 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     </Link>
   );
 
+  // --- visualização padrão da tela: Geral (tudo) | Operação (só Kanban) | Clientes (só carteira)
+  const modo = str(sp.modo) ?? "geral";
+  const showKanban = modo !== "clientes";
+  const showCarteira = modo !== "operacao";
+  const modoBtn = (key: string, label: string) => (
+    <Link
+      key={key}
+      href={buildHref({ modo: key === "geral" ? null : key })}
+      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+        modo === key ? "bg-emerald-600 text-white shadow-sm" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+      }`}
+    >
+      {label}
+    </Link>
+  );
+
   return (
     <div>
       <PageHeader
@@ -322,21 +338,32 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
         description="CRM operacional — pipeline do ciclo de vida do cliente. Demandas internas ficam em Tarefas."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <ModuleConfig moduleKey="operation" moduleLabel="Operação" buttonLabel="Colunas" />
-            <Link
-              href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
-              className={`rounded-lg border px-3 py-2 text-sm transition ${
-                activeFilterCount > 0
-                  ? "border-emerald-700 text-emerald-300"
-                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
-              }`}
-            >
-              Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-            </Link>
+            {/* Visualização padrão da tela — explícita */}
             <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
-              {viewBtn("kanban", "Kanban")}
-              {viewBtn("calendario", "Calendário")}
+              <span className="px-1.5 text-[11px] font-medium text-zinc-500">Ver:</span>
+              {modoBtn("geral", "Geral")}
+              {modoBtn("operacao", "Operação")}
+              {modoBtn("clientes", "Clientes")}
             </span>
+            {showKanban && (
+              <>
+                <ModuleConfig moduleKey="operation" moduleLabel="Operação" buttonLabel="Colunas" />
+                <Link
+                  href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
+                  className={`rounded-lg border px-3 py-2 text-sm transition ${
+                    activeFilterCount > 0
+                      ? "border-emerald-700 text-emerald-300"
+                      : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+                  }`}
+                >
+                  Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+                </Link>
+                <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
+                  {viewBtn("kanban", "Kanban")}
+                  {viewBtn("calendario", "Calendário")}
+                </span>
+              </>
+            )}
             {canCreate && (
               <Link
                 href="/clientes/novo"
@@ -349,33 +376,38 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
         }
       />
 
-      {showFilters && (
-        <OperationFilters
-          users={allUsers}
-          clients={clientOptions}
-          niches={niches.map((n) => n.niche).filter((n): n is string => !!n)}
-          services={servicesRows.map((s) => s.name)}
-          stageOptions={stageActive.map((o) => ({ value: o.value, label: o.label }))}
-        />
-      )}
+      {showKanban && (
+        <>
+          {showFilters && (
+            <OperationFilters
+              users={allUsers}
+              clients={clientOptions}
+              niches={niches.map((n) => n.niche).filter((n): n is string => !!n)}
+              services={servicesRows.map((s) => s.name)}
+              stageOptions={stageActive.map((o) => ({ value: o.value, label: o.label }))}
+            />
+          )}
 
-      <SelectionProvider>
-      {visao === "calendario" ? (
-        <CalendarMonth year={calYear} month={calMonth} buildHref={buildHref} items={calendarItems} />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon="operation"
-          title="Nenhum cliente no pipeline"
-          description="Cadastre clientes ou limpe os filtros para vê-los aqui."
-        />
-      ) : (
-        <OperationKanban clients={kanbanClients} columns={kanbanColumns} canMove={canMove} canCreate={canCreate} canDelete={canDelete} />
+          <SelectionProvider>
+          {visao === "calendario" ? (
+            <CalendarMonth year={calYear} month={calMonth} buildHref={buildHref} items={calendarItems} />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              icon="operation"
+              title="Nenhum cliente no pipeline"
+              description="Cadastre clientes ou limpe os filtros para vê-los aqui."
+            />
+          ) : (
+            <OperationKanban clients={kanbanClients} columns={kanbanColumns} canMove={canMove} canCreate={canCreate} canDelete={canDelete} />
+          )}
+            <BulkBar entityLabel="clientes" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteClients : undefined} />
+          </SelectionProvider>
+        </>
       )}
-        <BulkBar entityLabel="clientes" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteClients : undefined} />
-      </SelectionProvider>
 
       {/* ---- Carteira de clientes: métricas + lista (antiga tela /clientes) ---- */}
-      <section className="mt-8 border-t border-zinc-800 pt-6">
+      {showCarteira && (
+      <section className={showKanban ? "mt-8 border-t border-zinc-800 pt-6" : "mt-2"}>
         <div className="mb-4 flex items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold text-zinc-100">Carteira de clientes</h2>
@@ -413,6 +445,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
           <ClientsList rows={listRows} options={listOptions} canUpdate={canUpdate} canDelete={canDelete} />
         )}
       </section>
+      )}
     </div>
   );
 }

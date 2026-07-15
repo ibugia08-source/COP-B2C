@@ -55,6 +55,12 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   const canDelete = hasPermission(session, "clients.delete");
   const canUpdate = hasPermission(session, "clients.update");
 
+  // visualização padrão: Geral (tudo) | Operação (só Kanban) | Clientes (só carteira).
+  // Definido cedo para carregar só as queries do que vai aparecer.
+  const modo = str(sp.modo) ?? "geral";
+  const showKanban = modo !== "clientes";
+  const showCarteira = modo !== "operacao";
+
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [];
   // escopo de ownership: quem não é OWNER/ADMIN só vê os clientes que gerencia
@@ -70,22 +76,29 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   if (str(sp.empresa)) filters.push(eq(clients.agencyBrand, str(sp.empresa) as never));
   if (str(sp.ads)) filters.push(eq(clients.adsStatus, str(sp.ads) as never));
 
+  // allUsers é usado pelos filtros das duas seções; o resto do Kanban só quando showKanban
   const [allRows, allUsers, niches, servicesRows, stageOptionsAll, clientOptions] = await Promise.all([
-    db.query.clients.findMany({
-      where: filters.length ? and(...filters) : undefined,
-      with: { trafficManager1: true, strategist: true, operationalProfile: true },
-      // ordem manual do Kanban (boardOrder); cliente novo entra no fim da coluna
-      orderBy: (c, { asc: a }) => [a(c.boardOrder), a(c.createdAt)],
-    }),
+    showKanban
+      ? db.query.clients.findMany({
+          where: filters.length ? and(...filters) : undefined,
+          with: { trafficManager1: true, strategist: true, operationalProfile: true },
+          // ordem manual do Kanban (boardOrder); cliente novo entra no fim da coluna
+          orderBy: (c, { asc: a }) => [a(c.boardOrder), a(c.createdAt)],
+        })
+      : Promise.resolve([]),
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
-    db.selectDistinct({ niche: clients.niche }).from(clients).where(scope),
-    db
-      .select({ name: agencyServices.name })
-      .from(agencyServices)
-      .where(eq(agencyServices.isActive, true))
-      .orderBy(asc(agencyServices.order), asc(agencyServices.name)),
-    resolveOptions("operation", "pipeline"),
-    db.select({ id: clients.id, name: clients.name }).from(clients).where(scope).orderBy(asc(clients.name)),
+    showKanban ? db.selectDistinct({ niche: clients.niche }).from(clients).where(scope) : Promise.resolve([]),
+    showKanban
+      ? db
+          .select({ name: agencyServices.name })
+          .from(agencyServices)
+          .where(eq(agencyServices.isActive, true))
+          .orderBy(asc(agencyServices.order), asc(agencyServices.name))
+      : Promise.resolve([]),
+    showKanban ? resolveOptions("operation", "pipeline") : Promise.resolve([]),
+    showKanban
+      ? db.select({ id: clients.id, name: clients.name }).from(clients).where(scope).orderBy(asc(clients.name))
+      : Promise.resolve([]),
   ]);
 
   // serviço utilizado: filtra sobre o perfil operacional (lista de serviços do cliente)
@@ -262,21 +275,26 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
 
   // conta respeitando o escopo de ownership (gestor restrito só conta a própria carteira)
   const sc = (c: SQL) => (scope ? and(scope, c) : c);
+  const zeros: { n: number }[][] = [[{ n: 0 }], [{ n: 0 }], [{ n: 0 }], [{ n: 0 }], [{ n: 0 }], [{ n: 0 }]];
   const [listClients, clientNiches, totals] = await Promise.all([
-    db.query.clients.findMany({
-      where: listFilters.length ? and(...listFilters) : undefined,
-      orderBy: [listOrderBy],
-      with: { strategist: true, trafficManager1: true },
-    }),
-    resolveOptions("clients", "niche", { activeOnly: true }),
-    Promise.all([
-      db.select({ n: count() }).from(clients).where(scope),
-      db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "ATIVO"))),
-      db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "OBSERVACAO"))),
-      db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "CRITICO"))),
-      db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "PERDIDO"))),
-      db.select({ n: count() }).from(clients).where(sc(eq(clients.adsStatus, "PAUSADO"))),
-    ]),
+    showCarteira
+      ? db.query.clients.findMany({
+          where: listFilters.length ? and(...listFilters) : undefined,
+          orderBy: [listOrderBy],
+          with: { strategist: true, trafficManager1: true },
+        })
+      : Promise.resolve([]),
+    showCarteira ? resolveOptions("clients", "niche", { activeOnly: true }) : Promise.resolve([]),
+    showCarteira
+      ? Promise.all([
+          db.select({ n: count() }).from(clients).where(scope),
+          db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "ATIVO"))),
+          db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "OBSERVACAO"))),
+          db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "CRITICO"))),
+          db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "PERDIDO"))),
+          db.select({ n: count() }).from(clients).where(sc(eq(clients.adsStatus, "PAUSADO"))),
+        ])
+      : Promise.resolve(zeros),
   ]);
   const [total, ativos, observacao, criticos, perdidos, adsPausado] = totals.map((t) => t[0].n);
 
@@ -317,10 +335,6 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     </Link>
   );
 
-  // --- visualização padrão da tela: Geral (tudo) | Operação (só Kanban) | Clientes (só carteira)
-  const modo = str(sp.modo) ?? "geral";
-  const showKanban = modo !== "clientes";
-  const showCarteira = modo !== "operacao";
   const modoBtn = (key: string, label: string) => (
     <Link
       key={key}

@@ -16,6 +16,7 @@ import {
   TASK_STATUS_META,
   type Tone,
 } from "@/lib/labels";
+import { Icon } from "@/components/ui/icon";
 import { Tabs } from "@/components/ui/overlay";
 import {
   Badge,
@@ -50,7 +51,7 @@ function extLink(url: string | null) {
   const href = url.startsWith("http") ? url : `https://${url}`;
   return (
     <a href={href} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">
-      {url.slice(0, 40)}{url.length > 40 ? "…" : ""} ↗
+      {url.slice(0, 40)}{url.length > 40 ? "…" : ""} <Icon name="externalLink" />
     </a>
   );
 }
@@ -188,7 +189,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
   );
 
   const credenciais = !can.secretsMeta ? (
-    <EmptyState icon="🔒" title="Acesso restrito" description="Seu papel não tem acesso às credenciais deste ativo." />
+    <EmptyState icon="lock" title="Acesso restrito" description="Seu papel não tem acesso às credenciais deste ativo." />
   ) : (
     <SecretsSection
       assetId={asset.id}
@@ -210,7 +211,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
     <div className="space-y-3">
       {can.upload && <AttachmentUpload assetId={asset.id} />}
       {asset.attachments.length === 0 ? (
-        <EmptyState icon="📎" title="Nenhum anexo" description="Backups de perfil, prints, documentos e materiais do ativo ficam aqui." />
+        <EmptyState icon="attachment" title="Nenhum anexo" description="Backups de perfil, prints, documentos e materiais do ativo ficam aqui." />
       ) : (
         <Table
           minWidth="600px"
@@ -218,7 +219,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         >
           {asset.attachments.map((a) => (
             <tr key={a.id} className="hover:bg-zinc-900/60">
-              <Td className="text-zinc-200">📎 {a.fileName}</Td>
+              <Td className="text-zinc-200"><Icon name="attachment" /> {a.fileName}</Td>
               <Td className="text-xs text-zinc-500">{a.fileType ?? "—"}</Td>
               <Td className="text-zinc-400">{formatBytes(a.fileSize)}</Td>
               <Td className="text-xs text-zinc-500">
@@ -228,7 +229,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
                 <span className="inline-flex items-center gap-2">
                   {can.download && (
                     <Button size="sm" variant="secondary" href={`/ativos/anexos/${a.id}`}>
-                      ⬇ Baixar
+                      <Icon name="download" /> Baixar
                     </Button>
                   )}
                   {can.deleteAsset && <DeleteAttachmentButton attachmentId={a.id} fileName={a.fileName} />}
@@ -263,7 +264,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
   );
 
   const historico = asset.statusHistory.length === 0 ? (
-    <EmptyState icon="🕐" title="Sem mudanças de status registradas" />
+    <EmptyState icon="clock" title="Sem mudanças de status registradas" />
   ) : (
     <Table
       minWidth="600px"
@@ -282,9 +283,9 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
   );
 
   const auditoria = !can.audit ? (
-    <EmptyState icon="🔒" title="Apenas usuários autorizados podem ver a auditoria" />
+    <EmptyState icon="lock" title="Apenas usuários autorizados podem ver a auditoria" />
   ) : asset.auditLogs.length === 0 ? (
-    <EmptyState icon="🛡️" title="Nenhum evento de auditoria" />
+    <EmptyState icon="shield" title="Nenhum evento de auditoria" />
   ) : (
     <Table
       minWidth="700px"
@@ -319,7 +320,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold">{asset.title}</h1>
             <StatusBadge value={asset.status} meta={statusMeta} />
-            {reviewPending && <Badge tone="amber">⏰ revisão pendente</Badge>}
+            {reviewPending && <Badge tone="amber"><Icon name="clock" /> revisão pendente</Badge>}
             {asset.archivedAt && <Badge tone="zinc">arquivado</Badge>}
           </div>
           <p className="mt-1 text-sm text-zinc-400">
@@ -363,7 +364,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
           <ul className="space-y-1">
             {openTasks.map((t) => (
               <li key={t.id} className="flex items-center justify-between text-sm">
-                <Link href={`/tarefas/${t.id}`} className="text-zinc-200 hover:text-emerald-300">☑ {t.title}</Link>
+                <Link href={`/tarefas/${t.id}`} className="text-zinc-200 hover:text-emerald-300"><Icon name="tasks" /> {t.title}</Link>
                 <span className="flex items-center gap-2 text-xs">
                   <StatusBadge value={t.status} meta={TASK_STATUS_META} />
                   {t.assignedTo && <UserAvatar name={t.assignedTo.name} size="sm" />}

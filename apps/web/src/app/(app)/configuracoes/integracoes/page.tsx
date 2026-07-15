@@ -2,6 +2,7 @@ import Link from "next/link";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { getGoogleDriveStatus } from "@/lib/google-drive";
 import { Badge, Card, PageHeader } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { GoogleDriveControls } from "./ui";
 
 export default async function IntegracoesPage() {
@@ -19,7 +20,7 @@ export default async function IntegracoesPage() {
       <Card className="p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">📁</span>
+            <span className="text-2xl"><Icon name="folder" /></span>
             <div>
               <h2 className="font-semibold">Google Drive</h2>
               <p className="text-xs text-zinc-500">

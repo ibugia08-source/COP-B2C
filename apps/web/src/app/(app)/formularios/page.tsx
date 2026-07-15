@@ -41,7 +41,7 @@ export default async function FormulariosPage() {
 
       {templates.length === 0 ? (
         <EmptyState
-          icon="📝"
+          icon="forms"
           title="Nenhum formulário ainda"
           description={admin ? 'Clique em "+ Novo formulário" para criar o primeiro.' : "Nenhum formulário configurado. Peça a um administrador para criar."}
         />
@@ -88,7 +88,7 @@ export default async function FormulariosPage() {
       <section className="mt-8">
         <h2 className="mb-3 text-sm font-semibold text-zinc-300">Envios recentes</h2>
         {submissions.length === 0 ? (
-          <EmptyState icon="📨" title="Nenhum envio ainda" description="Os formulários enviados aparecem aqui e no histórico do cliente." />
+          <EmptyState icon="envelope" title="Nenhum envio ainda" description="Os formulários enviados aparecem aqui e no histórico do cliente." />
         ) : (
           <Table
             minWidth="700px"

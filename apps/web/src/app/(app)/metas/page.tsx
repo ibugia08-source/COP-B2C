@@ -50,7 +50,7 @@ export default async function MetasPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          icon="🎯"
+          icon="goals"
           title="Nenhuma meta cadastrada"
           description="Crie a primeira meta do período para acompanhar o progresso da agência."
           action={<GoalFormButton users={allUsers} canEdit={canCreate} />}

@@ -29,7 +29,7 @@ export default async function ServicosPage() {
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold text-zinc-300">Serviços da agência</h2>
         {services.length === 0 ? (
-          <EmptyState icon="🧩" title="Nenhum serviço cadastrado" description="Cadastre os serviços que a agência presta — eles aparecem na aba Operação da ficha do cliente." />
+          <EmptyState icon="module" title="Nenhum serviço cadastrado" description="Cadastre os serviços que a agência presta — eles aparecem na aba Operação da ficha do cliente." />
         ) : (
           <Table
             minWidth="560px"

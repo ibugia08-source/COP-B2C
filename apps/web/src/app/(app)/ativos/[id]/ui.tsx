@@ -5,6 +5,7 @@ import { useRef, useState, useTransition } from "react";
 import { SECRET_TYPES } from "@/db/schema";
 import { SECRET_TYPE_LABEL } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog, Modal } from "@/components/ui/overlay";
 import {
   addAssetComment,
@@ -81,7 +82,7 @@ export function AssetHeaderControls({
             Alterar status
           </Button>
           <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => markAssetChecked(assetId, 30))}>
-            ✓ Registrar checagem
+            <Icon name="check" /> Registrar checagem
           </Button>
         </>
       )}
@@ -257,12 +258,16 @@ function SecretRow({
           )}
           {canReveal && value === null && (
             <Button size="sm" variant="secondary" disabled={pending} onClick={doReveal}>
-              👁 Revelar
+              <Icon name="eye" /> Revelar
             </Button>
           )}
           {canCopy && (
             <Button size="sm" variant="secondary" disabled={pending} onClick={doCopy}>
-              {copied ? "copiado ✓" : "⧉ Copiar"}
+              {copied ? (
+                <><Icon name="check" /> copiado</>
+              ) : (
+                <><Icon name="copy" /> Copiar</>
+              )}
             </Button>
           )}
           {canUpdate && (
@@ -337,7 +342,7 @@ export function SecretsSection({
   return (
     <div className="space-y-3">
       <Alert tone="amber">
-        🔐 Os valores são criptografados (AES-256-GCM) e só saem do servidor via “Revelar”/“Copiar”.
+        <Icon name="lock" /> Os valores são criptografados (AES-256-GCM) e só saem do servidor via “Revelar”/“Copiar”.
         Toda revelação fica registrada na auditoria com usuário, data e IP.
       </Alert>
 
@@ -404,7 +409,7 @@ export function AttachmentUpload({ assetId }: { assetId: string }) {
   return (
     <div>
       <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:border-emerald-600 ${pending ? "opacity-60" : ""}`}>
-        📤 {pending ? "Enviando..." : "Enviar anexo"}
+        <Icon name="outbox" /> {pending ? "Enviando..." : "Enviar anexo"}
         <input
           ref={inputRef}
           type="file"

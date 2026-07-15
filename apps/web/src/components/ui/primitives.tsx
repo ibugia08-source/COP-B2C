@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { TONE_CLASSES, type Tone } from "@/lib/labels";
+import { Icon, type IconName } from "@/components/ui/icon";
 
 // ---------------------------------------------------------------------------
 // Button
@@ -216,19 +217,21 @@ export function PageHeader({
 }
 
 export function EmptyState({
-  icon = "📭",
+  icon = "envelopeOpen",
   title,
   description,
   action,
 }: {
-  icon?: string;
+  icon?: IconName;
   title: string;
   description?: string;
   action?: ReactNode;
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900 px-6 py-14 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-2xl">{icon}</div>
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-2xl text-zinc-400">
+        <Icon name={icon} />
+      </div>
       <h3 className="mt-3 text-sm font-semibold text-zinc-300">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-zinc-500">{description}</p>}
       {action && <div className="mt-4">{action}</div>}

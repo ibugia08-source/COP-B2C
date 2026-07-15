@@ -119,7 +119,7 @@ export function CalendarMonth({
       </div>
       {items.length === 0 && (
         <div className="mt-4">
-          <EmptyState icon="🗓️" title={emptyLabel} />
+          <EmptyState icon="calendar" title={emptyLabel} />
         </div>
       )}
     </div>

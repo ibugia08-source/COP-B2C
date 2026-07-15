@@ -3,6 +3,7 @@ import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { PERMISSION_KEYS, ROLE_PERMISSIONS } from "@/lib/auth/permissions";
 import { ROLE_NAMES } from "@/db/schema";
 import { Card, PageHeader } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 
 export default async function ConfiguracoesPage() {
   const session = await requirePermission("settings.view");
@@ -15,21 +16,21 @@ export default async function ConfiguracoesPage() {
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/configuracoes/servicos" className="block">
           <Card className="p-5 transition hover:border-zinc-600">
-            <p className="text-2xl">🧩</p>
+            <p className="text-2xl"><Icon name="module" /></p>
             <h3 className="mt-2 font-semibold">Serviços & Módulos</h3>
             <p className="mt-1 text-sm text-zinc-400">Serviços da agência e módulos opcionais (Co-piloto, Google).</p>
           </Card>
         </Link>
         <Link href="/equipe" className="block">
           <Card className="p-5 transition hover:border-zinc-600">
-            <p className="text-2xl">🧑‍💼</p>
+            <p className="text-2xl"><Icon name="team" /></p>
             <h3 className="mt-2 font-semibold">Equipe e papéis</h3>
             <p className="mt-1 text-sm text-zinc-400">Cadastre colaboradores e defina papéis de acesso.</p>
           </Card>
         </Link>
         <Link href="/automacoes" className="block">
           <Card className="p-5 transition hover:border-zinc-600">
-            <p className="text-2xl">⚡</p>
+            <p className="text-2xl"><Icon name="automations" /></p>
             <h3 className="mt-2 font-semibold">Automações</h3>
             <p className="mt-1 text-sm text-zinc-400">Ative/desative regras e veja o histórico de execução.</p>
           </Card>
@@ -60,7 +61,7 @@ export default async function ConfiguracoesPage() {
                   {ROLE_NAMES.map((role) => (
                     <td key={role} className="px-2 py-1.5 text-center">
                       {ROLE_PERMISSIONS[role]?.includes(key) ? (
-                        <span className="text-emerald-400">✓</span>
+                        <span className="text-emerald-400"><Icon name="check" /></span>
                       ) : (
                         <span className="text-zinc-700">—</span>
                       )}

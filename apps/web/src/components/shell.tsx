@@ -117,6 +117,8 @@ export function AppNav({ groups }: { groups: NavGroup[] }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem("nav_collapsed");
+      // hidrata o estado salvo após a montagem (evita mismatch de SSR)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
     } catch {
       /* localStorage indisponível */

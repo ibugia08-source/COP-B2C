@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { ACTION_STATUS_META, ACTION_TYPE_LABELS, SUGGESTION_TYPE_LABELS } from "@/lib/copilot/labels";
 import { PRIORITY_META } from "@/lib/labels";
 import { Alert, Badge, Button, Field, StatusBadge, Textarea } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/overlay";
 import {
   approveAndExecuteAction,
@@ -77,7 +78,7 @@ function ActionBlock({ action: a }: { action: ActionView }) {
     <div className="mt-2 rounded-lg border border-emerald-900/50 bg-emerald-950/10 p-2.5">
       <div className="flex flex-wrap items-center justify-between gap-1.5">
         <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase text-emerald-300">
-          ⚙ {ACTION_TYPE_LABELS[a.actionType] ?? a.actionType}
+          <Icon name="settings" /> {ACTION_TYPE_LABELS[a.actionType] ?? a.actionType}
         </span>
         <StatusBadge value={a.status} meta={ACTION_STATUS_META} />
       </div>
@@ -91,7 +92,7 @@ function ActionBlock({ action: a }: { action: ActionView }) {
       )}
       {a.status === "EXECUTADA" && (
         <p className="mt-1.5 text-xs text-emerald-400">
-          ✓ {a.resultSummary ?? "Executada."}{" "}
+          <Icon name="check" /> {a.resultSummary ?? "Executada."}{" "}
           {a.resultRef && (
             <Link href={a.resultRef} className="underline hover:text-emerald-300">ver resultado →</Link>
           )}
@@ -101,7 +102,13 @@ function ActionBlock({ action: a }: { action: ActionView }) {
       {canDecide && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <Button size="sm" disabled={pending} onClick={() => run(() => approveAndExecuteAction(a.id))}>
-            {pending ? "Executando..." : a.status === "FALHOU" ? "↻ Tentar novamente" : "✓ Aprovar e executar"}
+            {pending ? (
+              "Executando..."
+            ) : a.status === "FALHOU" ? (
+              <><Icon name="retry" /> Tentar novamente</>
+            ) : (
+              <><Icon name="check" /> Aprovar e executar</>
+            )}
           </Button>
           {a.editableText != null && (
             <Button size="sm" variant="secondary" disabled={pending} onClick={() => { setText(a.editableText ?? ""); setEditOpen(true); }}>
@@ -192,19 +199,19 @@ export function SuggestionCard({ suggestion: s, readOnly }: { suggestion: Sugges
           {isPending && (
             <>
               <Button size="sm" variant={s.actions.length ? "secondary" : "primary"} disabled={pending} onClick={() => run(() => approveSuggestion(s.id))}>
-                ✓ Aprovar
+                <Icon name="check" /> Aprovar
               </Button>
               <Button size="sm" variant="secondary" disabled={pending} onClick={() => { setEditedAction(s.suggestedAction); setEditOpen(true); }}>
                 Editar e aprovar
               </Button>
               <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => rejectSuggestion(s.id))}>
-                ✕ Rejeitar
+                <Icon name="close" /> Rejeitar
               </Button>
             </>
           )}
           {s.actions.length === 0 && (
             <Button size="sm" variant={isApproved ? "primary" : "secondary"} disabled={pending} onClick={() => run(() => suggestionToTask(s.id))}>
-              ☑ Transformar em tarefa
+              <Icon name="tasks" /> Transformar em tarefa
             </Button>
           )}
         </div>

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { formTemplates } from "@/db/schema";
 import type { FieldDef } from "@/app/(app)/formularios/field-types";
+import { Icon } from "@/components/ui/icon";
 import { PublicForm } from "./ui";
 
 export const metadata: Metadata = { title: "Formulário — COP B2C" };
@@ -25,7 +26,7 @@ export default async function PublicFormPage({ params }: { params: Promise<{ slu
           />
         ) : (
           <div className="space-y-2 text-center">
-            <div className="text-4xl">🔍</div>
+            <div className="text-4xl"><Icon name="search" /></div>
             <h1 className="text-lg font-semibold text-zinc-100">Formulário indisponível</h1>
             <p className="text-sm text-zinc-400">Este formulário não existe ou não está mais ativo.</p>
           </div>

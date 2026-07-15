@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { getGoogleDriveStatus } from "@/lib/google-drive";
 import { formatDate } from "@/lib/labels";
 import { Alert, Badge, buttonClass } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { ArchiveDocumentButton, DeleteDocumentButton, DOC_SOURCE_LABELS, DOC_TYPE_LABELS, DocumentFormButton } from "../ui";
 
 export default async function DocumentoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -68,7 +69,7 @@ export default async function DocumentoPage({ params }: { params: Promise<{ id: 
         <div className="flex flex-wrap gap-2">
           {isExternal && (
             <a href={doc.fileUrl!} target="_blank" rel="noreferrer" className={buttonClass("primary", "md")}>
-              {doc.sourceType === "UPLOAD" ? "Abrir arquivo ↗" : "Abrir ↗"}
+              {doc.sourceType === "UPLOAD" ? <>Abrir arquivo <Icon name="externalLink" /></> : <>Abrir <Icon name="externalLink" /></>}
             </a>
           )}
           <DocumentFormButton
@@ -113,7 +114,7 @@ export default async function DocumentoPage({ params }: { params: Promise<{ id: 
           </p>
           {doc.fileUrl && (
             <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="break-all text-emerald-400 hover:underline">
-              {doc.fileUrl} ↗
+              {doc.fileUrl} <Icon name="externalLink" />
             </a>
           )}
           {doc.mimeType && <p className="mt-2 text-xs text-zinc-500">Tipo: {doc.mimeType}</p>}

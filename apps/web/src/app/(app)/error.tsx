@@ -11,7 +11,7 @@ export default function ErrorPage({
 }) {
   return (
     <EmptyState
-      icon="⚠️"
+      icon="warning"
       title="Algo deu errado"
       description={
         error.digest

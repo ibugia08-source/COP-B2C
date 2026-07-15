@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { getGoogleDriveStatus } from "@/lib/google-drive";
 import { formatDate } from "@/lib/labels";
 import { Badge, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { ArchiveDocumentButton, DOC_SOURCE_LABELS, DOC_TYPE_LABELS, DocumentFormButton } from "./ui";
 
 type Search = Record<string, string | string[] | undefined>;
@@ -117,7 +118,7 @@ export default async function DocumentosPage({ searchParams }: { searchParams: P
 
       {rows.length === 0 ? (
         <EmptyState
-          icon="📄"
+          icon="documents"
           title="Nenhum documento encontrado"
           description="Crie o primeiro documento (texto, upload, link ou Google Drive) ou ajuste os filtros."
           action={<DocumentFormButton clients={allClients} tasks={allTasks} assets={allAssets} driveConnected={drive.connected} />}
@@ -158,7 +159,7 @@ export default async function DocumentosPage({ searchParams }: { searchParams: P
                   <span className="inline-flex items-center gap-2">
                     {isExternal && (
                       <a href={d.fileUrl!} target="_blank" rel="noreferrer" className="text-xs text-emerald-400 hover:underline">
-                        abrir ↗
+                        abrir <Icon name="externalLink" />
                       </a>
                     )}
                     <ArchiveDocumentButton documentId={d.id} isArchived={d.isArchived} />

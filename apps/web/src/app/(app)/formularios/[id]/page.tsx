@@ -37,7 +37,7 @@ export default async function FormResponsesPage({ params }: { params: Promise<{ 
       />
 
       {submissions.length === 0 ? (
-        <EmptyState icon="📨" title="Nenhuma resposta ainda" description="As respostas deste formulário aparecerão aqui." />
+        <EmptyState icon="envelope" title="Nenhuma resposta ainda" description="As respostas deste formulário aparecerão aqui." />
       ) : (
         <div className="space-y-4">
           {submissions.map((s) => {

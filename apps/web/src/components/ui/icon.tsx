@@ -22,6 +22,7 @@ import {
   faCircleCheck,
   faCircleExclamation,
   faClipboard,
+  faCopy,
   faClock,
   faComment,
   faCompass,
@@ -48,6 +49,7 @@ import {
   faPuzzlePiece,
   faRightFromBracket,
   faRobot,
+  faRotateRight,
   faScroll,
   faSeedling,
   faShieldHalved,
@@ -72,6 +74,7 @@ const ICONS = {
   dashboard: faGaugeHigh, // ▦
   copilot: faCompass, // 🧭
   operation: faArrowsRotate, // 🔄
+  retry: faRotateRight, // ↻
   tasks: faSquareCheck, // ☑
   clients: faUsers, // 👥
   assets: faBoxArchive, // 🗄
@@ -112,6 +115,7 @@ const ICONS = {
   brain: faBrain, // 🧠
   chart: faChartColumn, // 📊
   clipboard: faClipboard, // 📋
+  copy: faCopy, // ⧉
   calendar: faCalendarDays, // 🗓 / 📅
   calendarAlt: faCalendar,
   folder: faFolder, // 📁

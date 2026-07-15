@@ -6,6 +6,7 @@ import { CREATIVE_APPROVALS, type CreativeBrief } from "@/db/schema";
 import { CREATIVE_APPROVAL_META } from "@/lib/labels";
 import { Alert, Button, Field, Input, Select, StatusBadge, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
 import {
   addAttachment,
   addChecklist,
@@ -73,7 +74,7 @@ export function TaskStatusControls({
         </Select>
         {status !== "CONCLUIDA" && canComplete && (
           <Button size="sm" disabled={pending} onClick={() => run(() => changeTaskStatus(taskId, "CONCLUIDA"))}>
-            ✓ Concluir
+            <Icon name="check" /> Concluir
           </Button>
         )}
         {status !== "CANCELADA" && (
@@ -176,7 +177,7 @@ export function CreativeBriefSection({
           <dd>
             {brief?.referenceLink ? (
               <a href={brief.referenceLink} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">
-                abrir link ↗
+                abrir link <Icon name="externalLink" />
               </a>
             ) : "—"}
           </dd>

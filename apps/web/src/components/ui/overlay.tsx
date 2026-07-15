@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "./primitives";
+import { Icon } from "@/components/ui/icon";
 
 // ---------------------------------------------------------------------------
 // Modal / Drawer
@@ -46,7 +47,7 @@ export function Modal({
             aria-label="Fechar"
             className="-mr-1 rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
           >
-            ✕
+            <Icon name="close" />
           </button>
         </div>
         <div className="p-5">{children}</div>

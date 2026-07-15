@@ -28,6 +28,7 @@ import {
   type Option,
 } from "./ui";
 import { ModuleConfig } from "../module-config";
+import { Icon } from "@/components/ui/icon";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
 import { bulkAssignTasks, bulkDeleteTasks, bulkMoveTasks, bulkPrioritizeTasks, deleteTask } from "./actions";
@@ -238,7 +239,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
               className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
               title="Templates de checklist"
             >
-              📋
+              <Icon name="clipboard" />
             </Link>
             {canCreate && (
               <TaskCreateButton
@@ -308,7 +309,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
         />
       ) : rows.length === 0 ? (
         <>
-          <EmptyState icon="☑" title="Nenhuma tarefa encontrada" description="Crie uma tarefa ou ajuste os filtros." />
+          <EmptyState icon="tasks" title="Nenhuma tarefa encontrada" description="Crie uma tarefa ou ajuste os filtros." />
           {canCreate && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
         </>
       ) : (

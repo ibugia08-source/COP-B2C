@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Input } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
 import {
   createOption,
   deleteOption,
@@ -196,7 +197,7 @@ export function ConfigDrawerButton({
           buttonLabel ? "px-3 py-2 text-sm" : "p-2"
         }`}
       >
-        ⚙{buttonLabel ? ` ${buttonLabel}` : ""}
+        <Icon name="settings" />{buttonLabel ? ` ${buttonLabel}` : ""}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={`Configurar — ${moduleLabel}`} wide>
         {groups.length === 0 ? (

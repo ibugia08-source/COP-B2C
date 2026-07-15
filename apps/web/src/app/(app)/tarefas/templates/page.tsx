@@ -28,7 +28,7 @@ export default async function TemplatesPage() {
       />
 
       {templates.length === 0 ? (
-        <EmptyState icon="📋" title="Nenhum template cadastrado" />
+        <EmptyState icon="clipboard" title="Nenhum template cadastrado" />
       ) : (
         <Table
           minWidth="760px"

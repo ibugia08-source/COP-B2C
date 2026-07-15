@@ -364,7 +364,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
         <CalendarMonth year={calYear} month={calMonth} buildHref={buildHref} items={calendarItems} />
       ) : rows.length === 0 ? (
         <EmptyState
-          icon="🔄"
+          icon="operation"
           title="Nenhum cliente no pipeline"
           description="Cadastre clientes ou limpe os filtros para vê-los aqui."
         />
@@ -405,7 +405,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
 
         {listRows.length === 0 ? (
           <EmptyState
-            icon="👥"
+            icon="clients"
             title="Nenhum cliente na carteira"
             description="Cadastre clientes ou limpe os filtros da carteira para vê-los aqui."
           />

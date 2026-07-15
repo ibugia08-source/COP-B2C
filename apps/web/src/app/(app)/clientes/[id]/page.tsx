@@ -37,6 +37,7 @@ import {
   Th,
   UserAvatar,
 } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { ClientQuickActions } from "./quick-actions";
 import { OperationalProfileForm } from "./profile-form";
 import { DOC_SOURCE_LABELS, DOC_TYPE_LABELS } from "../../documentos/ui";
@@ -123,14 +124,14 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
         <InfoRow label="Instagram">
           {client.instagramUrl ? (
             <a href={client.instagramUrl} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">
-              abrir ↗
+              abrir <Icon name="externalLink" />
             </a>
           ) : "—"}
         </InfoRow>
         <InfoRow label="Site">
           {client.websiteUrl ? (
             <a href={client.websiteUrl} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">
-              abrir ↗
+              abrir <Icon name="externalLink" />
             </a>
           ) : "—"}
         </InfoRow>
@@ -181,7 +182,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   const operacao = canUpdate ? (
     <OperationalProfileForm clientId={client.id} profile={client.operationalProfile ?? null} services={services} />
   ) : (
-    <EmptyState icon="🔒" title="Sem permissão para editar o perfil operacional" />
+    <EmptyState icon="lock" title="Sem permissão para editar o perfil operacional" />
   );
 
   // Resumo de tarefas: atrasadas + contagem por status
@@ -245,14 +246,14 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
           })}
         </Table>
       ) : (
-        <EmptyState icon="☑" title="Nenhuma tarefa para este cliente" />
+        <EmptyState icon="tasks" title="Nenhuma tarefa para este cliente" />
       )}
     </div>
   );
 
   const now = new Date();
   const ativosDigitais = !canAssets ? (
-    <EmptyState icon="🔒" title="Acesso restrito" description="Você não tem permissão para ver os ativos digitais deste cliente." />
+    <EmptyState icon="lock" title="Acesso restrito" description="Você não tem permissão para ver os ativos digitais deste cliente." />
   ) : client.digitalAssets.length ? (
     <div>
       {canCreateAsset && (
@@ -294,7 +295,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
     </div>
   ) : (
     <EmptyState
-      icon="🗄️"
+      icon="assets"
       title="Nenhum ativo digital cadastrado"
       action={canCreateAsset && <Button size="sm" href={`/ativos?novo=1&cliente=${client.id}`}>+ Novo ativo para este cliente</Button>}
     />
@@ -319,7 +320,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
             </Link>
             {isExternal && (
               <a href={d.fileUrl!} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-emerald-400 hover:underline">
-                abrir ↗
+                abrir <Icon name="externalLink" />
               </a>
             )}
           </div>
@@ -327,7 +328,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       })}
     </div>
   ) : (
-    <EmptyState icon="📄" title="Nenhum documento vinculado" action={<Button size="sm" href={`/documentos?novo=1&cliente=${client.id}`}>+ Novo documento</Button>} />
+    <EmptyState icon="documents" title="Nenhum documento vinculado" action={<Button size="sm" href={`/documentos?novo=1&cliente=${client.id}`}>+ Novo documento</Button>} />
   );
 
   const reunioes = (
@@ -368,7 +369,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       ))}
     </ol>
   ) : (
-    <EmptyState icon="🕐" title="Sem eventos no histórico ainda" />
+    <EmptyState icon="clock" title="Sem eventos no histórico ainda" />
   );
 
   return (
@@ -399,7 +400,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       {pendencias.length > 0 && (
         <div className="mb-4 space-y-2">
           {pendencias.map((p) => (
-            <Alert key={p} tone="amber">⚠️ {p}</Alert>
+            <Alert key={p} tone="amber"><Icon name="warning" /> {p}</Alert>
           ))}
         </div>
       )}

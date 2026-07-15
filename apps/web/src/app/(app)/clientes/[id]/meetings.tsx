@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 
 import { Alert, Badge, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
 import { createMeetingFollowup, generateMeetLink, registerMeeting, type MeetingInput } from "../actions";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -131,7 +132,7 @@ export function ClientMeetings({
                   <p>
                     Link:{" "}
                     <a href={m.meetLink} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">
-                      abrir reunião ↗
+                      abrir reunião <Icon name="externalLink" />
                     </a>
                   </p>
                 )}

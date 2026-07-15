@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { FormFieldInputs } from "@/app/(app)/formularios/form-fields";
 import type { FieldDef } from "@/app/(app)/formularios/field-types";
 import { submitPublicForm, type PublicFormState } from "./actions";
@@ -23,7 +24,7 @@ export function PublicForm({
   if (state.success) {
     return (
       <div className="space-y-3 text-center">
-        <div className="text-4xl">✅</div>
+        <div className="text-4xl"><Icon name="checkCircle" /></div>
         <h1 className="text-xl font-semibold text-zinc-100">{name}</h1>
         <p className="text-emerald-400">{state.success}</p>
       </div>

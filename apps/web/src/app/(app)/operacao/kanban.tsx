@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { ADS_META, AGENCY_BRAND_META, formatDate, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
 import { deleteClient, moveClientStage, reorderClientOnBoard } from "./actions";
 
@@ -200,14 +201,14 @@ export function OperationKanban({
                       <StatusBadge value={c.adsStatus} meta={ADS_META} />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
-                      <span title="Estrategista">🧠 {c.estrategista?.split(" ")[0] ?? "—"}</span>
+                      <span title="Estrategista"><Icon name="brain" /> {c.estrategista?.split(" ")[0] ?? "—"}</span>
                       <span title="Próximo prazo" className={c.nextDue && new Date(c.nextDue) < new Date() ? "text-red-400" : ""}>
-                        ⏰ {c.nextDue ? formatDate(new Date(c.nextDue)) : "—"}
+                        <Icon name="clock" /> {c.nextDue ? formatDate(new Date(c.nextDue)) : "—"}
                       </span>
                     </div>
                     {c.pendencias.length > 0 && (
                       <div className="mt-2">
-                        <Badge tone="amber">⚠ {c.pendencias.length} pendência{c.pendencias.length > 1 ? "s" : ""}</Badge>
+                        <Badge tone="amber"><Icon name="warning" /> {c.pendencias.length} pendência{c.pendencias.length > 1 ? "s" : ""}</Badge>
                       </div>
                     )}
                   </div>

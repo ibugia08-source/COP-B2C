@@ -9,6 +9,7 @@ import { syncGoalReminders } from "@/lib/goals/reminders";
 import { METRIC_BY_KEY, METRIC_CATALOG, type MetricKey } from "@/lib/dashboard-metrics";
 import { ASSET_STATUS_META, CLIENT_STATUS_META, formatDate, TASK_STATUS_META } from "@/lib/labels";
 import { Badge, Card, EmptyState, StatCard, Table, Td, Th } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { DashboardControls } from "./dashboard-controls";
 import { DashboardFilterBar } from "./dashboard-filters";
 
@@ -126,7 +127,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Card className="mb-6 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-xs font-semibold uppercase text-zinc-500">
-              🔔 Lembretes e avisos
+              <Icon name="bell" /> Lembretes e avisos
               <span className="rounded-full bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{reminders.length}</span>
             </h3>
             <Link href="/notificacoes" className="text-xs text-emerald-400 hover:underline">ver todas →</Link>
@@ -159,13 +160,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* Métricas personalizadas do usuário */}
       {availableMetrics.length === 0 ? (
         <EmptyState
-          icon="🔒"
+          icon="lock"
           title="Sem métricas disponíveis"
           description="Seu papel não tem acesso a métricas do dashboard. Fale com um administrador."
         />
       ) : dash.metrics.length === 0 ? (
         <EmptyState
-          icon="📊"
+          icon="chart"
           title="Nenhuma métrica selecionada"
           description="Use “+ Adicionar métrica” para escolher o que acompanhar aqui."
         />
@@ -209,7 +210,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <section className="mt-6">
           <h2 className="mb-3 text-sm font-semibold text-zinc-300">Carga de trabalho por colaborador</h2>
           {data.workload.length === 0 ? (
-            <EmptyState icon="🧑‍💼" title="Sem carga registrada" description="Atribua tarefas, clientes e ativos aos colaboradores." />
+            <EmptyState icon="team" title="Sem carga registrada" description="Atribua tarefas, clientes e ativos aos colaboradores." />
           ) : (
             <Table
               minWidth="700px"

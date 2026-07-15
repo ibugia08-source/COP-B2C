@@ -22,6 +22,7 @@ import {
   UserAvatar,
 } from "@/components/ui/primitives";
 import { TaskCreateButton } from "../ui";
+import { Icon } from "@/components/ui/icon";
 import {
   AssignSelect,
   AttachmentForm,
@@ -150,7 +151,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
               templates={templates}
             />
           ) : task.checklists.length === 0 ? (
-            <EmptyState icon="☑" title="Sem checklists" />
+            <EmptyState icon="tasks" title="Sem checklists" />
           ) : null}
         </section>
 
@@ -297,7 +298,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
             {task.attachments.map((a) => (
               <li key={a.id}>
                 <a href={a.fileUrl} target="_blank" rel="noreferrer" className="text-sm text-emerald-400 hover:underline">
-                  📎 {a.fileName}
+                  <Icon name="attachment" /> {a.fileName}
                 </a>
               </li>
             ))}

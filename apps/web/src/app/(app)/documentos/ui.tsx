@@ -6,6 +6,7 @@ import type { Document } from "@/db/schema";
 import type { DriveFile } from "@/lib/google-drive";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
 import { deleteDocument, saveDocument, searchDriveFiles, toggleArchiveDocument, uploadDocument, type ActionState } from "./actions";
 
 export const DOC_TYPE_LABELS: Record<string, string> = {
@@ -273,7 +274,7 @@ export function DocumentFormButton({
           </div>
 
           <p className="text-[11px] text-amber-500/80">
-            🔐 Nunca cole senhas ou tokens aqui — credenciais vão para o Banco de Ativos Digitais.
+            <Icon name="lock" /> Nunca cole senhas ou tokens aqui — credenciais vão para o Banco de Ativos Digitais.
           </p>
           {state.error && <Alert>{state.error}</Alert>}
           <div className="flex justify-end gap-2">

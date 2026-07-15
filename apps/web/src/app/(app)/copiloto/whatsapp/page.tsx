@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth/guard";
 import { SENTIMENT_META, WHATSAPP_STATUS_META } from "@/lib/copilot/labels";
 import { PRIORITY_META } from "@/lib/labels";
 import { Alert, Badge, Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { AddConversationForm, ConnectButton, SimulateSummaryForm, ToggleConversationButton } from "./ui";
 
 export default async function CopilotoWhatsAppPage() {
@@ -48,7 +49,7 @@ export default async function CopilotoWhatsAppPage() {
       <Card className="mb-5 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">💬</span>
+            <span className="text-2xl"><Icon name="chat" /></span>
             <div>
               <h2 className="font-semibold">Conexão WhatsApp comercial</h2>
               <p className="text-xs text-zinc-500">Somente via provedor oficial/autorizado — sem scraping e sem burlar termos de plataforma.</p>
@@ -102,7 +103,7 @@ export default async function CopilotoWhatsAppPage() {
       <section>
         <h2 className="mb-3 text-sm font-semibold text-zinc-300">Resumos de conversas ({summaries.length})</h2>
         {summaries.length === 0 ? (
-          <EmptyState icon="📝" title="Nenhum resumo ainda" description="Use a simulação acima para gerar o primeiro resumo." />
+          <EmptyState icon="forms" title="Nenhum resumo ainda" description="Use a simulação acima para gerar o primeiro resumo." />
         ) : (
           <div className="space-y-3">
             {summaries.map((s) => (
@@ -167,7 +168,7 @@ export default async function CopilotoWhatsAppPage() {
 
       <div className="mt-5">
         <Alert tone="amber">
-          🔐 Nunca cole senhas, tokens ou dados sensíveis em conversas/resumos — credenciais pertencem ao Banco de
+          <Icon name="lock" /> Nunca cole senhas, tokens ou dados sensíveis em conversas/resumos — credenciais pertencem ao Banco de
           Ativos Digitais. Resumos guardam apenas síntese objetiva.
         </Alert>
       </div>

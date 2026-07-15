@@ -5,6 +5,7 @@ import { clients, documents, tasks } from "@/db/schema";
 import { hasPermission, requireSession } from "@/lib/auth/guard";
 import { CLIENT_STATUS_META, TASK_STATUS_META } from "@/lib/labels";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 
 type Search = Record<string, string | string[] | undefined>;
 
@@ -17,7 +18,7 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
     return (
       <div>
         <PageHeader title="Busca" />
-        <EmptyState icon="🔍" title="Digite algo na busca do topo" description="Você pode buscar clientes, tarefas e documentos." />
+        <EmptyState icon="search" title="Digite algo na busca do topo" description="Você pode buscar clientes, tarefas e documentos." />
       </div>
     );
   }
@@ -52,7 +53,7 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
       <PageHeader title={`Busca: "${q}"`} description={`${total} resultado${total === 1 ? "" : "s"}`} />
 
       {total === 0 ? (
-        <EmptyState icon="🔍" title="Nada encontrado" description="Tente outro termo." />
+        <EmptyState icon="search" title="Nada encontrado" description="Tente outro termo." />
       ) : (
         <div className="space-y-6">
           {foundClients.length > 0 && (
@@ -61,7 +62,7 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
               <div className="space-y-1">
                 {foundClients.map((c) => (
                   <Link key={c.id} href={`/clientes/${c.id}`} className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 transition hover:border-zinc-600">
-                    <span className="text-sm text-zinc-100">👥 {c.name}</span>
+                    <span className="text-sm text-zinc-100"><Icon name="clients" /> {c.name}</span>
                     <StatusBadge value={c.status} meta={CLIENT_STATUS_META} />
                   </Link>
                 ))}
@@ -74,7 +75,7 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
               <div className="space-y-1">
                 {foundTasks.map((t) => (
                   <Link key={t.id} href={`/tarefas/${t.id}`} className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 transition hover:border-zinc-600">
-                    <span className="text-sm text-zinc-100">☑ {t.title}</span>
+                    <span className="text-sm text-zinc-100"><Icon name="tasks" /> {t.title}</span>
                     <StatusBadge value={t.status} meta={TASK_STATUS_META} />
                   </Link>
                 ))}
@@ -87,7 +88,7 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
               <div className="space-y-1">
                 {foundDocs.map((d) => (
                   <Link key={d.id} href={`/documentos/${d.id}`} className="block rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-100 transition hover:border-zinc-600">
-                    📄 {d.title}
+                    <Icon name="documents" /> {d.title}
                   </Link>
                 ))}
               </div>

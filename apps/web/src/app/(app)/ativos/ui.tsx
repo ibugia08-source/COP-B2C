@@ -12,6 +12,7 @@ import {
   ASSET_TYPE_LABEL,
 } from "@/lib/labels";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/overlay";
 import { createAsset, saveGroup, updateAsset, type ActionState } from "./actions";
 
@@ -258,7 +259,7 @@ export function AssetFormButton({
           {!asset && template && canCreateSecrets && (
             <div className="space-y-3 rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
               <p className="text-xs font-semibold uppercase text-amber-400">
-                🔐 Credenciais do template — serão criptografadas (AES-256-GCM)
+                <Icon name="lock" /> Credenciais do template — serão criptografadas (AES-256-GCM)
               </p>
               {template.secretFields.map((s, i) => (
                 <Field key={i} label={s.label}>
@@ -322,16 +323,17 @@ export function AssetFilters({
   }
   const sel = (k: string) => params.get(k) ?? "";
 
-  const chip = (label: string, key: string, value: string) => (
+  const chip = (icon: IconName, label: string, key: string, value: string) => (
     <button
       type="button"
       onClick={() => setParam(key, sel(key) === value ? "" : value)}
-      className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition ${
         sel(key) === value
           ? "border-emerald-600 bg-emerald-950/60 text-emerald-300"
           : "border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white"
       }`}
     >
+      <Icon name={icon} />
       {label}
     </button>
   );
@@ -392,12 +394,12 @@ export function AssetFilters({
         />
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {chip("🔴 Bloqueados", "status", "BLOQUEADA")}
-        {chip("✅ Prontos para uso", "status", "PRONTA_PARA_USO")}
-        {chip("🔥 Sendo esquentados", "status", "SENDO_ESQUENTADA")}
-        {chip("📄 Precisam de documentos", "status", "PRECISA_DE_DOCUMENTOS")}
-        {chip("⏰ Revisão pendente", "revisao", "pendente")}
-        {chip("👤 Sem responsável", "responsavel", "__none__")}
+        {chip("redDot", "Bloqueados", "status", "BLOQUEADA")}
+        {chip("checkCircle", "Prontos para uso", "status", "PRONTA_PARA_USO")}
+        {chip("fire", "Sendo esquentados", "status", "SENDO_ESQUENTADA")}
+        {chip("documents", "Precisam de documentos", "status", "PRECISA_DE_DOCUMENTOS")}
+        {chip("clock", "Revisão pendente", "revisao", "pendente")}
+        {chip("user", "Sem responsável", "responsavel", "__none__")}
       </div>
     </div>
   );

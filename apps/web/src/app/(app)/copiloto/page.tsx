@@ -8,6 +8,7 @@ import { SUGGESTION_STATUS_META, SUGGESTION_TYPE_LABELS } from "@/lib/copilot/la
 import { syncCopilotSuggestions } from "@/lib/copilot/suggestions";
 import { formatDate, HEALTH_META, PRIORITY_META } from "@/lib/labels";
 import { Alert, Badge, Card, EmptyState, PageHeader, StatCard, StatusBadge } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { SuggestionCard, type ActionView, type SuggestionView } from "./ui";
 
 type Search = Record<string, string | string[] | undefined>;
@@ -154,7 +155,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
               href="/copiloto/whatsapp"
               className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
             >
-              💬 WhatsApp & escuta
+              <Icon name="chat" /> WhatsApp & escuta
             </Link>
           </div>
         }
@@ -172,7 +173,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
       <div className="mb-5">
         <Alert tone="amber">
-          🛡️ O Co-piloto apenas sugere. Nenhuma mensagem é enviada e nenhuma alteração é feita sem a sua aprovação —
+          <Icon name="shield" /> O Co-piloto apenas sugere. Nenhuma mensagem é enviada e nenhuma alteração é feita sem a sua aprovação —
           e toda decisão fica registrada no histórico.
         </Alert>
       </div>
@@ -182,9 +183,9 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
         <div className="space-y-4">
           {/* 2. Prioridades recomendadas */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">🎯 Prioridades recomendadas</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="goals" /> Prioridades recomendadas</h3>
             {ctx.suggestedPriorities.length === 0 ? (
-              <p className="text-sm text-zinc-500">Sem prioridades críticas hoje. Bom dia de trabalho! ✨</p>
+              <p className="text-sm text-zinc-500">Sem prioridades críticas hoje. Bom dia de trabalho! <Icon name="sparkles" /></p>
             ) : (
               <ol className="list-inside list-decimal space-y-1.5 text-sm text-zinc-200">
                 {ctx.suggestedPriorities.map((p, i) => <li key={i}>{p}</li>)}
@@ -194,7 +195,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
           {/* 3. Clientes que exigem atenção */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">🚨 Clientes que exigem atenção</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="alert" /> Clientes que exigem atenção</h3>
             {attentionClients.length === 0 ? (
               <p className="text-sm text-zinc-500">Nenhum cliente crítico ou em observação na sua carteira.</p>
             ) : (
@@ -213,32 +214,32 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
           {/* 7. Alertas operacionais */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">⚠️ Alertas operacionais</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="warning" /> Alertas operacionais</h3>
             <div className="space-y-1.5 text-sm">
               {ctx.blockedDigitalAssets.map((a) => (
                 <p key={a.id}>
-                  🔴 Ativo bloqueado:{" "}
+                  <Icon name="redDot" /> Ativo bloqueado:{" "}
                   <Link href={`/ativos/${a.id}`} className="text-zinc-200 hover:text-emerald-300">{a.title}</Link>
                   {a.clientName && <span className="text-zinc-500"> — {a.clientName}</span>}
                 </p>
               ))}
               {ctx.assetsNeedingDocs.map((a) => (
                 <p key={a.id}>
-                  📄 Precisa de documentos:{" "}
+                  <Icon name="documents" /> Precisa de documentos:{" "}
                   <Link href={`/ativos/${a.id}`} className="text-zinc-200 hover:text-emerald-300">{a.title}</Link>
                   {a.clientName && <span className="text-zinc-500"> — {a.clientName}</span>}
                 </p>
               ))}
               {ctx.goalsAlerts.map((g) => (
                 <p key={g.id}>
-                  {g.overdue ? "⏰ Meta vencida:" : "🎯 Meta perto do prazo:"}{" "}
+                  {g.overdue ? <><Icon name="clock" /> Meta vencida:</> : <><Icon name="goals" /> Meta perto do prazo:</>}{" "}
                   <Link href="/metas" className="text-zinc-200 hover:text-emerald-300">{g.title}</Link>
                   <span className="text-zinc-500"> — {formatDate(g.periodEnd)}</span>
                 </p>
               ))}
               {ctx.upcomingMeetings.slice(0, 4).map((m) => (
                 <p key={m.id}>
-                  📅 Reunião:{" "}
+                  <Icon name="calendar" /> Reunião:{" "}
                   <Link href={`/clientes/${m.clientId}`} className="text-zinc-200 hover:text-emerald-300">{m.clientName}</Link>
                   <span className="text-zinc-500">
                     {" "}— {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(m.meetingDate)}
@@ -256,9 +257,9 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
         <div className="space-y-4">
           {/* 4. Tarefas atrasadas */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">⏰ Tarefas atrasadas ({ctx.overdueTasks.length})</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="clock" /> Tarefas atrasadas ({ctx.overdueTasks.length})</h3>
             {ctx.overdueTasks.length === 0 ? (
-              <p className="text-sm text-zinc-500">Nenhuma tarefa atrasada. 👏</p>
+              <p className="text-sm text-zinc-500">Nenhuma tarefa atrasada. <Icon name="clap" /></p>
             ) : (
               <ul className="space-y-1.5">
                 {ctx.overdueTasks.slice(0, 8).map((t) => (
@@ -276,7 +277,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
           {/* 5. Tarefas importantes de hoje */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">📌 Tarefas de hoje ({ctx.todayTasks.length})</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="pin" /> Tarefas de hoje ({ctx.todayTasks.length})</h3>
             {ctx.todayTasks.length === 0 ? (
               <p className="text-sm text-zinc-500">Nada vencendo hoje.</p>
             ) : (
@@ -293,7 +294,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
           {/* 6. Solicitações pendentes */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">📥 Solicitações feitas a você ({ctx.pendingRequests.length})</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="inbox" /> Solicitações feitas a você ({ctx.pendingRequests.length})</h3>
             {ctx.pendingRequests.length === 0 ? (
               <p className="text-sm text-zinc-500">Nenhuma solicitação aberta de outras pessoas.</p>
             ) : (
@@ -311,7 +312,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
           {/* Documentos vinculados recentes */}
           {ctx.recentDocuments.length > 0 && (
             <Card className="p-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">📄 Documentos recentes da carteira</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="documents" /> Documentos recentes da carteira</h3>
               <ul className="space-y-1 text-sm">
                 {ctx.recentDocuments.map((d) => (
                   <li key={d.id}>
@@ -325,7 +326,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
           {/* Atividade recente */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">🕐 Atividade recente na carteira</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="clock" /> Atividade recente na carteira</h3>
             {ctx.recentActivity.length === 0 ? (
               <p className="text-sm text-zinc-500">Sem atividade recente registrada.</p>
             ) : (
@@ -346,10 +347,10 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
           {/* 8. Sugestões da IA */}
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
-              🤖 Sugestões para sua aprovação ({pendentes.length})
+              <Icon name="robot" /> Sugestões para sua aprovação ({pendentes.length})
             </h3>
             {pendentes.length === 0 ? (
-              <EmptyState icon="🤖" title="Sem sugestões pendentes" description="O Co-piloto gera sugestões conforme os dados da sua operação mudam." />
+              <EmptyState icon="robot" title="Sem sugestões pendentes" description="O Co-piloto gera sugestões conforme os dados da sua operação mudam." />
             ) : (
               <div className="space-y-3">
                 {pendentes.map((s) => <SuggestionCard key={s.id} suggestion={s} />)}
@@ -361,7 +362,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
           {aprovadas.length > 0 && (
             <div>
               <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
-                ✅ Aprovadas — aguardando execução ({aprovadas.length})
+                <Icon name="checkCircle" /> Aprovadas — aguardando execução ({aprovadas.length})
               </h3>
               <div className="space-y-3">
                 {aprovadas.map((s) => <SuggestionCard key={s.id} suggestion={s} />)}
@@ -371,7 +372,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
 
           {/* 10. Histórico */}
           <Card className="p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">📜 Histórico de decisões</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="scroll" /> Histórico de decisões</h3>
             {historico.length === 0 ? (
               <p className="text-sm text-zinc-500">Nenhuma decisão registrada ainda.</p>
             ) : (

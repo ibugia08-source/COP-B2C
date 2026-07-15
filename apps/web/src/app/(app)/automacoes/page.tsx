@@ -48,7 +48,7 @@ export default async function AutomacoesPage() {
       />
 
       {rules.length === 0 ? (
-        <EmptyState icon="⚡" title="Nenhuma automação cadastrada" description="Rode o seed para criar as automações padrão." />
+        <EmptyState icon="automations" title="Nenhuma automação cadastrada" description="Rode o seed para criar as automações padrão." />
       ) : (
         <Table
           minWidth="800px"
@@ -94,7 +94,7 @@ export default async function AutomacoesPage() {
       <section className="mt-8">
         <h2 className="mb-3 text-sm font-semibold text-zinc-300">Histórico de execução (últimas 50)</h2>
         {logs.length === 0 ? (
-          <EmptyState icon="🕐" title="Nenhuma execução registrada ainda" description="As automações registram cada execução aqui — sucesso, erro ou ignorada." />
+          <EmptyState icon="clock" title="Nenhuma execução registrada ainda" description="As automações registram cada execução aqui — sucesso, erro ou ignorada." />
         ) : (
           <Table
             minWidth="700px"

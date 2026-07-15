@@ -77,7 +77,7 @@ export default async function NotificacoesPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          icon="🔔"
+          icon="bell"
           title="Nenhuma notificação"
           description="Alertas de tarefas, cobranças e automações aparecem aqui."
         />

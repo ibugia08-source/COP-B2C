@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ASSET_PLATFORM_LABEL, ASSET_TYPE_LABEL, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Textarea, UserAvatar } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/overlay";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
 import { changeAssetStatus, deleteAsset, moveAssetToGroup, quickCreateAsset } from "./actions";
@@ -67,9 +68,9 @@ function AssetCard({
         {ASSET_TYPE_LABEL[asset.assetType] ?? asset.assetType} · {ASSET_PLATFORM_LABEL[asset.platform] ?? asset.platform}
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-1">
-        {asset.secretCount > 0 && <Badge tone="purple">🔐 {asset.secretCount}</Badge>}
-        {asset.attachmentCount > 0 && <Badge tone="blue">📎 {asset.attachmentCount}</Badge>}
-        {asset.reviewPending && <Badge tone="amber">⏰ revisar</Badge>}
+        {asset.secretCount > 0 && <Badge tone="purple"><Icon name="lock" /> {asset.secretCount}</Badge>}
+        {asset.attachmentCount > 0 && <Badge tone="blue"><Icon name="attachment" /> {asset.attachmentCount}</Badge>}
+        {asset.reviewPending && <Badge tone="amber"><Icon name="clock" /> revisar</Badge>}
       </div>
       <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
         <span className="truncate">{mode === "status" ? (asset.clientName ?? asset.groupName) : (asset.clientName ?? "interno")}</span>

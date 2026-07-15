@@ -24,6 +24,7 @@ import {
   UserAvatar,
 } from "@/components/ui/primitives";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
+import { Icon } from "@/components/ui/icon";
 import { AssetKanban, type AssetCardData, type KanbanColumn } from "./kanban";
 import { AssetFilters, AssetFormButton, GroupFormButton } from "./ui";
 import { ModuleConfig } from "../module-config";
@@ -251,7 +252,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
         </div>
       ) : assets.length === 0 ? (
         <EmptyState
-          icon="🗄️"
+          icon="assets"
           title="Nenhum ativo encontrado"
           description="Crie um grupo e cadastre o primeiro ativo, ou ajuste os filtros."
         />
@@ -299,8 +300,8 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
               </Td>
               <Td>
                 <span className="space-x-1">
-                  {a.secrets.length > 0 && <Badge tone="purple">🔐 {a.secrets.length}</Badge>}
-                  {a.attachments.length > 0 && <Badge tone="blue">📎 {a.attachments.length}</Badge>}
+                  {a.secrets.length > 0 && <Badge tone="purple"><Icon name="lock" /> {a.secrets.length}</Badge>}
+                  {a.attachments.length > 0 && <Badge tone="blue"><Icon name="attachment" /> {a.attachments.length}</Badge>}
                 </span>
               </Td>
               {(canUpdate || canDelete) && (

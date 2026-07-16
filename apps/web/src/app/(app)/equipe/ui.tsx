@@ -14,6 +14,7 @@ import {
 } from "@/lib/auth/permissions";
 import { Alert, Badge, Button, UserAvatar } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
 import {
   approveUser,
   changeCargo,
@@ -85,6 +86,10 @@ function PermissionsPanel({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
+  const [hideDefault, setHideDefault] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [confirm, setConfirm] = useState<{ key: PermissionKey; label: string } | null>(null);
+
   const defaults = useMemo(() => new Set(cargoDefaultPermissions(cargo)), [cargo]);
   const extraSet = useMemo(() => new Set(extras), [extras]);
   const q = query.trim().toLowerCase();
@@ -100,76 +105,128 @@ function PermissionsPanel({
     });
   }
 
+  // Conceder algo de ALTO RISCO pede confirmação; conceder/remover o resto é direto.
+  function requestToggle(key: PermissionKey, grant: boolean) {
+    if (grant && PERMISSION_META[key].risk === "high") {
+      setConfirm({ key, label: PERMISSION_META[key].label });
+      return;
+    }
+    toggle(key, grant);
+  }
+
+  function toggleCollapse(feature: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(feature)) next.delete(feature);
+      else next.add(feature);
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm text-zinc-300">Permissões extras (além do cargo)</span>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar permissão…"
-          className="w-48 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-emerald-500"
-        />
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+            <input type="checkbox" checked={hideDefault} onChange={(e) => setHideDefault(e.target.checked)} className="accent-emerald-500" />
+            Ocultar padrão do cargo
+          </label>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar permissão…"
+            className="w-44 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-emerald-500"
+          />
+        </div>
       </div>
       {error && <Alert>{error}</Alert>}
 
-      <div className="max-h-80 space-y-4 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+      <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
         {FEATURES.map((feature) => {
           const keys = PERMISSION_KEYS.filter(
             (k) =>
               PERMISSION_META[k].feature === feature &&
-              (!q || PERMISSION_META[k].label.toLowerCase().includes(q) || k.includes(q)),
+              (!q || PERMISSION_META[k].label.toLowerCase().includes(q) || k.includes(q)) &&
+              (!hideDefault || !defaults.has(k) || extraSet.has(k)),
           );
           if (keys.length === 0) return null;
+          const grantedCount = keys.filter((k) => extraSet.has(k) && !defaults.has(k)).length;
+          const isCollapsed = collapsed.has(feature) && !q;
           return (
-            <div key={feature}>
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                {FEATURE_LABELS[feature]}
-              </p>
-              <div className="space-y-1">
-                {keys.map((key) => {
-                  const meta = PERMISSION_META[key];
-                  const isDefault = defaults.has(key);
-                  const isExtra = extraSet.has(key);
-                  const checked = isDefault || isExtra;
-                  const busy = pendingKey === key;
-                  return (
-                    <label
-                      key={key}
-                      className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm ${
-                        isDefault ? "opacity-70" : "hover:bg-zinc-900"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={isDefault || busy}
-                          onChange={(e) => toggle(key, e.target.checked)}
-                          className="accent-emerald-500"
-                        />
-                        <span className={meta.risk === "high" ? "text-amber-300" : "text-zinc-200"}>
-                          {meta.label}
+            <div key={feature} className="rounded-md border border-zinc-800/70">
+              <button
+                type="button"
+                onClick={() => toggleCollapse(feature)}
+                aria-expanded={!isCollapsed}
+                className="flex w-full items-center justify-between px-2 py-1.5 text-left transition hover:bg-zinc-900/50"
+              >
+                <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  <Icon name="chevronDown" className={`text-[8px] transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                  {FEATURE_LABELS[feature]}
+                </span>
+                {grantedCount > 0 && <Badge tone="green">{grantedCount} extra(s)</Badge>}
+              </button>
+              {!isCollapsed && (
+                <div className="space-y-1 px-2 pb-2">
+                  {keys.map((key) => {
+                    const meta = PERMISSION_META[key];
+                    const isDefault = defaults.has(key);
+                    const isExtra = extraSet.has(key);
+                    const checked = isDefault || isExtra;
+                    const busy = pendingKey === key;
+                    return (
+                      <label
+                        key={key}
+                        className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm ${
+                          isDefault ? "opacity-70" : "hover:bg-zinc-900"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isDefault || busy}
+                            onChange={(e) => requestToggle(key, e.target.checked)}
+                            className="accent-emerald-500"
+                          />
+                          <span className={meta.risk === "high" ? "text-amber-300" : "text-zinc-200"}>
+                            {meta.label}
+                          </span>
+                          {meta.risk === "high" && <span title="Alto risco" className="text-[10px] text-amber-500">●</span>}
                         </span>
-                        {meta.risk === "high" && <span title="Alto risco" className="text-[10px] text-amber-500">●</span>}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        {isDefault && <Badge tone="zinc">padrão</Badge>}
-                        {isExtra && !isDefault && <Badge tone="green">concedida</Badge>}
-                        {busy && <span className="text-[10px] text-zinc-500">…</span>}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+                        <span className="flex items-center gap-1">
+                          {isDefault && <Badge tone="zinc">padrão</Badge>}
+                          {isExtra && !isDefault && <Badge tone="green">concedida</Badge>}
+                          {busy && <span className="text-[10px] text-zinc-500">…</span>}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
       <p className="text-[11px] text-zinc-600">
-        As permissões marcadas como “padrão” vêm do cargo e não podem ser removidas aqui — para
-        tirá-las, altere o cargo. As “concedidas” são extras individuais.
+        “Padrão” vem do cargo (para tirá-la, mude o cargo). “Concedida” é extra individual e é
+        <strong> salva na hora</strong>. Permissões de alto risco (<span className="text-amber-500">●</span>) pedem confirmação.
       </p>
+
+      <ConfirmDialog
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => {
+          if (confirm) toggle(confirm.key, true);
+          setConfirm(null);
+        }}
+        title="Conceder permissão de alto risco?"
+        description={`Você está concedendo “${confirm?.label}”.`}
+        warning="Confirme se esta pessoa realmente precisa deste acesso — segredos, exclusões e ações administrativas são sensíveis. A concessão fica registrada na auditoria."
+        confirmLabel="Conceder"
+        danger
+      />
     </div>
   );
 }
@@ -431,7 +488,12 @@ export function MemberRow({
           <span className="text-xs text-zinc-600">sem cargo</span>
         )}
         {member.extras.length > 0 && (
-          <span className="ml-1 text-[10px] text-emerald-400">+{member.extras.length} extra(s)</span>
+          <span
+            className="ml-1 cursor-help text-[10px] text-emerald-400"
+            title={member.extras.map((k) => PERMISSION_META[k as PermissionKey]?.label ?? k).join(", ")}
+          >
+            +{member.extras.length} extra(s)
+          </span>
         )}
       </td>
       <td className="px-4 py-3">
@@ -497,7 +559,7 @@ export function MemberRow({
                   Você não pode alterar as suas próprias permissões.
                 </p>
               ) : (
-                <PermissionsPanel userId={member.id} cargo={member.cargo} extras={member.extras} />
+                <PermissionsPanel userId={member.id} cargo={cargo || member.cargo} extras={member.extras} />
               )}
 
               {error && <Alert>{error}</Alert>}

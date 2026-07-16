@@ -17,7 +17,7 @@ import {
   type Tone,
 } from "@/lib/labels";
 import { Icon } from "@/components/ui/icon";
-import { Tabs } from "@/components/ui/overlay";
+import { UrlTabs } from "@/components/ui/overlay";
 import {
   Badge,
   Button,
@@ -375,12 +375,12 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         </div>
       )}
 
-      <Tabs
+      <UrlTabs
         tabs={[
           { key: "visao", label: "Visão Geral", content: visaoGeral },
           { key: "credenciais", label: "Credenciais", content: credenciais, badge: can.secretsMeta ? asset.secrets.length : undefined },
           { key: "anexos", label: "Anexos", content: anexos, badge: asset.attachments.length },
-          { key: "comentarios", label: "Comentários/Logs", content: comentarios, badge: asset.comments.length },
+          { key: "comentarios", label: "Diário", content: comentarios, badge: asset.comments.length },
           { key: "historico", label: "Histórico de Status", content: historico },
           { key: "auditoria", label: "Auditoria", content: auditoria },
         ]}

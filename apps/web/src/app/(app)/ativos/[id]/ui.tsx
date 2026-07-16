@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { SECRET_TYPES } from "@/db/schema";
 import { SECRET_TYPE_LABEL } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
@@ -211,12 +211,35 @@ function SecretRow({
   const [editLabel, setEditLabel] = useState(secret.label);
   const [editValue, setEditValue] = useState("");
 
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function clearHideTimer() {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }
+  function hide() {
+    clearHideTimer();
+    setValue(null);
+  }
+  // segurança: o valor revelado some sozinho após 30s (anti shoulder-surfing)
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    },
+    [],
+  );
+
   function doReveal() {
     setError(null);
     startTransition(async () => {
       const result = await revealSecret(secret.id, "reveal");
       if (result.error) setError(result.error);
-      else setValue(result.value ?? "");
+      else {
+        setValue(result.value ?? "");
+        clearHideTimer();
+        hideTimer.current = setTimeout(() => setValue(null), 30_000);
+      }
       router.refresh(); // atualiza auditoria/lastRevealedAt
     });
   }
@@ -249,9 +272,10 @@ function SecretRow({
           {value !== null ? (
             <>
               <code className="rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-emerald-300">{value}</code>
-              <button type="button" className="text-xs text-zinc-500 hover:text-white" onClick={() => setValue(null)}>
+              <button type="button" className="text-xs text-zinc-500 hover:text-white" onClick={hide}>
                 ocultar
               </button>
+              <span className="text-[10px] text-amber-500/80" title="Por segurança, o valor some sozinho">oculta em 30s</span>
             </>
           ) : (
             <code className="rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-500">••••••••</code>

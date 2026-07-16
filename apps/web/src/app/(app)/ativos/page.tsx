@@ -17,6 +17,7 @@ import {
   Badge,
   EmptyState,
   PageHeader,
+  StatCard,
   StatusBadge,
   Table,
   Td,
@@ -25,8 +26,10 @@ import {
 } from "@/components/ui/primitives";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { Icon } from "@/components/ui/icon";
+import { Segmented } from "@/components/ui/toolbar";
+import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { AssetKanban, type AssetCardData, type KanbanColumn } from "./kanban";
-import { AssetFilters, AssetFormButton, GroupFormButton } from "./ui";
+import { AssetFormButton, GroupFormButton } from "./ui";
 import { ModuleConfig } from "../module-config";
 import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
 import { bulkAssignAssets, bulkDeleteAssets, bulkMoveAssets, deleteAsset } from "./actions";
@@ -170,17 +173,17 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
       ]
     : [];
 
-  const viewBtn = (k: string, label: string) => (
-    <Link
-      key={k}
-      href={buildHref({ visao: k === "kanban" ? null : k })}
-      className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
-        visao === k ? "bg-emerald-950/70 text-emerald-300" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-      }`}
-    >
-      {label}
-    </Link>
-  );
+  const assetFilterConfig: FilterDef[] = [
+    { key: "q", kind: "search", placeholder: "Buscar ativo...", width: "w-44" },
+    { key: "cliente", kind: "select", label: "Cliente", options: allClients.map((c) => ({ value: c.id, label: c.name })) },
+    { key: "grupo", kind: "select", label: "Grupo", options: groupOptions.map((g) => ({ value: g.id, label: g.name })) },
+    { key: "tipo", kind: "select", label: "Tipo", options: Object.entries(ASSET_TYPE_LABEL).map(([v, l]) => ({ value: v, label: l })) },
+    { key: "plataforma", kind: "select", label: "Plataforma", options: Object.entries(ASSET_PLATFORM_LABEL).map(([v, l]) => ({ value: v, label: l })) },
+    { key: "status", kind: "select", label: "Status", options: statusOptionsAll.map((o) => ({ value: o.value, label: o.label })) },
+    { key: "responsavel", kind: "select", label: "Responsável", options: [{ value: "__none__", label: "Sem responsável" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))] },
+    { key: "tag", kind: "search", placeholder: "Tag...", width: "w-28" },
+    { key: "revisao", kind: "select", label: "Revisão", emptyLabel: "Revisão: todas", options: [{ value: "pendente", label: "Vencidas/pendentes" }] },
+  ];
 
   return (
     <div>
@@ -189,22 +192,37 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
         description="CRM de contas, perfis, acessos e ativos digitais da operação. Segredos ficam criptografados e nunca aparecem nos cards."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Segmented
+              ariaLabel="Visão"
+              active={visao}
+              items={[
+                { value: "kanban", label: "Kanban", href: buildHref({ visao: null }) },
+                { value: "lista", label: "Lista", href: buildHref({ visao: "lista" }) },
+                { value: "calendario", label: "Revisões", href: buildHref({ visao: "calendario" }) },
+              ]}
+            />
+            {visao === "kanban" && (
+              <Segmented
+                size="sm"
+                ariaLabel="Agrupar por"
+                active={agrupar}
+                items={[
+                  { value: "status", label: "Status", href: buildHref({ agrupar: null }) },
+                  { value: "grupo", label: "Grupo", href: buildHref({ agrupar: "grupo" }) },
+                ]}
+              />
+            )}
             <ModuleConfig moduleKey="digital_assets" moduleLabel="Banco de Ativos Digitais" buttonLabel="Colunas" />
             <Link
               href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
-              className={`rounded-lg border px-3 py-2 text-sm transition ${
-                activeFilterCount > 0
-                  ? "border-emerald-700 text-emerald-300"
-                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                activeFilterCount > 0 || showFilters
+                  ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
+                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
               }`}
             >
-              Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+              <Icon name="search" /> Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
             </Link>
-            <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
-              {viewBtn("kanban", "Kanban")}
-              {viewBtn("lista", "Lista")}
-              {viewBtn("calendario", "Revisões")}
-            </span>
             <GroupFormButton clients={allClients} canManage={canManageGroups} />
             {canCreate && (
               <AssetFormButton
@@ -221,35 +239,31 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
         }
       />
 
-      {visao === "kanban" && (
-        <div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
-          Agrupar por:
-          <Link href={buildHref({ agrupar: null })} className={agrupar === "status" ? "text-emerald-300" : "hover:text-zinc-200"}>Status</Link>
-          <span>·</span>
-          <Link href={buildHref({ agrupar: "grupo" })} className={agrupar === "grupo" ? "text-emerald-300" : "hover:text-zinc-200"}>Grupo/cliente</Link>
-        </div>
-      )}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatCard label="Revisões vencidas" value={overdueReviews.length} tone="text-amber-400" href={buildHref({ revisao: "pendente" })} />
+        <StatCard label="Bloqueados" value={blocked.length} tone="text-red-400" href={buildHref({ status: "BLOQUEADA" })} />
+        <StatCard label="Precisam de documentos" value={needDocs.length} tone="text-sky-400" href={buildHref({ status: "PRECISA_DE_DOCUMENTOS" })} />
+      </div>
 
-      {showFilters && <AssetFilters clients={allClients} groups={groupOptions} users={allUsers} />}
+      {showFilters && (
+        <FilterBar
+          filters={assetFilterConfig}
+          preserve={["visao", "agrupar", "mes", "filtros"]}
+          resultCount={assets.length}
+        />
+      )}
 
       <SelectionProvider>
       {visao === "calendario" ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <SummaryCard label="Revisões vencidas" count={overdueReviews.length} tone="amber" href={buildHref({ visao: null, revisao: "pendente" })} />
-            <SummaryCard label="Bloqueados" count={blocked.length} tone="red" href={buildHref({ visao: null, status: "BLOQUEADA" })} />
-            <SummaryCard label="Precisam de documentos" count={needDocs.length} tone="blue" href={buildHref({ visao: null, status: "PRECISA_DE_DOCUMENTOS" })} />
-          </div>
-          <CalendarMonth
-            year={calYear}
-            month={calMonth}
-            buildHref={buildHref}
-            items={calendarItems}
-            taskLegend="revisão de ativo"
-            meetingLegend="—"
-            emptyLabel="Nenhuma revisão agendada neste mês"
-          />
-        </div>
+        <CalendarMonth
+          year={calYear}
+          month={calMonth}
+          buildHref={buildHref}
+          items={calendarItems}
+          taskLegend="revisão de ativo"
+          meetingLegend="—"
+          emptyLabel="Nenhuma revisão agendada neste mês"
+        />
       ) : assets.length === 0 ? (
         <EmptyState
           icon="assets"
@@ -328,6 +342,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
           assets={cards}
           mode={agrupar === "grupo" ? "group" : "status"}
           columns={agrupar === "status" ? statusColumns : groupColumns}
+          statusMeta={statusMeta}
           canUpdate={canUpdate}
           canCreate={canCreate}
           canDelete={canDelete}
@@ -342,13 +357,3 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
   );
 }
 
-function SummaryCard({ label, count, tone, href }: { label: string; count: number; tone: Tone; href: string }) {
-  const color =
-    tone === "red" ? "text-red-400" : tone === "amber" ? "text-amber-400" : "text-sky-400";
-  return (
-    <Link href={href} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-600">
-      <p className={`text-2xl font-bold ${color}`}>{count}</p>
-      <p className="text-xs text-zinc-500">{label}</p>
-    </Link>
-  );
-}

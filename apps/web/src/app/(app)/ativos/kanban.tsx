@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ASSET_PLATFORM_LABEL, ASSET_TYPE_LABEL, TONE_CLASSES, type Tone } from "@/lib/labels";
-import { Alert, Badge, Button, Field, Input, Textarea, UserAvatar } from "@/components/ui/primitives";
+import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/overlay";
+import { MoveMenu } from "@/components/ui/move-menu";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
 import { changeAssetStatus, deleteAsset, moveAssetToGroup, quickCreateAsset } from "./actions";
 
@@ -36,6 +37,12 @@ function AssetCard({
   onDragEnd,
   dragging,
   canDelete,
+  canMove,
+  moveOptions,
+  currentValue,
+  onMove,
+  pending,
+  statusMeta,
 }: {
   asset: AssetCardData;
   mode: "status" | "group";
@@ -44,6 +51,12 @@ function AssetCard({
   onDragEnd: () => void;
   dragging: boolean;
   canDelete?: boolean;
+  canMove: boolean;
+  moveOptions: { value: string; label: string }[];
+  currentValue: string;
+  onMove: (value: string) => void;
+  pending: boolean;
+  statusMeta: Record<string, { label: string; tone: Tone }>;
 }) {
   return (
     <div
@@ -56,7 +69,18 @@ function AssetCard({
     >
       <div className="mb-1 flex items-center justify-between gap-2">
         <SelectCircle id={asset.id} />
-        {canDelete && <CardTrash id={asset.id} deleteAction={deleteAsset} label="ativo" />}
+        <div className="flex items-center gap-0.5">
+          {canMove && (
+            <MoveMenu
+              options={moveOptions}
+              currentValue={currentValue}
+              onMove={onMove}
+              disabled={pending}
+              title={`Mover "${asset.title}" para…`}
+            />
+          )}
+          {canDelete && <CardTrash id={asset.id} deleteAction={deleteAsset} label="ativo" />}
+        </div>
       </div>
       <div className="flex items-start justify-between gap-2">
         <Link href={`/ativos/${asset.id}`} className="text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300">
@@ -68,6 +92,7 @@ function AssetCard({
         {ASSET_TYPE_LABEL[asset.assetType] ?? asset.assetType} · {ASSET_PLATFORM_LABEL[asset.platform] ?? asset.platform}
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-1">
+        {mode === "group" && <StatusBadge value={asset.status} meta={statusMeta} />}
         {asset.secretCount > 0 && <Badge tone="purple"><Icon name="lock" /> {asset.secretCount}</Badge>}
         {asset.attachmentCount > 0 && <Badge tone="blue"><Icon name="attachment" /> {asset.attachmentCount}</Badge>}
         {asset.reviewPending && <Badge tone="amber"><Icon name="clock" /> revisar</Badge>}
@@ -86,6 +111,7 @@ export function AssetKanban({
   assets,
   mode,
   columns,
+  statusMeta,
   canUpdate,
   canCreate,
   canDelete,
@@ -96,6 +122,7 @@ export function AssetKanban({
   assets: AssetCardData[];
   mode: "status" | "group";
   columns: KanbanColumn[];
+  statusMeta: Record<string, { label: string; tone: Tone }>;
   canUpdate: boolean;
   canCreate: boolean;
   canDelete?: boolean;
@@ -121,6 +148,7 @@ export function AssetKanban({
   const allColumns: KanbanColumn[] = orphans.length
     ? [...columns, { value: "__outros__", label: mode === "status" ? "Sem coluna" : "Sem grupo", color: "zinc" }]
     : columns;
+  const moveOptions = columns.map((c) => ({ value: c.value, label: c.label }));
 
   function applyMove(assetId: string, target: string, extra?: { reason?: string; nextReviewDays?: number }) {
     setError(null);
@@ -144,19 +172,23 @@ export function AssetKanban({
     });
   }
 
+  function requestMove(assetId: string, target: string) {
+    if (mode === "status" && NEEDS_INPUT.has(target)) {
+      setReason("");
+      setReviewDays("7");
+      setRuleModal({ assetId, status: target });
+      return;
+    }
+    applyMove(assetId, target);
+  }
+
   function onDrop(target: string) {
     setOverCol(null);
     if (!dragId || !canUpdate || target === "__outros__") return;
     const asset = assets.find((a) => a.id === dragId);
     setDragId(null);
     if (!asset || key(asset) === target) return;
-    if (mode === "status" && NEEDS_INPUT.has(target)) {
-      setReason("");
-      setReviewDays("7");
-      setRuleModal({ assetId: asset.id, status: target });
-      return;
-    }
-    applyMove(asset.id, target);
+    requestMove(asset.id, target);
   }
 
   return (
@@ -201,6 +233,12 @@ export function AssetKanban({
                     onDragEnd={() => setDragId(null)}
                     dragging={dragId === a.id}
                     canDelete={canDelete}
+                    canMove={canUpdate}
+                    moveOptions={moveOptions}
+                    currentValue={key(a)}
+                    onMove={(v) => requestMove(a.id, v)}
+                    pending={isPending}
+                    statusMeta={statusMeta}
                   />
                 ))}
                 {canCreate && col.value !== "__outros__" && (

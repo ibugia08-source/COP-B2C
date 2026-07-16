@@ -15,20 +15,43 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
 
+  const canClients = hasPermission(session, "clients.view");
+  const canTasks = hasPermission(session, "tasks.view");
+  const canDocs = hasPermission(session, "documents.view");
+  const canAny = canClients || canTasks || canDocs;
+
+  // Campo de busca na própria página (a busca da topbar some no mobile).
+  const searchForm = (
+    <form action="/busca" method="get" className="mb-6">
+      <label className="relative block">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+          <Icon name="search" />
+        </span>
+        <input
+          name="q"
+          defaultValue={q}
+          placeholder="Buscar clientes, tarefas, documentos..."
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 py-2.5 pl-10 pr-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-emerald-600"
+        />
+      </label>
+    </form>
+  );
+
   if (!q) {
     return (
-      <div>
+      <div className="mx-auto max-w-2xl">
         <PageHeader title="Busca" />
-        <EmptyState icon="search" title="Digite algo na busca do topo" description="Você pode buscar clientes, tarefas e documentos." />
+        {searchForm}
+        <EmptyState
+          icon="search"
+          title="O que você procura?"
+          description="Digite acima e pressione Enter para buscar clientes, tarefas e documentos."
+        />
       </div>
     );
   }
 
   const pattern = `%${q}%`;
-  const canClients = hasPermission(session, "clients.view");
-  const canTasks = hasPermission(session, "tasks.view");
-  const canDocs = hasPermission(session, "documents.view");
-
   // respeita o escopo: clientes/tarefas são abertos; documentos por cliente
   const clientScope = clientScopeCondition(session);
   const taskScope = taskScopeCondition(session);
@@ -59,14 +82,23 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={`Busca: "${q}"`} description={`${total} resultado${total === 1 ? "" : "s"}`} />
+      {searchForm}
 
-      {total === 0 ? (
-        <EmptyState icon="search" title="Nada encontrado" description="Tente outro termo." />
+      {!canAny ? (
+        <EmptyState
+          icon="lock"
+          title="Sem acesso a itens buscáveis"
+          description="Seu papel não permite ver clientes, tarefas nem documentos."
+        />
+      ) : total === 0 ? (
+        <EmptyState icon="search" title="Nada encontrado" description={`Nenhum cliente, tarefa ou documento corresponde a "${q}".`} />
       ) : (
         <div className="space-y-6">
           {foundClients.length > 0 && (
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Clientes</h2>
+              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
+                Clientes{foundClients.length === 10 ? " (primeiros 10)" : ""}
+              </h2>
               <div className="space-y-1">
                 {foundClients.map((c) => (
                   <Link key={c.id} href={`/clientes/${c.id}`} className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 transition hover:border-zinc-600">
@@ -79,7 +111,9 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
           )}
           {foundTasks.length > 0 && (
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Tarefas</h2>
+              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
+                Tarefas{foundTasks.length === 10 ? " (primeiras 10)" : ""}
+              </h2>
               <div className="space-y-1">
                 {foundTasks.map((t) => (
                   <Link key={t.id} href={`/tarefas/${t.id}`} className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 transition hover:border-zinc-600">
@@ -92,7 +126,9 @@ export default async function BuscaPage({ searchParams }: { searchParams: Promis
           )}
           {foundDocs.length > 0 && (
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Documentos</h2>
+              <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
+                Documentos{foundDocs.length === 10 ? " (primeiros 10)" : ""}
+              </h2>
               <div className="space-y-1">
                 {foundDocs.map((d) => (
                   <Link key={d.id} href={`/documentos/${d.id}`} className="block rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-100 transition hover:border-zinc-600">

@@ -4,8 +4,12 @@ import { goals, users } from "@/db/schema";
 import { hasPermission, isAdmin, requirePermission } from "@/lib/auth/guard";
 import { syncGoalReminders } from "@/lib/goals/reminders";
 import { formatDate, GOAL_STATUS_META } from "@/lib/labels";
-import { Badge, Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui/primitives";
+import { Badge, Card, EmptyState, PageHeader, StatCard, StatusBadge } from "@/components/ui/primitives";
+import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { GOAL_CATEGORY_LABELS, GoalFormButton, GoalProgressControls } from "./ui";
+
+type Search = Record<string, string | string[] | undefined>;
+const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
 
 function GoalBar({ current, target, superT, mega }: { current: number; target: number; superT: number | null; mega: number | null }) {
   const maxRef = Math.max(target, superT ?? 0, mega ?? 0, current, 1);
@@ -20,8 +24,9 @@ function GoalBar({ current, target, superT, mega }: { current: number; target: n
   );
 }
 
-export default async function MetasPage() {
+export default async function MetasPage({ searchParams }: { searchParams: Promise<Search> }) {
   const session = await requirePermission("goals.view");
+  const sp = await searchParams;
   const canCreate = hasPermission(session, "goals.create");
   const canUpdate = hasPermission(session, "goals.update");
   const canDelete = hasPermission(session, "goals.delete");
@@ -40,6 +45,26 @@ export default async function MetasPage() {
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)).orderBy(asc(users.name)),
   ]);
 
+  const now = new Date();
+  const atingidas = rows.filter((g) => g.currentValue >= g.targetValue).length;
+  const atrasadas = rows.filter((g) => g.periodEnd && g.periodEnd < now && g.currentValue < g.targetValue).length;
+
+  const fStatus = str(sp.status);
+  const fCat = str(sp.categoria);
+  const fResp = str(sp.responsavel);
+  const filtered = rows.filter(
+    (g) =>
+      (!fStatus || g.status === fStatus) &&
+      (!fCat || g.category === fCat) &&
+      (!fResp || g.ownerId === fResp),
+  );
+
+  const metaFilterConfig: FilterDef[] = [
+    { key: "status", kind: "select", label: "Status", options: Object.entries(GOAL_STATUS_META).map(([v, m]) => ({ value: v, label: m.label })) },
+    { key: "categoria", kind: "select", label: "Categoria", options: Object.entries(GOAL_CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l })) },
+    { key: "responsavel", kind: "select", label: "Responsável", options: allUsers.map((u) => ({ value: u.id, label: u.name })) },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -56,8 +81,20 @@ export default async function MetasPage() {
           action={<GoalFormButton users={allUsers} canEdit={canCreate} />}
         />
       ) : (
+        <>
+          <div className="mb-4 grid grid-cols-3 gap-3 sm:max-w-md">
+            <StatCard label="Metas" value={rows.length} />
+            <StatCard label="Atingidas" value={atingidas} tone="text-green-400" />
+            <StatCard label="Atrasadas" value={atrasadas} tone="text-red-400" />
+          </div>
+          <FilterBar filters={metaFilterConfig} resultCount={filtered.length} />
+          <div className="mb-4 flex flex-wrap gap-4 text-[11px] text-zinc-500">
+            <span className="flex items-center gap-1.5"><span className="inline-block h-3.5 w-0.5 bg-zinc-300" /> Meta</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-3.5 w-0.5 bg-amber-400" /> Super meta</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-3.5 w-0.5 bg-purple-400" /> Mega meta</span>
+          </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {rows.map((g) => {
+          {filtered.map((g) => {
             const pctOfTarget = g.targetValue > 0 ? Math.round((g.currentValue / g.targetValue) * 100) : 0;
             const fmt = (v: number) => (g.unit === "R$" ? `R$ ${v.toLocaleString("pt-BR")}` : `${v.toLocaleString("pt-BR")}${g.unit ? ` ${g.unit}` : ""}`);
             return (
@@ -90,6 +127,7 @@ export default async function MetasPage() {
             );
           })}
         </div>
+        </>
       )}
     </div>
   );

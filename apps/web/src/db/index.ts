@@ -39,14 +39,34 @@ function throwingClient(): ReturnType<typeof postgres> {
   });
 }
 
+// Em dev, o Turbopack/Next recarrega este módulo a cada alteração de arquivo.
+// Sem cachear o cliente, cada reload abria um NOVO pool do postgres.js sem
+// fechar o anterior; em session mode (pooler porta 5432, teto de 15 conexões)
+// os pools vazados acumulam até estourar: `EMAXCONNSESSION max clients reached`.
+// Guardar o cliente no globalThis faz o HMR reaproveitar o mesmo pool.
+const globalForDb = globalThis as unknown as {
+  __copPgClient?: ReturnType<typeof postgres>;
+};
+
 let client: ReturnType<typeof postgres>;
 if (isPg) {
   // prepare:false é necessário para o pooler do Supabase em modo "transaction".
   // A conexão é lazy: nada é aberto durante o import.
-  // NOTA: max:1 foi testado e QUEBROU produção (todas as telas travavam em
-  // "carregando") — provavelmente exaustão do pooler em modo sessão. Reverter
-  // para o default. Reintroduzir performance só com teste em preview.
-  client = postgres(url!, { prepare: false });
+  // NOTA: max:1 QUEBROU produção (telas travando em "carregando") — em session
+  // mode uma única conexão serializa tudo. NÃO reduzir o max de produção.
+  // idle_timeout fecha conexões ociosas (higiene, evita acúmulo no pooler);
+  // em dev o max é menor só para deixar folga sob o teto de 15 do pooler.
+  const isProd = process.env.NODE_ENV === "production";
+  client =
+    globalForDb.__copPgClient ??
+    postgres(url!, {
+      prepare: false,
+      idle_timeout: 20,
+      max: isProd ? 10 : 5,
+    });
+  // Cachear apenas em dev — em produção (serverless) o módulo é avaliado uma vez
+  // por instância, então não há reload e o cache é desnecessário.
+  if (!isProd) globalForDb.__copPgClient = client;
 } else if (process.env.NODE_ENV === "production" && !isBuildPhase) {
   // Produção sem banco = crash imediato e explícito no boot — nunca um
   // fallback silencioso apontando para um host fake.

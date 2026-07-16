@@ -1504,12 +1504,21 @@ export const importLogs = pgTable("import_logs", {
 export const usersRelations = relations(users, ({ one, many }) => ({
   teamMember: one(teamMembers, { fields: [users.id], references: [teamMembers.userId] }),
   userRoles: many(userRoles),
-  userPermissions: many(userPermissions),
+  userPermissions: many(userPermissions, { relationName: "user_perms" }),
 }));
 
 export const userPermissionsRelations = relations(userPermissions, ({ one }) => ({
-  user: one(users, { fields: [userPermissions.userId], references: [users.id] }),
-  grantedBy: one(users, { fields: [userPermissions.grantedById], references: [users.id] }),
+  // dois FKs para users → precisam de relationName distinto para desambiguar
+  user: one(users, {
+    fields: [userPermissions.userId],
+    references: [users.id],
+    relationName: "user_perms",
+  }),
+  grantedBy: one(users, {
+    fields: [userPermissions.grantedById],
+    references: [users.id],
+    relationName: "granted_perms",
+  }),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({

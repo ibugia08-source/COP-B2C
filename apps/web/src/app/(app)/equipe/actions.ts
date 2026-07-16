@@ -10,7 +10,6 @@ import {
   permissionAuditLogs,
   teamMembers,
   users,
-  type CargoName,
   type PermissionAuditAction,
 } from "@/db/schema";
 import { userPermissions } from "@/db/schema";
@@ -583,6 +582,3 @@ export async function toggleMemberActive(userId: string): Promise<ActionState> {
   revalidatePath("/equipe");
   return { success: newActive ? "Colaborador reativado." : "Colaborador desativado." };
 }
-
-// Reexport tipos úteis para a UI
-export type { CargoName };

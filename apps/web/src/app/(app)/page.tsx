@@ -122,7 +122,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         />
       </header>
 
-      <DashboardFilterBar users={allUsers} niches={niches.map((n) => n.niche).filter((n): n is string => !!n)} />
+      <DashboardFilterBar
+        users={allUsers}
+        niches={niches.map((n) => n.niche).filter((n): n is string => !!n)}
+        current={{ empresa: filters.empresa ?? "", gestor: filters.gestor ?? "", nicho: filters.nicho ?? "" }}
+      />
 
       {/* Lembretes e avisos (inclui metas próximas do prazo/atrasadas) */}
       {reminders.length > 0 && (

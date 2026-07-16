@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "./primitives";
 import { Icon } from "@/components/ui/icon";
 
@@ -66,6 +67,7 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
+  warning,
   confirmLabel = "Confirmar",
   danger = false,
   pending = false,
@@ -75,6 +77,8 @@ export function ConfirmDialog({
   onConfirm: () => void;
   title: string;
   description?: string;
+  /** aviso destacado para ações de alto risco (segredos, exclusões, permissões admin) */
+  warning?: ReactNode;
   confirmLabel?: string;
   danger?: boolean;
   pending?: boolean;
@@ -82,6 +86,14 @@ export function ConfirmDialog({
   return (
     <Modal open={open} onClose={onClose} title={title}>
       {description && <p className="text-sm text-zinc-400">{description}</p>}
+      {warning && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <span className="mt-0.5 shrink-0">
+            <Icon name="warning" />
+          </span>
+          <span>{warning}</span>
+        </div>
+      )}
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose} disabled={pending}>
           Cancelar
@@ -115,6 +127,61 @@ export function Tabs({
             key={tab.key}
             type="button"
             onClick={() => setActive(tab.key)}
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition ${
+              tab.key === current?.key
+                ? "border-emerald-600 font-semibold text-zinc-100"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            {tab.label}
+            {tab.badge != null && tab.badge > 0 && (
+              <span className="ml-1.5 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
+                {tab.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      <div>{current?.content}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UrlTabs — abas com estado na URL (?tab=), linkáveis e resistentes a refresh
+// ---------------------------------------------------------------------------
+
+export function UrlTabs({
+  tabs,
+  param = "tab",
+}: {
+  tabs: { key: string; label: string; content: ReactNode; badge?: number }[];
+  param?: string;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const first = tabs[0]?.key;
+  const active = params.get(param) ?? first;
+  const current = tabs.find((t) => t.key === active) ?? tabs[0];
+
+  function select(key: string) {
+    const next = new URLSearchParams(params.toString());
+    if (key === first) next.delete(param);
+    else next.set(param, key);
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-zinc-800">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => select(tab.key)}
+            aria-current={tab.key === current?.key ? "page" : undefined}
             className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition ${
               tab.key === current?.key
                 ? "border-emerald-600 font-semibold text-zinc-100"

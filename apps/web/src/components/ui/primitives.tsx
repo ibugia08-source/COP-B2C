@@ -342,3 +342,80 @@ export function LoadingBlock({ label = "Carregando..." }: { label?: string }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Seletor de cor (swatches) — padrão único de escolha de tom (reusa TONE_CLASSES)
+// ---------------------------------------------------------------------------
+
+export const SWATCH_TONES: Tone[] = ["green", "amber", "red", "blue", "purple", "cyan", "zinc"];
+
+export function ColorSwatch({ tone, className = "h-3.5 w-3.5" }: { tone: Tone; className?: string }) {
+  return <span className={`inline-block rounded-full border ${TONE_CLASSES[tone]} ${className}`} />;
+}
+
+export function ColorSwatchPicker({
+  value,
+  onChange,
+  tones = SWATCH_TONES,
+}: {
+  value: Tone;
+  onChange: (tone: Tone) => void;
+  tones?: Tone[];
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {tones.map((t) => (
+        <button
+          key={t}
+          type="button"
+          onClick={() => onChange(t)}
+          title={t}
+          aria-label={`Cor ${t}`}
+          aria-pressed={value === t}
+          className={`rounded-full p-0.5 transition ${
+            value === t ? "ring-2 ring-emerald-500" : "hover:ring-1 hover:ring-zinc-600"
+          }`}
+        >
+          <ColorSwatch tone={t} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Toggle on/off — linguagem única de ativado/desativado em todo o sistema
+// ---------------------------------------------------------------------------
+
+export function Toggle({
+  on,
+  onToggle,
+  pending = false,
+  labels,
+}: {
+  on: boolean;
+  onToggle: () => void;
+  pending?: boolean;
+  labels?: { on: string; off: string };
+}) {
+  const text = on ? (labels?.on ?? "Ativado") : (labels?.off ?? "Desativado");
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={pending}
+      onClick={onToggle}
+      className={`inline-flex items-center gap-2 rounded-full border py-1 pl-1 pr-2.5 text-xs font-medium transition disabled:opacity-50 ${
+        on ? "border-emerald-600 bg-emerald-950/40 text-emerald-300" : "border-zinc-700 bg-zinc-900 text-zinc-500"
+      }`}
+    >
+      <span className={`relative inline-block h-4 w-7 rounded-full transition ${on ? "bg-emerald-600" : "bg-zinc-600"}`}>
+        <span
+          className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${on ? "left-[0.875rem]" : "left-0.5"}`}
+        />
+      </span>
+      {text}
+    </button>
+  );
+}

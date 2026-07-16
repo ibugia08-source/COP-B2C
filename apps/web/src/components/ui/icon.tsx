@@ -60,6 +60,7 @@ import {
   faThumbtack,
   faTrashCan,
   faTriangleExclamation,
+  faUpDownLeftRight,
   faUpload,
   faUser,
   faUsers,
@@ -143,6 +144,7 @@ const ICONS = {
   chevronDown: faChevronDown,
   chevronRight: faChevronRight,
   menu: faBars, // ☰
+  move: faUpDownLeftRight, // ↔ mover (Kanban)
   // tema
   sun: faSun, // ☀ claro
   moon: faMoon, // ☾ escuro

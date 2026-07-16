@@ -23,11 +23,12 @@ import {
   CLIENT_STATUS_META,
   HEALTH_META,
 } from "@/lib/labels";
-import { EmptyState, PageHeader, StatCard } from "@/components/ui/primitives";
+import { Button, EmptyState, PageHeader, StatCard } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
+import { Segmented } from "@/components/ui/toolbar";
+import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { OperationKanban, type KanbanClient, type StageOption } from "./kanban";
-import { OperationFilters } from "./ui-filters";
-import { ClientFilters } from "../clientes/ui-filters";
 import { ClientsList, type ClientRow } from "../clientes/list";
 import { ModuleConfig } from "../module-config";
 import { BulkBar, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
@@ -36,7 +37,7 @@ import { bulkAssignClients, bulkDeleteClients, bulkMoveClients, bulkSetClientsHe
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
 
-const FILTER_KEYS = ["etapa", "cliente", "responsavel", "gestor", "estrategista", "saude", "empresa", "nicho", "ads", "servico"] as const;
+const FILTER_KEYS = ["q", "etapa", "servico", "status", "modelo", "saude", "empresa", "nicho", "ads", "gestor", "gestor2", "estrategista"] as const;
 
 // ordenação da lista da carteira (mesmos valores da antiga tela /clientes)
 const SORTS: Record<string, SQL> = {
@@ -61,15 +62,19 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   const showKanban = modo !== "clientes";
   const showCarteira = modo !== "operacao";
 
-  // --- filtros combinados -------------------------------------------------
+  // --- filtros combinados (as mesmas chaves valem para Kanban e Carteira) -
   const filters: SQL[] = [];
   // escopo de ownership: quem não é OWNER/ADMIN só vê os clientes que gerencia
   const scope = clientScopeCondition(session);
   if (scope) filters.push(scope);
+  const qKanban = str(sp.q);
+  if (qKanban) {
+    const p = `%${qKanban}%`;
+    filters.push(or(like(clients.name, p), like(clients.brandName, p), like(clients.legalName, p))!);
+  }
   if (str(sp.etapa)) filters.push(eq(clients.pipelineStage, str(sp.etapa) as never));
-  if (str(sp.cliente)) filters.push(eq(clients.id, str(sp.cliente)!));
-  if (str(sp.responsavel)) filters.push(eq(clients.trafficManager1Id, str(sp.responsavel)!));
   if (str(sp.gestor)) filters.push(eq(clients.trafficManager1Id, str(sp.gestor)!));
+  if (str(sp.gestor2)) filters.push(eq(clients.trafficManager2Id, str(sp.gestor2)!));
   if (str(sp.estrategista)) filters.push(eq(clients.strategistId, str(sp.estrategista)!));
   if (str(sp.saude)) filters.push(eq(clients.healthStatus, str(sp.saude) as never));
   if (str(sp.nicho)) filters.push(eq(clients.niche, str(sp.nicho)!));
@@ -77,7 +82,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   if (str(sp.ads)) filters.push(eq(clients.adsStatus, str(sp.ads) as never));
 
   // allUsers é usado pelos filtros das duas seções; o resto do Kanban só quando showKanban
-  const [allRows, allUsers, niches, servicesRows, stageOptionsAll, clientOptions] = await Promise.all([
+  const [allRows, allUsers, niches, servicesRows, stageOptionsAll] = await Promise.all([
     showKanban
       ? db.query.clients.findMany({
           where: filters.length ? and(...filters) : undefined,
@@ -96,9 +101,6 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
           .orderBy(asc(agencyServices.order), asc(agencyServices.name))
       : Promise.resolve([]),
     showKanban ? resolveOptions("operation", "pipeline") : Promise.resolve([]),
-    showKanban
-      ? db.select({ id: clients.id, name: clients.name }).from(clients).where(scope).orderBy(asc(clients.name))
-      : Promise.resolve([]),
   ]);
 
   // serviço utilizado: filtra sobre o perfil operacional (lista de serviços do cliente)
@@ -261,12 +263,9 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     [str(sp.saude), clients.healthStatus],
     [str(sp.ads), clients.adsStatus],
     [str(sp.nicho), clients.niche],
-    [str(sp.cidade), clients.city],
-    [str(sp.uf), clients.state],
     [str(sp.estrategista), clients.strategistId],
-    [str(sp.gestor1), clients.trafficManager1Id],
+    [str(sp.gestor), clients.trafficManager1Id],
     [str(sp.gestor2), clients.trafficManager2Id],
-    [str(sp.responsavel), clients.trafficManager1Id],
   ] as const;
   for (const [value, column] of listEq) {
     if (value) listFilters.push(eq(column as unknown as typeof clients.name, value));
@@ -323,29 +322,41 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     users: allUsers.map((u) => ({ value: u.id, label: u.name })),
   };
 
-  const viewBtn = (key: string, label: string) => (
-    <Link
-      key={key}
-      href={buildHref({ visao: key === "kanban" ? null : key })}
-      className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
-        visao === key ? "bg-emerald-950/70 text-emerald-300" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-
-  const modoBtn = (key: string, label: string) => (
-    <Link
-      key={key}
-      href={buildHref({ modo: key === "geral" ? null : key })}
-      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-        modo === key ? "bg-emerald-600 text-white shadow-sm" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-      }`}
-    >
-      {label}
-    </Link>
-  );
+  // --- filtro unificado: uma barra só; os controles se adaptam ao modo -----
+  const userOpts = allUsers.map((u) => ({ value: u.id, label: u.name }));
+  const nicheOpts = showCarteira
+    ? clientNiches.map((n) => ({ value: n.value, label: n.label }))
+    : niches.map((n) => n.niche).filter((n): n is string => !!n).map((n) => ({ value: n, label: n }));
+  const filterConfig: FilterDef[] = [
+    { key: "q", kind: "search", placeholder: "Buscar cliente...", width: "w-48" },
+    { key: "empresa", kind: "select", label: "Empresa", options: AGENCY_BRANDS.map((v) => ({ value: v, label: AGENCY_BRAND_META[v]?.label ?? v })) },
+    { key: "nicho", kind: "select", label: "Nicho", options: nicheOpts },
+    { key: "saude", kind: "select", label: "Saúde", options: HEALTH_STATUSES.map((v) => ({ value: v, label: HEALTH_META[v]?.label ?? v })) },
+    { key: "ads", kind: "select", label: "Ads", options: ADS_STATUSES.map((v) => ({ value: v, label: ADS_META[v]?.label ?? v })) },
+    { key: "gestor", kind: "select", label: "Gestor", options: userOpts },
+    { key: "gestor2", kind: "select", label: "Gestor 2", options: userOpts },
+    { key: "estrategista", kind: "select", label: "Estrategista", options: userOpts },
+  ];
+  if (showKanban) {
+    filterConfig.push({ key: "etapa", kind: "select", label: "Etapa", options: stageActive.map((o) => ({ value: o.value, label: o.label })) });
+    filterConfig.push({ key: "servico", kind: "select", label: "Serviço", options: servicesRows.map((s) => ({ value: s.name, label: s.name })) });
+  }
+  if (showCarteira) {
+    filterConfig.push({ key: "status", kind: "select", label: "Status", options: CLIENT_STATUSES.map((v) => ({ value: v, label: CLIENT_STATUS_META[v]?.label ?? v })) });
+    filterConfig.push({ key: "modelo", kind: "select", label: "Modelo", options: BUSINESS_MODELS.map((v) => ({ value: v, label: BUSINESS_MODEL_LABEL[v] ?? v })) });
+    filterConfig.push({
+      key: "ordenar",
+      kind: "select",
+      label: "Ordenar",
+      emptyLabel: "Recentes (padrão)",
+      options: [
+        { value: "nome", label: "Nome" },
+        { value: "entrada", label: "Data de entrada" },
+        { value: "status", label: "Status" },
+        { value: "saude", label: "Saúde" },
+      ],
+    });
+  }
   // href de um StatCard: mantém o modo atual e aplica um filtro limpo
   const carteiraHref = (patch: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -362,56 +373,52 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
         description="CRM operacional — pipeline do ciclo de vida do cliente. Demandas internas ficam em Tarefas."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Visualização padrão da tela — explícita */}
-            <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
-              <span className="px-1.5 text-[11px] font-medium text-zinc-500">Ver:</span>
-              {modoBtn("geral", "Geral")}
-              {modoBtn("operacao", "Operação")}
-              {modoBtn("clientes", "Clientes")}
-            </span>
+            <Segmented
+              ariaLabel="Modo de visualização"
+              active={modo}
+              items={[
+                { value: "geral", label: "Geral", href: buildHref({ modo: null }) },
+                { value: "operacao", label: "Operação", icon: "operation", href: buildHref({ modo: "operacao" }) },
+                { value: "clientes", label: "Clientes", icon: "clients", href: buildHref({ modo: "clientes" }) },
+              ]}
+            />
             {showKanban && (
-              <>
-                <ModuleConfig moduleKey="operation" moduleLabel="Operação" buttonLabel="Colunas" />
-                <Link
-                  href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
-                  className={`rounded-lg border px-3 py-2 text-sm transition ${
-                    activeFilterCount > 0
-                      ? "border-emerald-700 text-emerald-300"
-                      : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
-                  }`}
-                >
-                  Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-                </Link>
-                <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
-                  {viewBtn("kanban", "Kanban")}
-                  {viewBtn("calendario", "Calendário")}
-                </span>
-              </>
+              <Segmented
+                size="sm"
+                ariaLabel="Visão do pipeline"
+                active={visao}
+                items={[
+                  { value: "kanban", label: "Kanban", href: buildHref({ visao: null }) },
+                  { value: "calendario", label: "Calendário", href: buildHref({ visao: "calendario" }) },
+                ]}
+              />
             )}
-            {canCreate && (
-              <Link
-                href="/clientes/novo"
-                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-500"
-              >
-                + Novo cliente
-              </Link>
-            )}
+            {showKanban && <ModuleConfig moduleKey="operation" moduleLabel="Operação" buttonLabel="Colunas" />}
+            <Link
+              href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                activeFilterCount > 0 || showFilters
+                  ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
+                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+              }`}
+            >
+              <Icon name="search" /> Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </Link>
+            {canCreate && <Button href="/clientes/novo">+ Novo cliente</Button>}
           </div>
         }
       />
 
+      {showFilters && (
+        <FilterBar
+          filters={filterConfig}
+          preserve={["modo", "visao", "mes", "filtros"]}
+          resultCount={modo === "clientes" ? listRows.length : modo === "operacao" ? kanbanClients.length : undefined}
+        />
+      )}
+
       {showKanban && (
         <>
-          {showFilters && (
-            <OperationFilters
-              users={allUsers}
-              clients={clientOptions}
-              niches={niches.map((n) => n.niche).filter((n): n is string => !!n)}
-              services={servicesRows.map((s) => s.name)}
-              stageOptions={stageActive.map((o) => ({ value: o.value, label: o.label }))}
-            />
-          )}
-
           <SelectionProvider>
           {visao === "calendario" ? (
             <CalendarMonth year={calYear} month={calMonth} buildHref={buildHref} items={calendarItems} />
@@ -448,16 +455,6 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
           <StatCard label="Perdidos" value={perdidos} tone="text-zinc-400" href={carteiraHref({ status: "PERDIDO" })} />
           <StatCard label="Ads pausado" value={adsPausado} tone="text-amber-400" href={carteiraHref({ ads: "PAUSADO" })} />
         </div>
-
-        <ClientFilters
-          users={allUsers}
-          niches={clientNiches.map((n) => n.value)}
-          statuses={[...CLIENT_STATUSES]}
-          healths={[...HEALTH_STATUSES]}
-          adsStatuses={[...ADS_STATUSES]}
-          brands={[...AGENCY_BRANDS]}
-          models={[...BUSINESS_MODELS]}
-        />
 
         {listRows.length === 0 ? (
           <EmptyState

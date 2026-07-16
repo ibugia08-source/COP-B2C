@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import { useState } from "react";
 import {
   ADS_META,
   AGENCY_BRAND_META,
@@ -11,7 +10,10 @@ import {
   formatDate,
   HEALTH_META,
 } from "@/lib/labels";
-import { StatusBadge, Table, Td, Th, UserAvatar } from "@/components/ui/primitives";
+import { Alert, Button, Field, Select, StatusBadge, Table, Td, Th, UserAvatar } from "@/components/ui/primitives";
+import { Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
+import { useAction } from "@/components/ui/use-action";
 import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
 import {
   bulkClientEmpresa,
@@ -20,7 +22,7 @@ import {
   bulkClientSaude,
   bulkDeleteClientsList,
   deleteClientRow,
-  updateClientField,
+  updateClientQuick,
 } from "./actions";
 
 type Opt = { value: string; label: string };
@@ -51,73 +53,133 @@ type Options = {
   users: Opt[]; // gestores
 };
 
-// Célula editável inline: mostra o valor; ao clicar (com permissão) vira <select>.
-function InlineField({
-  id,
-  field,
-  value,
-  display,
-  options,
-  canEdit,
-  allowEmpty,
-  emptyLabel = "—",
-}: {
-  id: string;
-  field: string;
-  value: string;
-  display: ReactNode;
-  options: Opt[];
-  canEdit: boolean;
-  allowEmpty?: boolean;
-  emptyLabel?: string;
-}) {
-  const router = useRouter();
-  const [editing, setEditing] = useState(false);
-  const [pending, start] = useTransition();
-  const [err, setErr] = useState<string | null>(null);
+// garante que o valor atual apareça no select mesmo se não estiver na lista de opções
+function ensureOption(opts: Opt[], value: string, label: string): Opt[] {
+  if (!value || opts.some((o) => o.value === value)) return opts;
+  return [{ value, label }, ...opts];
+}
 
-  if (!canEdit) return <>{display}</>;
+// Modal de edição rápida de um cliente (aberto pelo lápis na linha).
+function ClientQuickEdit({ row, options }: { row: ClientRow; options: Options }) {
+  const [open, setOpen] = useState(false);
+  const { pending, error, run } = useAction();
 
-  if (!editing) {
-    return (
+  const [empresa, setEmpresa] = useState(row.agencyBrand);
+  const [nicho, setNicho] = useState(row.niche ?? "");
+  const [modelo, setModelo] = useState(row.businessModel);
+  const [saude, setSaude] = useState(row.healthStatus);
+  const [ads, setAds] = useState(row.adsStatus);
+  const [gestor, setGestor] = useState(row.gestor1Id ?? "");
+
+  function openModal() {
+    // ressincroniza com a linha (os dados podem ter mudado desde o último refresh)
+    setEmpresa(row.agencyBrand);
+    setNicho(row.niche ?? "");
+    setModelo(row.businessModel);
+    setSaude(row.healthStatus);
+    setAds(row.adsStatus);
+    setGestor(row.gestor1Id ?? "");
+    setOpen(true);
+  }
+
+  function save() {
+    const changed: Record<string, string> = {};
+    if (empresa !== row.agencyBrand) changed.agencyBrand = empresa;
+    if (nicho !== (row.niche ?? "")) changed.niche = nicho;
+    if (modelo !== row.businessModel) changed.businessModel = modelo;
+    if (saude !== row.healthStatus) changed.healthStatus = saude;
+    if (ads !== row.adsStatus) changed.adsStatus = ads;
+    if (gestor !== (row.gestor1Id ?? "")) changed.trafficManager1Id = gestor;
+    if (Object.keys(changed).length === 0) {
+      setOpen(false);
+      return;
+    }
+    run(() => updateClientQuick(row.id, changed), () => setOpen(false));
+  }
+
+  const healthOptions = ensureOption(options.healths, row.healthStatus, HEALTH_META[row.healthStatus]?.label ?? row.healthStatus);
+  const nicheOptions = row.niche ? ensureOption(options.niches, row.niche, row.niche) : options.niches;
+
+  return (
+    <>
       <button
         type="button"
-        onClick={() => { setErr(null); setEditing(true); }}
-        title="Clique para editar"
-        className="group/inline inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-left transition hover:bg-zinc-800"
+        title="Editar cliente"
+        aria-label={`Editar ${row.name}`}
+        onClick={openModal}
+        className="rounded-md p-1 text-zinc-500 transition hover:bg-zinc-800 hover:text-emerald-400"
       >
-        {display}
-        <span className="text-[9px] text-zinc-500 opacity-0 transition group-hover/inline:opacity-100">▾</span>
+        <Icon name="pencil" />
       </button>
-    );
-  }
-  return (
-    <span className="inline-flex flex-col gap-0.5">
-      <select
-        autoFocus
-        defaultValue={value}
-        disabled={pending}
-        onBlur={() => !pending && setEditing(false)}
-        onChange={(e) => {
-          const v = e.target.value;
-          start(async () => {
-            const r = await updateClientField(id, field, v);
-            if (r.error) setErr(r.error);
-            else {
-              setEditing(false);
-              router.refresh();
-            }
-          });
-        }}
-        className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-emerald-500"
-      >
-        {allowEmpty && <option value="">{emptyLabel}</option>}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-      {err && <span className="max-w-40 text-[10px] text-red-600">{err}</span>}
-    </span>
+      <Modal open={open} onClose={() => setOpen(false)} title={`Editar — ${row.name}`}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Empresa">
+            <Select value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+              {options.brands.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Modelo de negócio">
+            <Select value={modelo} onChange={(e) => setModelo(e.target.value)}>
+              {options.models.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Saúde da conta">
+            <Select value={saude} onChange={(e) => setSaude(e.target.value)}>
+              {healthOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Anúncios">
+            <Select value={ads} onChange={(e) => setAds(e.target.value)}>
+              {options.adsStatuses.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Nicho">
+            <Select value={nicho} onChange={(e) => setNicho(e.target.value)}>
+              <option value="">— sem nicho —</option>
+              {nicheOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Gestor 1">
+            <Select value={gestor} onChange={(e) => setGestor(e.target.value)}>
+              <option value="">— sem gestor —</option>
+              {options.users.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <p className="mt-3 text-[11px] text-zinc-500">
+          Saúde CRÍTICA e os demais campos ficam na{" "}
+          <Link href={`/clientes/${row.id}/editar`} className="text-emerald-400 hover:text-emerald-300">
+            ficha completa
+          </Link>
+          .
+        </p>
+        {error && (
+          <div className="mt-3">
+            <Alert>{error}</Alert>
+          </div>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
+            Cancelar
+          </Button>
+          <Button onClick={save} disabled={pending}>
+            {pending ? "Salvando..." : "Salvar"}
+          </Button>
+        </div>
+      </Modal>
+    </>
   );
 }
 
@@ -143,11 +205,12 @@ export function ClientsList({
         { label: "Gestor…", options: [{ value: "", label: "— Sem gestor —" }, ...options.users], run: bulkClientGestor },
       ]
     : [];
+  const hasActions = canUpdate || canDelete;
 
   return (
     <SelectionProvider>
       <Table
-        minWidth="1000px"
+        minWidth="900px"
         head={
           <>
             <Th className="w-8"></Th>
@@ -160,7 +223,7 @@ export function ClientsList({
             <Th>Ads</Th>
             <Th>Gestor 1</Th>
             <Th>Entrada</Th>
-            {canDelete && <Th className="w-10"></Th>}
+            {hasActions && <Th className="w-16 text-right">Ações</Th>}
           </>
         }
       >
@@ -173,45 +236,31 @@ export function ClientsList({
               </Link>
               {c.city && <p className="text-xs text-zinc-500">{c.city}{c.state ? `/${c.state}` : ""}</p>}
             </Td>
+            <Td><StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} /></Td>
+            <Td className="text-zinc-400">{c.niche ?? "—"}</Td>
+            <Td className="text-zinc-400">{BUSINESS_MODEL_LABEL[c.businessModel] ?? c.businessModel}</Td>
+            <Td><StatusBadge value={c.status} meta={CLIENT_STATUS_META} /></Td>
+            <Td><StatusBadge value={c.healthStatus} meta={HEALTH_META} /></Td>
+            <Td><StatusBadge value={c.adsStatus} meta={ADS_META} /></Td>
             <Td>
-              <InlineField id={c.id} field="agencyBrand" value={c.agencyBrand} canEdit={canUpdate} options={options.brands}
-                display={<StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} />} />
-            </Td>
-            <Td className="text-zinc-400">
-              <InlineField id={c.id} field="niche" value={c.niche ?? ""} canEdit={canUpdate} options={options.niches} allowEmpty emptyLabel="— sem nicho —"
-                display={<span>{c.niche ?? "—"}</span>} />
-            </Td>
-            <Td className="text-zinc-400">
-              <InlineField id={c.id} field="businessModel" value={c.businessModel} canEdit={canUpdate} options={options.models}
-                display={<span>{BUSINESS_MODEL_LABEL[c.businessModel] ?? c.businessModel}</span>} />
-            </Td>
-            <Td>
-              {/* status é derivado (etapa + saúde + pausa) — somente leitura */}
-              <StatusBadge value={c.status} meta={CLIENT_STATUS_META} />
-            </Td>
-            <Td>
-              <InlineField id={c.id} field="healthStatus" value={c.healthStatus} canEdit={canUpdate} options={options.healths}
-                display={<StatusBadge value={c.healthStatus} meta={HEALTH_META} />} />
-            </Td>
-            <Td>
-              <InlineField id={c.id} field="adsStatus" value={c.adsStatus} canEdit={canUpdate} options={options.adsStatuses}
-                display={<StatusBadge value={c.adsStatus} meta={ADS_META} />} />
-            </Td>
-            <Td>
-              <InlineField id={c.id} field="trafficManager1Id" value={c.gestor1Id ?? ""} canEdit={canUpdate} options={options.users} allowEmpty emptyLabel="— sem gestor —"
-                display={
-                  c.gestor1Name ? (
-                    <span className="flex items-center gap-1.5">
-                      <UserAvatar name={c.gestor1Name} size="sm" />
-                      <span className="text-xs text-zinc-400">{c.gestor1Name.split(" ")[0]}</span>
-                    </span>
-                  ) : (
-                    <span className="text-xs text-amber-500">sem gestor</span>
-                  )
-                } />
+              {c.gestor1Name ? (
+                <span className="flex items-center gap-1.5">
+                  <UserAvatar name={c.gestor1Name} size="sm" />
+                  <span className="text-xs text-zinc-400">{c.gestor1Name.split(" ")[0]}</span>
+                </span>
+              ) : (
+                <span className="text-xs text-amber-500">sem gestor</span>
+              )}
             </Td>
             <Td className="text-zinc-400">{formatDate(c.startDate ? new Date(c.startDate) : null)}</Td>
-            {canDelete && <Td className="text-right"><CardTrash id={c.id} deleteAction={deleteClientRow} label="cliente" /></Td>}
+            {hasActions && (
+              <Td>
+                <div className="flex items-center justify-end gap-0.5">
+                  {canUpdate && <ClientQuickEdit row={c} options={options} />}
+                  {canDelete && <CardTrash id={c.id} deleteAction={deleteClientRow} label="cliente" />}
+                </div>
+              </Td>
+            )}
           </tr>
         ))}
       </Table>

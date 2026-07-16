@@ -606,6 +606,73 @@ export async function updateClientField(
   return { success: "Atualizado." };
 }
 
+/**
+ * Edição rápida (modal da carteira): atualiza os campos operacionais de um
+ * cliente numa única escrita. Só recebe os campos realmente alterados.
+ */
+export async function updateClientQuick(
+  clientId: string,
+  fields: Record<string, string>,
+): Promise<ActionState> {
+  const auth = await checkPermission("clients.update");
+  if (!auth.ok) return { error: auth.error };
+
+  const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
+  if (!existing) return { error: "Cliente não encontrado." };
+  const denied = await denyClientOutOfScope(auth.session, clientId, "updateClientQuick");
+  if (denied) return denied;
+
+  const set: Record<string, unknown> = {};
+  let healthTo: HealthStatus | null = null;
+  for (const [field, raw] of Object.entries(fields)) {
+    if (!EDITABLE_CLIENT_FIELDS.has(field)) return { error: `Campo não editável: ${field}.` };
+    if (field === "healthStatus" && raw === "CRITICO") {
+      return { error: "Saúde CRÍTICA exige um motivo — altere na ficha completa do cliente." };
+    }
+    const enumValues = CLIENT_FIELD_ENUM[field];
+    const value = field === "trafficManager1Id" || field === "niche" ? raw || null : raw;
+    if (enumValues && (value === null || !enumValues.includes(value as string))) {
+      return { error: "Valor inválido." };
+    }
+    set[field] = value;
+    if (field === "healthStatus" && existing.healthStatus !== value) healthTo = value as HealthStatus;
+  }
+  if (Object.keys(set).length === 0) return { error: "Nada para atualizar." };
+
+  if (healthTo) {
+    set.status = deriveClientStatus({
+      pipelineStage: existing.pipelineStage,
+      healthStatus: healthTo,
+      isPaused: existing.isPaused,
+    });
+  }
+
+  await db.update(clients).set(set as Partial<typeof clients.$inferInsert>).where(eq(clients.id, clientId));
+
+  if (healthTo) {
+    await db.insert(clientHealthLogs).values({
+      clientId,
+      previousStatus: existing.healthStatus as HealthStatus,
+      newStatus: healthTo,
+      reason: "Edição rápida na carteira",
+      changedById: auth.session.userId,
+    });
+  }
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "client.quickEdited",
+    entityType: "client",
+    entityId: clientId,
+    metadata: { fields: Object.keys(set).filter((k) => k !== "status") },
+  });
+
+  revalidatePath("/clientes");
+  revalidatePath("/operacao");
+  revalidatePath(`/clientes/${clientId}`);
+  return { success: "Cliente atualizado." };
+}
+
 async function bulkField(ids: string[], field: string, value: string): Promise<BulkResult> {
   const auth = await checkPermission("clients.update");
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };

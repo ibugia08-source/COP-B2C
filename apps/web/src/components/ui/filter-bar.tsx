@@ -47,7 +47,7 @@ export function useUrlFilters(keys: readonly string[], opts?: { preserve?: reado
 
 export type FilterOption = { value: string; label: string };
 export type FilterDef =
-  | { key: string; kind: "select"; label: string; options: FilterOption[]; width?: string }
+  | { key: string; kind: "select"; label: string; options: FilterOption[]; width?: string; emptyLabel?: string }
   | { key: string; kind: "search"; placeholder?: string; width?: string };
 
 export function FilterBar({
@@ -89,7 +89,7 @@ export function FilterBar({
             value={get(f.key)}
             onChange={(e) => set(f.key, e.target.value)}
           >
-            <option value="">{f.label}: todos</option>
+            <option value="">{f.emptyLabel ?? `${f.label}: todos`}</option>
             {f.options.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}

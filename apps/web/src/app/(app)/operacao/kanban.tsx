@@ -8,6 +8,7 @@ import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar }
 import { Modal } from "@/components/ui/overlay";
 import { Icon } from "@/components/ui/icon";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
+import { MoveMenu } from "@/components/ui/move-menu";
 import { deleteClient, moveClientStage, reorderClientOnBoard } from "./actions";
 
 export type StageOption = { value: string; label: string; color: Tone };
@@ -59,6 +60,7 @@ export function OperationKanban({
   const allColumns: StageOption[] = orphans.length
     ? [...columns, { value: "__outros__", label: "Sem coluna", color: "zinc" }]
     : columns;
+  const moveOptions = columns.map((c) => ({ value: c.value, label: c.label }));
 
   function doMove(client: KanbanClient, toStage: string, extras?: Parameters<typeof moveClientStage>[2]) {
     setError(null);
@@ -183,7 +185,18 @@ export function OperationKanban({
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <SelectCircle id={c.id} />
-                      {canDelete && <CardTrash id={c.id} deleteAction={deleteClient} label="cliente" />}
+                      <div className="flex items-center gap-0.5">
+                        {canMove && (
+                          <MoveMenu
+                            options={moveOptions}
+                            currentValue={c.pipelineStage}
+                            onMove={(v) => doMove(c, v)}
+                            disabled={isPending}
+                            title={`Mover "${c.name}" para…`}
+                          />
+                        )}
+                        {canDelete && <CardTrash id={c.id} deleteAction={deleteClient} label="cliente" />}
+                      </div>
                     </div>
                     <div className="flex items-start justify-between gap-2">
                       <Link

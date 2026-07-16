@@ -8,6 +8,7 @@ import { resolveOptions } from "@/lib/config-options";
 import { formatDate, PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META, type Tone } from "@/lib/labels";
 import {
   Badge,
+  Button,
   EmptyState,
   PageHeader,
   StatCard,
@@ -22,13 +23,14 @@ import {
   ListQuickAdd,
   RowStatusSelect,
   TaskCreateButton,
-  TaskFilters,
   TasksKanban,
   type KanbanTask,
   type Option,
 } from "./ui";
 import { ModuleConfig } from "../module-config";
 import { Icon } from "@/components/ui/icon";
+import { Segmented } from "@/components/ui/toolbar";
+import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
 import { bulkAssignTasks, bulkDeleteTasks, bulkMoveTasks, bulkPrioritizeTasks, deleteTask } from "./actions";
@@ -104,7 +106,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   const monthStart = new Date(calYear, calMonth, 1);
   const monthEnd = new Date(calYear, calMonth + 1, 1);
 
-  const [rows, allUsers, allClients, statusOptionsAll, typeOptionsAll, counts, meetings] = await Promise.all([
+  const [rows, allUsers, allClients, statusOptionsAll, typeOptionsAll, counts, meetings, allTags] = await Promise.all([
     db.query.tasks.findMany({
       where: and(...filters),
       orderBy: [asc(tasks.dueDate)],
@@ -131,6 +133,8 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
           with: { client: true },
         })
       : Promise.resolve([]),
+    // universo global de tags (independe dos filtros aplicados) para o filtro de Tag
+    db.query.tasks.findMany({ columns: { tags: true }, where: scope }),
   ]);
   const [minhas, atrasadas, semResponsavel] = counts;
 
@@ -147,7 +151,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   const statusFilterOptions: Option[] = statusActive.map((o) => ({ value: o.value, label: o.label, color: o.color }));
   const typeOptions: Option[] = typeOptionsAll.map((o) => ({ value: o.value, label: o.label, color: o.color }));
 
-  const tags = Array.from(new Set(rows.flatMap((t) => t.tags))).sort();
+  const tags = Array.from(new Set(allTags.flatMap((t) => t.tags))).sort();
   const kanbanItems: KanbanTask[] = rows.map((t) => ({
     id: t.id,
     title: t.title,
@@ -176,22 +180,28 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
 
   // --- ordenação e colunas da lista ----------------------------------------
   const ordem = str(sp.ordem) ?? "vencimento";
+  const dir = str(sp.dir) === "desc" ? "desc" : "asc";
   const sorted = [...rows];
   const prioRank: Record<string, number> = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 };
   const statusRank = new Map(statusOptionsAll.map((o, i) => [o.value, i]));
   if (ordem === "prioridade") sorted.sort((a, b) => (prioRank[a.priority] ?? 9) - (prioRank[b.priority] ?? 9));
   else if (ordem === "titulo") sorted.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
   else if (ordem === "status") sorted.sort((a, b) => (statusRank.get(a.status) ?? 99) - (statusRank.get(b.status) ?? 99));
-  else if (ordem === "criacao") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  else if (ordem === "criacao") sorted.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   else sorted.sort((a, b) => (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity));
+  if (dir === "desc") sorted.reverse();
 
   const visibleCols = (str(sp.cols) ?? DEFAULT_COLS).split(",").filter(Boolean);
   const col = (key: string) => visibleCols.includes(key);
-  const sortTh = (key: string, label: string) => (
-    <Link href={buildHref({ ordem: key })} className={ordem === key ? "text-emerald-300" : "hover:text-zinc-200"}>
-      {label}{ordem === key ? " ↓" : ""}
-    </Link>
-  );
+  const sortTh = (key: string, label: string) => {
+    const active = ordem === key;
+    const nextDir = active && dir === "asc" ? "desc" : "asc";
+    return (
+      <Link href={buildHref({ ordem: key, dir: nextDir })} className={active ? "text-emerald-300" : "hover:text-zinc-200"}>
+        {label}{active ? (dir === "asc" ? " ↑" : " ↓") : ""}
+      </Link>
+    );
+  };
 
   const bulkMenus: BulkMenu[] = [
     { label: "Mover para…", options: statusFilterOptions.filter((o) => o.value !== "CANCELADA").map((o) => ({ value: o.value, label: o.label })), run: bulkMoveTasks },
@@ -199,17 +209,27 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     { label: "Prioridade…", options: Object.entries(PRIORITY_META).map(([v, m]) => ({ value: v, label: m.label })), run: bulkPrioritizeTasks },
   ];
 
-  const viewBtn = (key: string, label: string) => (
-    <Link
-      key={key}
-      href={buildHref({ visao: key === "kanban" ? null : key })}
-      className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
-        visao === key ? "bg-emerald-950/70 text-emerald-300" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-      }`}
-    >
-      {label}
-    </Link>
-  );
+  const filterConfig: FilterDef[] = [
+    { key: "status", kind: "select", label: "Status", emptyLabel: "Status: todos", options: [{ value: "__abertas__", label: "Abertas" }, ...statusFilterOptions.map((o) => ({ value: o.value, label: o.label }))] },
+    { key: "responsavel", kind: "select", label: "Responsável", options: [{ value: "__none__", label: "Sem responsável" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))] },
+    { key: "cliente", kind: "select", label: "Cliente", options: [{ value: "__none__", label: "Sem cliente" }, ...allClients.map((c) => ({ value: c.id, label: c.name }))] },
+    { key: "tipo", kind: "select", label: "Tipo", options: typeOptions.map((o) => ({ value: o.value, label: o.label })) },
+    { key: "prioridade", kind: "select", label: "Prioridade", options: Object.entries(PRIORITY_META).map(([v, m]) => ({ value: v, label: m.label })) },
+    {
+      key: "prazo",
+      kind: "select",
+      label: "Vencimento",
+      emptyLabel: "Vencimento: todos",
+      options: [
+        { value: "hoje", label: "Vence hoje" },
+        { value: "semana", label: "Esta semana" },
+        { value: "atrasadas", label: "Atrasadas" },
+        { value: "sem", label: "Sem prazo" },
+      ],
+    },
+    { key: "criador", kind: "select", label: "Criado por", options: allUsers.map((u) => ({ value: u.id, label: u.name })) },
+  ];
+  if (tags.length > 0) filterConfig.push({ key: "tag", kind: "select", label: "Tag", options: tags.map((t) => ({ value: t, label: t })) });
 
   return (
     <div>
@@ -218,29 +238,29 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
         description="CRM interno de demandas — vinculadas ou não a clientes. Solicitações de criativo são tarefas do tipo Criativo."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" buttonLabel="Colunas" />
+            <Segmented
+              ariaLabel="Visão"
+              active={visao}
+              items={[
+                { value: "kanban", label: "Kanban", href: buildHref({ visao: null }) },
+                { value: "lista", label: "Lista", href: buildHref({ visao: "lista" }) },
+                { value: "calendario", label: "Calendário", href: buildHref({ visao: "calendario" }) },
+              ]}
+            />
+            <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" buttonLabel="Config." />
             <Link
               href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
-              className={`rounded-lg border px-3 py-2 text-sm transition ${
-                activeFilterCount > 0
-                  ? "border-emerald-700 text-emerald-300"
-                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                activeFilterCount > 0 || showFilters
+                  ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
+                  : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
               }`}
             >
-              Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+              <Icon name="search" /> Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
             </Link>
-            <span className="flex items-center gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
-              {viewBtn("kanban", "Kanban")}
-              {viewBtn("lista", "Lista")}
-              {viewBtn("calendario", "Calendário")}
-            </span>
-            <Link
-              href="/tarefas/templates"
-              className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
-              title="Templates de checklist"
-            >
-              <Icon name="clipboard" />
-            </Link>
+            <Button href="/tarefas/templates" variant="secondary" size="sm">
+              <Icon name="clipboard" /> Templates
+            </Button>
             {canCreate && (
               <TaskCreateButton
                 users={allUsers}
@@ -262,13 +282,17 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
       </div>
 
       {showFilters && (
-        <TaskFilters
-          users={allUsers}
-          clients={allClients}
-          tags={tags}
-          statusOptions={statusFilterOptions}
-          typeOptions={typeOptions}
+        <FilterBar
+          filters={filterConfig}
+          preserve={["visao", "mes", "filtros", "ordem", "dir", "cols"]}
+          resultCount={visao === "lista" ? sorted.length : undefined}
         />
+      )}
+
+      {rows.length === 300 && (
+        <p className="mb-2 text-[11px] text-amber-500">
+          Mostrando as primeiras 300 tarefas — use os filtros para encontrar o restante.
+        </p>
       )}
 
       <SelectionProvider>

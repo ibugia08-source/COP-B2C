@@ -95,8 +95,12 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
     !["CONCLUIDA", "CANCELADA"].includes(task.status);
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-      <div className="space-y-6 xl:col-span-2">
+    <div>
+      <Link href="/tarefas" className="mb-4 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition hover:text-zinc-200">
+        <Icon name="chevronRight" className="rotate-180 text-[10px]" /> Voltar para Tarefas
+      </Link>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="order-2 space-y-6 xl:order-1 xl:col-span-2">
         <div>
           {task.parent && (
             <p className="mb-1 text-xs text-zinc-500">
@@ -217,7 +221,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
         </section>
       </div>
 
-      <aside className="space-y-4">
+      <aside className="order-1 space-y-4 xl:order-2">
         {task.client && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Cliente vinculado</h3>
@@ -235,16 +239,6 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase text-zinc-500">Detalhes</h3>
           <dl className="space-y-2 text-sm">
-            <div className="flex justify-between gap-2">
-              <dt className="text-zinc-500">Cliente</dt>
-              <dd>
-                {task.client ? (
-                  <Link href={`/clientes/${task.client.id}`} className="text-emerald-400 hover:underline">
-                    {task.client.name}
-                  </Link>
-                ) : <span className="text-zinc-500">sem cliente</span>}
-              </dd>
-            </div>
             <div className="flex items-center justify-between gap-2">
               <dt className="text-zinc-500">Responsável</dt>
               <dd className="min-w-0 flex-1 pl-4">
@@ -311,6 +305,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
           {canUpdate && <AttachmentForm taskId={task.id} />}
         </div>
       </aside>
+      </div>
     </div>
   );
 }

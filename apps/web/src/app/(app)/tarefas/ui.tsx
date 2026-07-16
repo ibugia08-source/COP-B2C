@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useActionState } from "react";
 import { formatDate, PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
@@ -528,6 +528,16 @@ export function ListColumnsPicker({
   const pathname = usePathname();
   const params = useSearchParams();
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
 
   function toggle(key: string) {
     const next = new URLSearchParams(params.toString());
@@ -539,7 +549,7 @@ export function ListColumnsPicker({
   }
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

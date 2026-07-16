@@ -120,6 +120,12 @@ export function StatusBadge({
   return <Badge tone={m.tone}>{m.label}</Badge>;
 }
 
+// Logo da marca (wordmark). Mascarado em CSS (.brand-logo) para herdar a cor do
+// tema — azul da marca no claro, azul mais vivo no escuro. Ver globals.css.
+export function Logo({ className = "h-5" }: { className?: string }) {
+  return <span role="img" aria-label="COP B2C" className={`brand-logo ${className}`} />;
+}
+
 // ---------------------------------------------------------------------------
 // Card / Table / PageHeader / EmptyState / UserAvatar
 // ---------------------------------------------------------------------------
@@ -154,7 +160,7 @@ export function StatCard({
   const inner = (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition group-hover:-translate-y-0.5 group-hover:border-zinc-700">
       <p className="truncate text-xs font-medium text-zinc-500">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tracking-tight ${tone}`}>{value}</p>
+      <p className={`nums mt-1 text-2xl font-semibold tracking-tight ${tone}`}>{value}</p>
       {hint && <p className="mt-0.5 text-[11px] text-zinc-500">{hint}</p>}
     </div>
   );
@@ -313,7 +319,7 @@ export function Alert({
 }) {
   const cls = {
     red: "border-red-200 bg-red-50 text-red-700",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    green: "border-green-200 bg-green-50 text-green-700",
     amber: "border-amber-200 bg-amber-50 text-amber-700",
   }[tone];
   return (

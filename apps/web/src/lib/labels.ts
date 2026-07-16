@@ -2,9 +2,11 @@
 
 export type Tone = "green" | "amber" | "red" | "blue" | "purple" | "zinc" | "cyan";
 
-// Chips de status: tinta suave da cor + texto forte + borda clara (tema claro).
+// Chips de status: tinta suave da cor + texto forte + borda clara (segue o tema).
+// green = verde SEMÂNTICO de "saúde/ok" (escala `green`, distinta do azul da marca
+// que ocupa a escala `emerald`). Ver globals.css.
 export const TONE_CLASSES: Record<Tone, string> = {
-  green: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  green: "bg-green-50 text-green-700 border-green-200",
   amber: "bg-amber-50 text-amber-700 border-amber-200",
   red: "bg-red-50 text-red-700 border-red-200",
   blue: "bg-sky-50 text-sky-700 border-sky-200",

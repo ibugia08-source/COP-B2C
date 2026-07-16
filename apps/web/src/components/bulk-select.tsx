@@ -115,7 +115,7 @@ export function CardTrash({
         <button
           type="button"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirming(false); }}
-          className="rounded-md px-1.5 py-0.5 text-[11px] text-zinc-500 hover:text-zinc-900"
+          className="rounded-md px-1.5 py-0.5 text-[11px] text-zinc-500 hover:text-zinc-100"
         >
           <Icon name="close" />
         </button>
@@ -227,7 +227,7 @@ export function BulkBar({
               >
                 {pending ? "Excluindo..." : `Excluir ${count}`}
               </button>
-              <button type="button" onClick={() => setConfirmDel(false)} className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-900">
+              <button type="button" onClick={() => setConfirmDel(false)} className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-100">
                 Cancelar
               </button>
             </span>
@@ -241,7 +241,7 @@ export function BulkBar({
             </button>
           ))}
 
-        <button type="button" onClick={clear} className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-900">
+        <button type="button" onClick={clear} className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-100">
           Limpar
         </button>
 

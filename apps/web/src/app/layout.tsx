@@ -31,9 +31,18 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100 font-sans">
+        {/* Aplica o tema salvo antes da pintura (evita flash). "auto"/ausente
+            deixa o @media prefers-color-scheme decidir. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var m=localStorage.getItem('cop_theme');if(m==='dark'||m==='light')document.documentElement.setAttribute('data-theme',m);}catch(e){}",
+          }}
+        />
         {children}
       </body>
     </html>

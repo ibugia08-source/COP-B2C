@@ -66,7 +66,7 @@ export function MobileBottomNav({
                 <p className="truncate text-sm font-semibold text-zinc-100">{userName}</p>
                 <p className="truncate text-[11px] text-zinc-500">{roles}</p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900">
+              <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100">
                 <Icon name="close" />
               </button>
             </div>
@@ -79,7 +79,7 @@ export function MobileBottomNav({
                     href={item.href}
                     onClick={() => setOpen(false)}
                     className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center text-xs transition ${
-                      active ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-zinc-800 bg-zinc-950 text-zinc-500 hover:border-zinc-700 hover:text-zinc-900"
+                      active ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-zinc-800 bg-zinc-950 text-zinc-500 hover:border-zinc-700 hover:text-zinc-100"
                     }`}
                   >
                     <Icon name={item.icon} className="text-2xl" />
@@ -167,7 +167,7 @@ export function AppNav({ groups }: { groups: NavGroup[] }) {
                       className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
                         active
                           ? "bg-emerald-50 font-semibold text-emerald-700"
-                          : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900"
+                          : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
                       }`}
                     >
                       <Icon name={item.icon} fixedWidth className="text-sm" />
@@ -299,7 +299,7 @@ export function CreateMenu({
               key={opt.href}
               href={opt.href}
               onClick={() => setOpen(false)}
-              className="block px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-900"
+              className="block px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
             >
               {opt.label}
             </Link>

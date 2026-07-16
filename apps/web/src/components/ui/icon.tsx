@@ -20,6 +20,7 @@ import {
   faCircle,
   faCircleCheck,
   faCircleExclamation,
+  faCircleHalfStroke,
   faClipboard,
   faCopy,
   faClock,
@@ -42,6 +43,7 @@ import {
   faLock,
   faLockOpen,
   faMagnifyingGlass,
+  faMoon,
   faPaperclip,
   faPenToSquare,
   faPencil,
@@ -54,6 +56,7 @@ import {
   faShieldHalved,
   faSquareCheck,
   faStar,
+  faSun,
   faThumbtack,
   faTrashCan,
   faTriangleExclamation,
@@ -140,6 +143,10 @@ const ICONS = {
   chevronDown: faChevronDown,
   chevronRight: faChevronRight,
   menu: faBars, // ☰
+  // tema
+  sun: faSun, // ☀ claro
+  moon: faMoon, // ☾ escuro
+  themeAuto: faCircleHalfStroke, // ◐ automático (segue o sistema)
 } as const satisfies Record<string, IconDefinition>;
 
 export type IconName = keyof typeof ICONS;

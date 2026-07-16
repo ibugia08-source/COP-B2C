@@ -6,7 +6,8 @@ import { logout } from "@/lib/auth/actions";
 import { requireSession, sessionPermissions } from "@/lib/auth/guard";
 import { CARGO_LABELS, type PermissionKey } from "@/lib/auth/permissions";
 import { AppNav, Breadcrumbs, GlobalSearch, MobileBottomNav, type NavGroup, type NavItem } from "@/components/shell";
-import { UserAvatar } from "@/components/ui/primitives";
+import { Logo, UserAvatar } from "@/components/ui/primitives";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Icon } from "@/components/ui/icon";
 
 type NavDef = NavItem & { permission?: PermissionKey };
@@ -69,11 +70,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-zinc-950">
       <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 lg:flex">
         <div className="flex h-14 items-center border-b border-zinc-800 px-4">
-          <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight" title="COP B2C">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white shadow-sm">B</span>
-            <span className="text-base">
-              COP <span className="text-emerald-700">B2C</span>
-            </span>
+          <Link href="/" className="flex items-center" title="COP B2C" aria-label="COP B2C — início">
+            <Logo className="h-[18px]" />
           </Link>
         </div>
         <AppNav groups={navGroups} />
@@ -99,17 +97,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/80 px-6 backdrop-blur max-md:px-4">
-          <Link href="/" className="flex shrink-0 items-center gap-2 lg:hidden" title="COP B2C" aria-label="Início">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white shadow-sm">B</span>
+          <Link href="/" className="flex shrink-0 items-center lg:hidden" title="COP B2C" aria-label="Início">
+            <Logo className="h-4" />
           </Link>
           <div className="min-w-0 flex-1">
             <Breadcrumbs />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <GlobalSearch />
+            <ThemeToggle />
             <Link
               href="/notificacoes"
-              className="relative rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-900"
+              className="relative rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"
               title="Notificações"
               aria-label={unread > 0 ? `Notificações (${unread} não lidas)` : "Notificações"}
             >

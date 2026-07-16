@@ -1,85 +1,199 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   COP B2C — Design tokens
-   Tema claro premium (minimalista, muito respiro, sombras quase imperceptíveis).
-   A identidade é aplicada remapeando a paleta do Tailwind v4 no @theme, então
-   as ~56 telas herdam o tema sem alterações individuais.
-   Para TROCAR A MARCA: ajuste o bloco "PALETA DA MARCA B2C" abaixo.
+   COP B2C — Design tokens (RBAC-era refresh)
+   "Console de Operações": base neutra fria, acento AZUL DA MARCA (#126FFA, o
+   mesmo do logo), dados em mono tabular. Suporta CLARO e ESCURO com alternância.
+
+   COMO FUNCIONA (padrão herdado do projeto): as ~56 telas usam nomes da escala
+   Tailwind (bg-zinc-900, text-emerald-600, etc.). Aqui remapeamos esses nomes
+   para os valores da marca, e sobrescrevemos os mesmos --color-* nos seletores
+   de tema — então todo o app vira claro/escuro sem tocar tela por tela.
+
+   NOMES IMPORTANTES (por causa desse remap):
+   - escala "zinc"    = neutros (fundo/superfície/bordas/tinta)
+   - escala "emerald" = AZUL DA MARCA (ação, seleção, foco, links). NÃO é verde.
+   - escala "green"   = verde SEMÂNTICO de "saúde/ok" (pills Ativo/Estável/etc.)
+   - sky/cyan/purple/amber/red/rose = tons semânticos de status
+   Para rebrandizar: troque o bloco "MARCA" (emerald + --brand*) abaixo.
    ========================================================================== */
 
 @theme {
-  /* -- PALETA DA MARCA B2C (troque aqui para rebrandizar) ------------------
-     A marca atual do produto é o verde "COP B2C". Mantido como acento,
-     usado com moderação (botões primários, links, estado ativo).            */
-  --brand: #059669; /* emerald-600 */
-  --brand-hover: #047857; /* emerald-700 */
-  --brand-strong: #065f46; /* emerald-800 */
-  --brand-tint: #ecfdf5; /* fundo suave da marca */
-  --brand-border: #a7f3d0;
+  /* ---- MARCA (azul COP) --------------------------------------------------- */
+  --brand: #126ffa;
+  --brand-hover: #0b5ad6;
+  --brand-strong: #0a49b0;
+  --brand-tint: #e9f1ff;
+  --brand-border: #c9dbff;
+  --brand-logo: #126ffa; /* cor do logo (mascarado) */
 
-  /* -- Superfícies e texto (neutros claros) --------------------------------
-     Remapeamos a escala "zinc": as telas usam zinc-900/950 como superfície e
-     zinc-100/300 como texto; aqui esses nomes passam a valer claro/tinta.    */
-  --color-zinc-50: #0b0d10; /* raro: tinta forte */
-  --color-zinc-100: #171a1f; /* texto primário (quase preto) */
-  --color-zinc-200: #242830;
-  --color-zinc-300: #3a3f49; /* labels / texto secundário forte */
-  --color-zinc-400: #565c66; /* texto secundário  (~5.9:1 no branco) */
-  --color-zinc-500: #6b7280; /* texto auxiliar    (~4.9:1) */
-  --color-zinc-600: #98a0ab; /* placeholder */
-  --color-zinc-700: #e3e6ea; /* bordas de inputs/botões */
-  --color-zinc-800: #eceef2; /* bordas de cards / divisores / hover sutil */
+  /* ---- NEUTROS (claro, base) --------------------------------------------- */
+  --color-zinc-50: #0a0c11;
+  --color-zinc-100: #14161f; /* tinta / texto primário */
+  --color-zinc-200: #23272f;
+  --color-zinc-300: #3b414f; /* rótulos / secundário forte */
+  --color-zinc-400: #545a6a; /* texto secundário (~6:1) */
+  --color-zinc-500: #61677c; /* texto auxiliar/muted (~4.9:1) */
+  --color-zinc-600: #9096a8; /* placeholder */
+  --color-zinc-700: #e4e6f0; /* bordas de inputs/botões */
+  --color-zinc-800: #ebedf5; /* bordas de cards / divisores / hover sutil */
   --color-zinc-900: #ffffff; /* superfície: cards, inputs, sidebar */
-  --color-zinc-950: #f6f7f9; /* fundo do app / topbar (vidro) */
+  --color-zinc-950: #f4f5fa; /* fundo do app / topbar */
 
-  /* -- Acentos semânticos --------------------------------------------------
-     Os tons -300/-400 eram usados como TEXTO sobre fundo escuro; no claro
-     precisam ser mais escuros. Os tons -900/-950 eram FUNDO escuro; no claro
-     viram tinta suave. Os tons sólidos (-500..-800) seguem padrão.           */
-  --color-emerald-300: #065f46;
-  --color-emerald-400: #047857;
-  --color-emerald-900: #a7f3d0;
-  --color-emerald-950: #ecfdf5;
+  /* ---- MARCA como escala "emerald" (AZUL, claro) ------------------------- */
+  --color-emerald-50: #eaf1ff;
+  --color-emerald-100: #dfe9ff;
+  --color-emerald-200: #c9dbff;
+  --color-emerald-300: #0a4bb8; /* texto de acento forte */
+  --color-emerald-400: #0b52c9; /* texto de acento / links */
+  --color-emerald-500: #2b7bf5; /* foco / checkbox / dots */
+  --color-emerald-600: #126ffa; /* SÓLIDO da marca (botões) */
+  --color-emerald-700: #0b5ad6; /* hover / texto forte */
+  --color-emerald-800: #0a49b0;
+  --color-emerald-900: #cfe0ff; /* fundo de ativo/seleção */
+  --color-emerald-950: #e9f1ff; /* fundo de marca suave */
 
-  --color-red-300: #b91c1c;
-  --color-red-400: #dc2626;
-  --color-red-900: #fecaca;
-  --color-red-950: #fef2f2;
+  /* ---- SUCESSO semântico como escala "green" (VERDE, claro) -------------- */
+  --color-green-50: #e6f6ee;
+  --color-green-100: #d3efe0;
+  --color-green-200: #b6e4cb;
+  --color-green-300: #0c8054;
+  --color-green-400: #0a7a52;
+  --color-green-500: #12a866;
+  --color-green-600: #0e9f6e;
+  --color-green-700: #0a7a52;
+  --color-green-900: #c7ecd8;
+  --color-green-950: #e6f6ee;
 
-  --color-amber-300: #b45309;
-  --color-amber-400: #d97706;
-  --color-amber-900: #fde68a;
-  --color-amber-950: #fffbeb;
+  /* ---- Tons semânticos (claro) ------------------------------------------- */
+  --color-amber-50: #fbefd9;  --color-amber-200: #f5ddb0; --color-amber-300: #8a5606;
+  --color-amber-400: #a4670a; --color-amber-500: #d18a0a; --color-amber-600: #c2790b;
+  --color-amber-700: #a4670a; --color-amber-900: #f7e2b5; --color-amber-950: #fdf6e7;
 
-  --color-sky-300: #0369a1;
-  --color-sky-400: #0284c7;
-  --color-sky-900: #bae6fd;
-  --color-sky-950: #f0f9ff;
+  --color-red-50: #fce7e9;  --color-red-200: #f5c2c8; --color-red-300: #a51f2c;
+  --color-red-400: #c22a3a; --color-red-500: #e0384a; --color-red-600: #d42f40;
+  --color-red-700: #c22a3a; --color-red-900: #f7cdd2; --color-red-950: #fdeef0;
 
-  --color-purple-300: #6d28d9;
-  --color-purple-400: #7c3aed;
-  --color-purple-900: #e9d5ff;
-  --color-purple-950: #faf5ff;
+  --color-sky-50: #e4eefb;  --color-sky-200: #c2d8f5; --color-sky-300: #1a4f9e;
+  --color-sky-400: #215fc9; --color-sky-500: #2f7fe0; --color-sky-600: #2570d6;
+  --color-sky-700: #215fc9; --color-sky-900: #cfe0f7; --color-sky-950: #eaf2fd;
 
-  --color-cyan-300: #0e7490;
-  --color-cyan-400: #0891b2;
-  --color-cyan-900: #a5f3fc;
-  --color-cyan-950: #ecfeff;
+  --color-purple-50: #f0ebfc;  --color-purple-200: #ddcbf7; --color-purple-300: #5f2ea6;
+  --color-purple-400: #7038c8; --color-purple-500: #8b52e0; --color-purple-600: #7d43d6;
+  --color-purple-700: #7038c8; --color-purple-900: #e3d3f9; --color-purple-950: #f4eefd;
 
-  --color-rose-300: #be123c;
-  --color-rose-400: #e11d48;
+  --color-cyan-50: #dff2f5;  --color-cyan-200: #b4e2e9; --color-cyan-300: #0a5f70;
+  --color-cyan-400: #0c7489; --color-cyan-500: #0e93ad; --color-cyan-600: #0d869e;
+  --color-cyan-700: #0c7489; --color-cyan-900: #c3e9ef; --color-cyan-950: #e6f6f9;
 
-  /* Sombras suaves (premium, quase imperceptíveis) */
-  --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-pop: 0 8px 24px rgba(16, 24, 40, 0.1), 0 2px 6px rgba(16, 24, 40, 0.06);
+  --color-rose-300: #a8123a; --color-rose-400: #c31743; --color-rose-500: #e11d48; --color-rose-600: #d31a42;
+
+  /* ---- Sombras / raios ---------------------------------------------------- */
+  --shadow-soft: 0 1px 2px rgba(18, 30, 60, 0.05), 0 1px 3px rgba(18, 30, 60, 0.06);
+  --shadow-card: 0 1px 2px rgba(18, 30, 60, 0.05);
+  --shadow-pop: 0 10px 30px rgba(18, 30, 60, 0.10), 0 2px 8px rgba(18, 30, 60, 0.06);
 }
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
+
+/* ==========================================================================
+   TEMA ESCURO — sobrescreve os mesmos --color-* (e sombras). Aplica quando o
+   SO prefere escuro (sem escolha manual) OU quando data-theme="dark".
+   ========================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --brand: #3d8bff; --brand-hover: #2f80ff; --brand-strong: #1a6ff0;
+    --brand-tint: #10233f; --brand-border: #1c3763; --brand-logo: #3d8bff;
+
+    --color-zinc-50: #f6f7fc;  --color-zinc-100: #e8eaf3; --color-zinc-200: #d4d7e2;
+    --color-zinc-300: #b9bdcc; --color-zinc-400: #9195a8; --color-zinc-500: #878ca0;
+    --color-zinc-600: #666b7e; --color-zinc-700: #2b2f3c; --color-zinc-800: #21242f;
+    --color-zinc-900: #14151d; --color-zinc-950: #0a0c11;
+
+    --color-emerald-50: #0e1c33;  --color-emerald-100: #12233f; --color-emerald-200: #1c3763;
+    --color-emerald-300: #a7c6ff; --color-emerald-400: #84b8ff; --color-emerald-500: #3d8bff;
+    --color-emerald-600: #1a6ff0; --color-emerald-700: #2f80ff; --color-emerald-800: #123a86;
+    --color-emerald-900: #10233f; --color-emerald-950: #0d1b30;
+
+    --color-green-50: #0f2820;  --color-green-100: #123024; --color-green-200: #1f4a38;
+    --color-green-300: #5ce0a6; --color-green-400: #48d99a; --color-green-500: #34cf8f;
+    --color-green-600: #2fc687; --color-green-700: #48d99a; --color-green-900: #10281f; --color-green-950: #0d2019;
+
+    --color-amber-50: #2a2110;  --color-amber-200: #4a3a18; --color-amber-300: #f7c06a;
+    --color-amber-400: #f4b451; --color-amber-500: #e5a53f; --color-amber-600: #d99b38;
+    --color-amber-700: #f4b451; --color-amber-900: #241c0e; --color-amber-950: #1e180c;
+
+    --color-red-50: #2c1518;  --color-red-200: #4a2226; --color-red-300: #f79098;
+    --color-red-400: #f2757c; --color-red-500: #e85f68; --color-red-600: #dd525b;
+    --color-red-700: #f2757c; --color-red-900: #251115; --color-red-950: #1e0e11;
+
+    --color-sky-50: #111f38;  --color-sky-200: #1c355c; --color-sky-300: #8fb6ff;
+    --color-sky-400: #6ea3ff; --color-sky-500: #4f8ff2; --color-sky-600: #4285ec;
+    --color-sky-700: #6ea3ff; --color-sky-900: #0f1d33; --color-sky-950: #0c1728;
+
+    --color-purple-50: #211a38;  --color-purple-200: #372a5c; --color-purple-300: #c4a5f7;
+    --color-purple-400: #b393f5; --color-purple-500: #9d78ef; --color-purple-600: #916ae8;
+    --color-purple-700: #b393f5; --color-purple-900: #1c1630; --color-purple-950: #150f26;
+
+    --color-cyan-50: #0f262a;  --color-cyan-200: #1a4048; --color-cyan-300: #54cfe4;
+    --color-cyan-400: #4cc7dd; --color-cyan-500: #38b6cd; --color-cyan-600: #33a9bf;
+    --color-cyan-700: #4cc7dd; --color-cyan-900: #0d2024; --color-cyan-950: #0a181b;
+
+    --color-rose-300: #f98aa8; --color-rose-400: #f56d90; --color-rose-500: #ee5580; --color-rose-600: #e34773;
+
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-pop: 0 14px 34px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --brand: #3d8bff; --brand-hover: #2f80ff; --brand-strong: #1a6ff0;
+  --brand-tint: #10233f; --brand-border: #1c3763; --brand-logo: #3d8bff;
+
+  --color-zinc-50: #f6f7fc;  --color-zinc-100: #e8eaf3; --color-zinc-200: #d4d7e2;
+  --color-zinc-300: #b9bdcc; --color-zinc-400: #9195a8; --color-zinc-500: #878ca0;
+  --color-zinc-600: #666b7e; --color-zinc-700: #2b2f3c; --color-zinc-800: #21242f;
+  --color-zinc-900: #14151d; --color-zinc-950: #0a0c11;
+
+  --color-emerald-50: #0e1c33;  --color-emerald-100: #12233f; --color-emerald-200: #1c3763;
+  --color-emerald-300: #a7c6ff; --color-emerald-400: #84b8ff; --color-emerald-500: #3d8bff;
+  --color-emerald-600: #1a6ff0; --color-emerald-700: #2f80ff; --color-emerald-800: #123a86;
+  --color-emerald-900: #10233f; --color-emerald-950: #0d1b30;
+
+  --color-green-50: #0f2820;  --color-green-100: #123024; --color-green-200: #1f4a38;
+  --color-green-300: #5ce0a6; --color-green-400: #48d99a; --color-green-500: #34cf8f;
+  --color-green-600: #2fc687; --color-green-700: #48d99a; --color-green-900: #10281f; --color-green-950: #0d2019;
+
+  --color-amber-50: #2a2110;  --color-amber-200: #4a3a18; --color-amber-300: #f7c06a;
+  --color-amber-400: #f4b451; --color-amber-500: #e5a53f; --color-amber-600: #d99b38;
+  --color-amber-700: #f4b451; --color-amber-900: #241c0e; --color-amber-950: #1e180c;
+
+  --color-red-50: #2c1518;  --color-red-200: #4a2226; --color-red-300: #f79098;
+  --color-red-400: #f2757c; --color-red-500: #e85f68; --color-red-600: #dd525b;
+  --color-red-700: #f2757c; --color-red-900: #251115; --color-red-950: #1e0e11;
+
+  --color-sky-50: #111f38;  --color-sky-200: #1c355c; --color-sky-300: #8fb6ff;
+  --color-sky-400: #6ea3ff; --color-sky-500: #4f8ff2; --color-sky-600: #4285ec;
+  --color-sky-700: #6ea3ff; --color-sky-900: #0f1d33; --color-sky-950: #0c1728;
+
+  --color-purple-50: #211a38;  --color-purple-200: #372a5c; --color-purple-300: #c4a5f7;
+  --color-purple-400: #b393f5; --color-purple-500: #9d78ef; --color-purple-600: #916ae8;
+  --color-purple-700: #b393f5; --color-purple-900: #1c1630; --color-purple-950: #150f26;
+
+  --color-cyan-50: #0f262a;  --color-cyan-200: #1a4048; --color-cyan-300: #54cfe4;
+  --color-cyan-400: #4cc7dd; --color-cyan-500: #38b6cd; --color-cyan-600: #33a9bf;
+  --color-cyan-700: #4cc7dd; --color-cyan-900: #0d2024; --color-cyan-950: #0a181b;
+
+  --color-rose-300: #f98aa8; --color-rose-400: #f56d90; --color-rose-500: #ee5580; --color-rose-600: #e34773;
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 14px 34px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 /* ------------------------------------------------------------------------- */
 
@@ -95,20 +209,26 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Cards e superfícies claras ganham uma sombra suave por padrão, dando
-   profundidade sem bordas pesadas. */
-.rounded-xl.border {
+/* Cards/superfícies ganham sombra suave por padrão (profundidade sem borda pesada) */
+.rounded-xl.border,
+.rounded-lg.border {
   box-shadow: var(--shadow-card);
 }
 
+/* Logo da marca (mascarado — herda a cor do tema) */
+.brand-logo {
+  display: inline-block;
+  background: var(--brand-logo);
+  -webkit-mask: url("/logo.svg") center / contain no-repeat;
+  mask: url("/logo.svg") center / contain no-repeat;
+  aspect-ratio: 1667 / 283;
+}
+
+/* Números/dados tabulares */
+.nums { font-variant-numeric: tabular-nums; }
+
 /* Transições suaves e consistentes nos elementos interativos */
-a,
-button,
-[role="button"],
-input,
-select,
-textarea,
-summary {
+a, button, [role="button"], input, select, textarea, summary {
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease,
@@ -129,52 +249,38 @@ button:active:not(:disabled),
   outline-offset: 2px;
   border-radius: 0.35rem;
 }
-/* Inputs já indicam foco pela borda — evita anel duplo */
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent);
   border-color: var(--brand) !important;
 }
 
-/* Em tema claro, ênfase de hover que era branca vira tinta escura.
-   Regra sem @layer vence a utilitária do Tailwind — corrige ~29 usos de
-   hover:text-white de uma vez, sem tocar nas telas. */
-.hover\:text-white:hover {
-  color: var(--color-zinc-100);
-}
+/* "hover:text-white" (~29 usos) = ênfase de alto contraste; mapeia p/ a tinta
+   do tema (quase-preto no claro, quase-branco no escuro). */
+.hover\:text-white:hover { color: var(--color-zinc-100); }
 
 ::selection {
-  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  background: color-mix(in srgb, var(--brand) 26%, transparent);
 }
 
-/* Scrollbar discreta */
+/* Scrollbar discreta (segue o tema) */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cfd4da transparent;
+  scrollbar-color: var(--color-zinc-700) transparent;
 }
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb {
-  background: #cfd4da;
+  background: var(--color-zinc-700);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-*::-webkit-scrollbar-thumb:hover {
-  background: #b6bcc4;
-  background-clip: padding-box;
-}
+*::-webkit-scrollbar-thumb:hover { background: var(--color-zinc-600); background-clip: padding-box; }
 
-/* Skeleton de carregamento */
-@keyframes cop-shimmer {
-  100% {
-    transform: translateX(100%);
-  }
-}
+/* Skeleton de carregamento (brilho segue o tema) */
+@keyframes cop-shimmer { 100% { transform: translateX(100%); } }
 .skeleton {
   position: relative;
   overflow: hidden;
@@ -186,37 +292,22 @@ textarea:focus-visible {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-zinc-100) 8%, transparent), transparent);
   animation: cop-shimmer 1.4s infinite;
 }
 
-/* --- Mobile: app-like, sem overflow horizontal acidental --------------- */
-/* Rolagem horizontal (tabelas/kanban) com inércia e sem barra pesada */
-.overflow-x-auto {
-  -webkit-overflow-scrolling: touch;
-}
+/* Mobile: rolagem horizontal com inércia */
+.overflow-x-auto { -webkit-overflow-scrolling: touch; }
 
-/* Alvos de toque confortáveis em telas de toque (sem inflar UI de mouse) */
 @media (pointer: coarse) {
-  nav a,
-  .tap-target {
-    min-height: 44px;
-  }
+  nav a, .tap-target { min-height: 44px; }
 }
 
-/* Áreas seguras do iPhone (notch / barra inferior) */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.h-safe-bottom {
-  height: env(safe-area-inset-bottom);
-}
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.h-safe-bottom { height: env(safe-area-inset-bottom); }
 
-/* Respeita quem prefere menos movimento */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

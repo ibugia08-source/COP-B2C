@@ -178,7 +178,31 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
         </Alert>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      {/* Núcleo acionável: as sugestões da IA vêm PRIMEIRO (topo, largura total) */}
+      <section className="mb-6">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-100">
+          <Icon name="robot" /> Sugestões para sua aprovação ({pendentes.length})
+        </h2>
+        {pendentes.length === 0 ? (
+          <EmptyState icon="robot" title="Sem sugestões pendentes" description="O Co-piloto gera sugestões conforme os dados da sua operação mudam." />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+            {pendentes.map((s) => <SuggestionCard key={s.id} suggestion={s} />)}
+          </div>
+        )}
+        {aprovadas.length > 0 && (
+          <div className="mt-4">
+            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
+              <Icon name="checkCircle" /> Aprovadas — aguardando execução ({aprovadas.length})
+            </h3>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+              {aprovadas.map((s) => <SuggestionCard key={s.id} suggestion={s} />)}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {/* Coluna 1: prioridades + clientes + alertas */}
         <div className="space-y-4">
           {/* 2. Prioridades recomendadas */}
@@ -342,35 +366,8 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
           </Card>
         </div>
 
-        {/* Coluna 3: sugestões da IA + aprovações + histórico */}
+        {/* Histórico de decisões */}
         <div className="space-y-4">
-          {/* 8. Sugestões da IA */}
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
-              <Icon name="robot" /> Sugestões para sua aprovação ({pendentes.length})
-            </h3>
-            {pendentes.length === 0 ? (
-              <EmptyState icon="robot" title="Sem sugestões pendentes" description="O Co-piloto gera sugestões conforme os dados da sua operação mudam." />
-            ) : (
-              <div className="space-y-3">
-                {pendentes.map((s) => <SuggestionCard key={s.id} suggestion={s} />)}
-              </div>
-            )}
-          </div>
-
-          {/* 9. Aprovações pendentes de execução */}
-          {aprovadas.length > 0 && (
-            <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
-                <Icon name="checkCircle" /> Aprovadas — aguardando execução ({aprovadas.length})
-              </h3>
-              <div className="space-y-3">
-                {aprovadas.map((s) => <SuggestionCard key={s.id} suggestion={s} />)}
-              </div>
-            </div>
-          )}
-
-          {/* 10. Histórico */}
           <Card className="p-4">
             <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500"><Icon name="scroll" /> Histórico de decisões</h3>
             {historico.length === 0 ? (

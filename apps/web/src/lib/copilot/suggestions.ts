@@ -7,6 +7,7 @@ import {
   type CopilotSuggestionType,
 } from "@/db/schema";
 import type { ManagerDailyContext } from "./context";
+import { formatDateOnly } from "@/lib/date";
 
 /**
  * Motor de sugestões do Co-piloto (v1: regras determinísticas, source REGRAS).
@@ -100,7 +101,7 @@ function buildRuleSuggestions(ctx: ManagerDailyContext): NewSuggestion[] {
         ? "Mover a tarefa para Em andamento e reservar um bloco de tempo hoje para concluí-la."
         : "Elevar a prioridade para URGENTE e tratar hoje.",
       priority: alreadyUrgent ? "URGENTE" : "ALTA",
-      aiReasoningSummary: `A tarefa venceu${t.dueDate ? ` em ${t.dueDate.toLocaleDateString("pt-BR")}` : ""} e tem prioridade ${t.priority.toLowerCase()} — atraso prolongado impacta o cliente.`,
+      aiReasoningSummary: `A tarefa venceu${t.dueDate ? ` em ${formatDateOnly(t.dueDate)}` : ""} e tem prioridade ${t.priority.toLowerCase()} — atraso prolongado impacta o cliente.`,
       clientId: t.clientId,
       taskId: t.id,
       dedupeKey: `PRIORIZAR_TAREFA:${t.id}`,

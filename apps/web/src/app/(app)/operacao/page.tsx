@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, count, desc, eq, gte, inArray, isNull, like, lt, not, or, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, like, lt, not, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   ADS_STATUSES,
@@ -15,6 +15,7 @@ import {
 } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { clientScopeCondition } from "@/lib/auth/ownership";
+import { dateOnlyToLocalDate } from "@/lib/date";
 import { resolveOptions } from "@/lib/config-options";
 import {
   ADS_META,
@@ -81,6 +82,62 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   if (str(sp.empresa)) filters.push(eq(clients.agencyBrand, str(sp.empresa) as never));
   if (str(sp.ads)) filters.push(eq(clients.adsStatus, str(sp.ads) as never));
 
+  // --- carteira: filtros + batch (independentes do Kanban) ------------------
+  // Definido e DISPARADO aqui para rodar concorrente com a onda do Kanban abaixo
+  // (antes rodava em série, depois do Kanban + openTasks). Consumido lá embaixo.
+  // Chaves compartilhadas (saude, empresa, nicho, ads, estrategista) filtram os dois.
+  const listFilters: SQL[] = [];
+  if (scope) listFilters.push(scope);
+  const q = str(sp.q);
+  if (q) {
+    const pattern = `%${q}%`;
+    listFilters.push(
+      or(like(clients.name, pattern), like(clients.brandName, pattern), like(clients.legalName, pattern))!,
+    );
+  }
+  const listEq = [
+    [str(sp.status), clients.status],
+    [str(sp.empresa), clients.agencyBrand],
+    [str(sp.modelo), clients.businessModel],
+    [str(sp.saude), clients.healthStatus],
+    [str(sp.ads), clients.adsStatus],
+    [str(sp.nicho), clients.niche],
+    [str(sp.estrategista), clients.strategistId],
+    [str(sp.gestor), clients.trafficManager1Id],
+    [str(sp.gestor2), clients.trafficManager2Id],
+  ] as const;
+  for (const [value, column] of listEq) {
+    if (value) listFilters.push(eq(column as unknown as typeof clients.name, value));
+  }
+  const listOrderBy = SORTS[str(sp.ordenar) ?? "recente"] ?? SORTS.recente;
+
+  // Contagens da carteira em UMA query (count(*) filter), escopo de ownership no WHERE.
+  const zeroTotals = { total: 0, ativos: 0, observacao: 0, criticos: 0, perdidos: 0, adsPausado: 0 };
+  const countIf = (c: SQL) => sql<number>`count(*) filter (where ${c})`.mapWith(Number);
+  const carteiraBatch = Promise.all([
+    showCarteira
+      ? db.query.clients.findMany({
+          where: listFilters.length ? and(...listFilters) : undefined,
+          orderBy: [listOrderBy],
+          with: { strategist: true, trafficManager1: true },
+        })
+      : Promise.resolve([]),
+    showCarteira ? resolveOptions("clients", "niche", { activeOnly: true }) : Promise.resolve([]),
+    showCarteira
+      ? db
+          .select({
+            total: count(),
+            ativos: countIf(eq(clients.status, "ATIVO")),
+            observacao: countIf(eq(clients.healthStatus, "OBSERVACAO")),
+            criticos: countIf(eq(clients.healthStatus, "CRITICO")),
+            perdidos: countIf(eq(clients.status, "PERDIDO")),
+            adsPausado: countIf(eq(clients.adsStatus, "PAUSADO")),
+          })
+          .from(clients)
+          .where(scope)
+      : Promise.resolve([zeroTotals]),
+  ]);
+
   // allUsers é usado pelos filtros das duas seções; o resto do Kanban só quando showKanban
   const [allRows, allUsers, niches, servicesRows, stageOptionsAll] = await Promise.all([
     showKanban
@@ -126,7 +183,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
           ),
         )
     : [];
-  const nextDueByClient = new Map<string, Date>();
+  const nextDueByClient = new Map<string, string>();
   for (const t of openTasks) {
     if (!t.clientId || !t.dueDate) continue;
     const current = nextDueByClient.get(t.clientId);
@@ -149,7 +206,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       pipelineStage: c.pipelineStage,
       gestor1: c.trafficManager1?.name ?? null,
       estrategista: c.strategist?.name ?? null,
-      nextDue: nextDue ? nextDue.toISOString() : null,
+      nextDue: nextDue ?? null,
       pendencias,
     };
   });
@@ -177,6 +234,10 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     : [now.getFullYear(), now.getMonth()];
   const monthStart = new Date(calYear, calMonth, 1);
   const monthEnd = new Date(calYear, calMonth + 1, 1);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  // Limites do mês como data-only ('YYYY-MM-DD') para filtrar tasks.dueDate (date).
+  const monthStartStr = `${monthStart.getFullYear()}-${pad2(monthStart.getMonth() + 1)}-01`;
+  const monthEndStr = `${monthEnd.getFullYear()}-${pad2(monthEnd.getMonth() + 1)}-01`;
 
   let calendarItems: CalendarItem[] = [];
   if (visao === "calendario" && rows.length) {
@@ -185,8 +246,8 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       db.query.tasks.findMany({
         where: and(
           inArray(tasks.clientId, clientIds),
-          gte(tasks.dueDate, monthStart),
-          lt(tasks.dueDate, monthEnd),
+          gte(tasks.dueDate, monthStartStr),
+          lt(tasks.dueDate, monthEndStr),
         ),
         with: { client: true },
       }),
@@ -201,13 +262,13 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     ]);
     calendarItems = [
       ...monthTasks
-        .filter((t): t is typeof t & { dueDate: Date } => !!t.dueDate)
+        .filter((t): t is typeof t & { dueDate: string } => !!t.dueDate)
         .map<CalendarItem>((t) => ({
           kind: "task",
           id: t.id,
           title: `${t.client?.name ?? ""} — ${t.title}`,
           href: `/tarefas/${t.id}`,
-          date: t.dueDate,
+          date: dateOnlyToLocalDate(t.dueDate),
           done: t.status === "CONCLUIDA",
         })),
       ...monthMeetings.map<CalendarItem>((m) => ({
@@ -245,57 +306,10 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
   }
 
   // --- carteira de clientes: lista + métricas (unificada nesta tela) --------
-  // Filtros próprios da lista (independentes do Kanban); chaves compartilhadas
-  // (saude, empresa, nicho, ads, estrategista, responsavel) filtram os dois.
-  const listFilters: SQL[] = [];
-  if (scope) listFilters.push(scope);
-  const q = str(sp.q);
-  if (q) {
-    const pattern = `%${q}%`;
-    listFilters.push(
-      or(like(clients.name, pattern), like(clients.brandName, pattern), like(clients.legalName, pattern))!,
-    );
-  }
-  const listEq = [
-    [str(sp.status), clients.status],
-    [str(sp.empresa), clients.agencyBrand],
-    [str(sp.modelo), clients.businessModel],
-    [str(sp.saude), clients.healthStatus],
-    [str(sp.ads), clients.adsStatus],
-    [str(sp.nicho), clients.niche],
-    [str(sp.estrategista), clients.strategistId],
-    [str(sp.gestor), clients.trafficManager1Id],
-    [str(sp.gestor2), clients.trafficManager2Id],
-  ] as const;
-  for (const [value, column] of listEq) {
-    if (value) listFilters.push(eq(column as unknown as typeof clients.name, value));
-  }
-  const listOrderBy = SORTS[str(sp.ordenar) ?? "recente"] ?? SORTS.recente;
-
-  // conta respeitando o escopo de ownership (gestor restrito só conta a própria carteira)
-  const sc = (c: SQL) => (scope ? and(scope, c) : c);
-  const zeros: { n: number }[][] = [[{ n: 0 }], [{ n: 0 }], [{ n: 0 }], [{ n: 0 }], [{ n: 0 }], [{ n: 0 }]];
-  const [listClients, clientNiches, totals] = await Promise.all([
-    showCarteira
-      ? db.query.clients.findMany({
-          where: listFilters.length ? and(...listFilters) : undefined,
-          orderBy: [listOrderBy],
-          with: { strategist: true, trafficManager1: true },
-        })
-      : Promise.resolve([]),
-    showCarteira ? resolveOptions("clients", "niche", { activeOnly: true }) : Promise.resolve([]),
-    showCarteira
-      ? Promise.all([
-          db.select({ n: count() }).from(clients).where(scope),
-          db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "ATIVO"))),
-          db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "OBSERVACAO"))),
-          db.select({ n: count() }).from(clients).where(sc(eq(clients.healthStatus, "CRITICO"))),
-          db.select({ n: count() }).from(clients).where(sc(eq(clients.status, "PERDIDO"))),
-          db.select({ n: count() }).from(clients).where(sc(eq(clients.adsStatus, "PAUSADO"))),
-        ])
-      : Promise.resolve(zeros),
-  ]);
-  const [total, ativos, observacao, criticos, perdidos, adsPausado] = totals.map((t) => t[0].n);
+  // A definição e o disparo do batch estão lá em cima (carteiraBatch), para rodar
+  // concorrente com a onda do Kanban. Aqui só consumimos o resultado.
+  const [listClients, clientNiches, totalsRows] = await carteiraBatch;
+  const { total, ativos, observacao, criticos, perdidos, adsPausado } = totalsRows[0] ?? zeroTotals;
 
   const listRows: ClientRow[] = listClients.map((c) => ({
     id: c.id,
@@ -310,7 +324,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     adsStatus: c.adsStatus,
     gestor1Id: c.trafficManager1Id,
     gestor1Name: c.trafficManager1?.name ?? null,
-    startDate: c.startDate ? c.startDate.toISOString() : null,
+    startDate: c.startDate ?? null,
   }));
   const listOptions = {
     brands: AGENCY_BRANDS.map((v) => ({ value: v, label: AGENCY_BRAND_META[v]?.label ?? v })),

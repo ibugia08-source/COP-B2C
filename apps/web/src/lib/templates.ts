@@ -11,8 +11,8 @@ import {
   type TemplateRole,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Resolve o responsável padrão de um item de template para um cliente. */
 async function resolveRole(
@@ -58,7 +58,6 @@ export async function applyTemplateToClient(
   const client = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
   if (!client) throw new Error("Cliente não encontrado");
 
-  const now = Date.now();
   let createdTasks = 0;
   let checklistItems = 0;
 
@@ -104,7 +103,7 @@ export async function applyTemplateToClient(
         clientId,
         assignedToId: item.role ? (assigneeByRole.get(item.role) ?? null) : null,
         createdById: opts.actorId ?? null,
-        dueDate: item.dueOffsetDays != null ? new Date(now + item.dueOffsetDays * DAY_MS) : null,
+        dueDate: item.dueOffsetDays != null ? addDaysDateOnly(todayDateOnly(), item.dueOffsetDays) : null,
       })),
     );
     createdTasks = template.items.length;

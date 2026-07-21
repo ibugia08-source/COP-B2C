@@ -16,6 +16,7 @@ import {
   type PipelineStage,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
 import { checkPermission } from "@/lib/auth/guard";
 import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
@@ -88,7 +89,7 @@ export async function createClient(_prev: ActionState, formData: FormData): Prom
       // status é sempre derivado (nunca vem do formulário).
       status: deriveClientStatus({ pipelineStage: effectiveStage, healthStatus: d.healthStatus, isPaused: false }),
       boardOrder: nextBoardOrder,
-      startDate: d.startDate ? new Date(d.startDate) : null,
+      startDate: d.startDate || null,
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,
       trafficManager2Id: d.trafficManager2Id || null,
@@ -139,7 +140,7 @@ export async function updateClient(
         healthStatus: d.healthStatus,
         isPaused: existing.isPaused,
       }),
-      startDate: d.startDate ? new Date(d.startDate) : null,
+      startDate: d.startDate || null,
       strategistId: d.strategistId || null,
       trafficManager1Id: d.trafficManager1Id || null,
       trafficManager2Id: d.trafficManager2Id || null,
@@ -349,7 +350,7 @@ export async function markClientLost(
       status: "PERDIDO",
       pipelineStage: "CLIENTE_PERDIDO",
       churnReason: churnReason.trim(),
-      churnDate: new Date(churnDate),
+      churnDate: churnDate || null,
     })
     .where(eq(clients.id, clientId));
 
@@ -440,7 +441,7 @@ export async function createMeetingFollowup(meetingId: string): Promise<ActionSt
     clientId: meeting.clientId,
     assignedToId: meeting.responsibleId ?? auth.session.userId,
     createdById: auth.session.userId,
-    dueDate: new Date(Date.now() + 3 * 86400_000),
+    dueDate: addDaysDateOnly(todayDateOnly(), 3),
   });
   await logActivity({
     userId: auth.session.userId,

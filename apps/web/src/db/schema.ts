@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -475,8 +476,9 @@ export const clients = pgTable(
     strategistId: text("strategist_id").references(() => users.id),
     trafficManager1Id: text("traffic_manager_1_id").references(() => users.id),
     trafficManager2Id: text("traffic_manager_2_id").references(() => users.id),
-    startDate: timestamp("start_date", { mode: "date" }),
-    churnDate: timestamp("churn_date", { mode: "date" }),
+    // Datas-only (sem hora) — 'YYYY-MM-DD' como string, sem conversão de fuso.
+    startDate: date("start_date", { mode: "string" }),
+    churnDate: date("churn_date", { mode: "string" }),
     churnReason: text("churn_reason"),
     notes: text("notes"),
     // Pausa comercial: cliente em espera SEM perder a posição na esteira.
@@ -597,8 +599,8 @@ export const tasks = pgTable(
     assignedToId: text("assigned_to_id").references(() => users.id),
     createdById: text("created_by_id").references(() => users.id),
     cancelReason: text("cancel_reason"),
-    dueDate: timestamp("due_date", { mode: "date" }),
-    startDate: timestamp("start_date", { mode: "date" }),
+    dueDate: date("due_date", { mode: "string" }),
+    startDate: date("start_date", { mode: "string" }),
     completedAt: timestamp("completed_at", { mode: "date" }),
     estimatedMinutes: integer("estimated_minutes"),
     trackedMinutes: integer("tracked_minutes").notNull().default(0),
@@ -781,7 +783,7 @@ export const digitalAssets = pgTable(
     notes: text("notes"),
     tags: jsonb("tags").$type<string[]>().notNull().default([]),
     lastCheckedAt: timestamp("last_checked_at", { mode: "date" }),
-    nextReviewAt: timestamp("next_review_at", { mode: "date" }),
+    nextReviewAt: date("next_review_at", { mode: "string" }),
     createdById: text("created_by_id").references(() => users.id),
     updatedById: text("updated_by_id").references(() => users.id),
     createdAt: createdAt(),
@@ -913,8 +915,8 @@ export const goals = pgTable("goals", {
   currentValue: real("current_value").notNull().default(0),
   unit: text("unit"), // ex.: "R$", "clientes", "%"
   autoProgress: boolean("auto_progress").notNull().default(false),
-  periodStart: timestamp("period_start", { mode: "date" }),
-  periodEnd: timestamp("period_end", { mode: "date" }),
+  periodStart: date("period_start", { mode: "string" }),
+  periodEnd: date("period_end", { mode: "string" }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

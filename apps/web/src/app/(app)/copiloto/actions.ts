@@ -14,6 +14,7 @@ import {
   type CopilotSuggestion,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
 import { checkPermission, isAdmin } from "@/lib/auth/guard";
 import type { SessionPayload } from "@/lib/auth/session";
 import { executeCopilotAction } from "@/lib/copilot/executor";
@@ -139,7 +140,7 @@ export async function suggestionToTask(suggestionId: string): Promise<ActionStat
       digitalAssetId: s.digitalAssetId,
       assignedToId: s.userId,
       createdById: auth.session.userId,
-      dueDate: new Date(Date.now() + 2 * 86_400_000),
+      dueDate: addDaysDateOnly(todayDateOnly(), 2),
     })
     .returning();
 

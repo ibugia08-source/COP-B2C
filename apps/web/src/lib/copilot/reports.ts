@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, not } from "drizzle-orm";
 import { db } from "@/db";
 import { clientMeetings, clients, digitalAssets, tasks } from "@/db/schema";
 import { formatDate, HEALTH_META, CLIENT_STATUS_META, PIPELINE_STAGE_META } from "@/lib/labels";
+import { formatDateOnly, todayDateOnly } from "@/lib/date";
 
 /**
  * Gera relatórios operacionais do Co-piloto em markdown a partir de dados
@@ -49,7 +50,8 @@ export async function buildClientReport(
   ]);
 
   const now = new Date();
-  const overdue = openTasks.filter((t) => t.dueDate && t.dueDate < now);
+  const todayStr = todayDateOnly();
+  const overdue = openTasks.filter((t) => t.dueDate && t.dueDate < todayStr);
   const health = HEALTH_META[client.healthStatus]?.label ?? client.healthStatus;
   const status = CLIENT_STATUS_META[client.status]?.label ?? client.status;
   const stage = PIPELINE_STAGE_META[client.pipelineStage]?.label ?? client.pipelineStage;
@@ -72,8 +74,8 @@ export async function buildClientReport(
   lines.push(`## Tarefas em aberto (${openTasks.length}${overdue.length ? ` — ${overdue.length} atrasada(s)` : ""})`);
   if (openTasks.length === 0) lines.push("- Nenhuma tarefa em aberto.");
   for (const t of openTasks.slice(0, 10)) {
-    const late = t.dueDate && t.dueDate < now ? " ⚠️ ATRASADA" : "";
-    lines.push(`- [${t.priority}] ${t.title} (${t.status}${t.dueDate ? `, prazo ${formatDate(t.dueDate)}` : ""})${late}`);
+    const late = t.dueDate && t.dueDate < todayStr ? " ⚠️ ATRASADA" : "";
+    lines.push(`- [${t.priority}] ${t.title} (${t.status}${t.dueDate ? `, prazo ${formatDateOnly(t.dueDate)}` : ""})${late}`);
   }
   lines.push("");
 

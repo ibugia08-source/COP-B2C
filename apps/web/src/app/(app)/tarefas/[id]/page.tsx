@@ -16,6 +16,7 @@ import {
   TASK_TYPE_META,
   type Tone,
 } from "@/lib/labels";
+import { formatDateOnly, isDateOnlyOverdue } from "@/lib/date";
 import {
   Badge,
   EmptyState,
@@ -91,7 +92,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
     .map((o) => ({ value: o.value, label: o.label }));
 
   const overdue =
-    !!task.dueDate && !task.completedAt && task.dueDate < new Date() &&
+    !!task.dueDate && !task.completedAt && isDateOnlyOverdue(task.dueDate) &&
     !["CONCLUIDA", "CANCELADA"].includes(task.status);
 
   return (
@@ -190,7 +191,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
                   <span className="flex items-center gap-2 text-xs text-zinc-500">
                     <StatusBadge value={s.status} meta={statusMeta} />
                     {s.assignedTo && <UserAvatar name={s.assignedTo.name} size="sm" />}
-                    {s.dueDate && formatDate(s.dueDate)}
+                    {s.dueDate && formatDateOnly(s.dueDate)}
                   </span>
                 </li>
               ))}
@@ -270,10 +271,10 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
               </div>
             )}
             <div className="flex justify-between"><dt className="text-zinc-500">Criada por</dt><dd>{task.createdBy?.name ?? "—"}</dd></div>
-            <div className="flex justify-between"><dt className="text-zinc-500">Início</dt><dd>{formatDate(task.startDate)}</dd></div>
+            <div className="flex justify-between"><dt className="text-zinc-500">Início</dt><dd>{formatDateOnly(task.startDate)}</dd></div>
             <div className="flex justify-between">
               <dt className="text-zinc-500">Vencimento</dt>
-              <dd className={overdue ? "text-red-400" : ""}>{formatDate(task.dueDate)}</dd>
+              <dd className={overdue ? "text-red-400" : ""}>{formatDateOnly(task.dueDate)}</dd>
             </div>
             <div className="flex justify-between"><dt className="text-zinc-500">Concluída em</dt><dd>{formatDate(task.completedAt)}</dd></div>
             <div className="flex justify-between"><dt className="text-zinc-500">Estimado</dt><dd>{task.estimatedMinutes ? `${task.estimatedMinutes} min` : "—"}</dd></div>

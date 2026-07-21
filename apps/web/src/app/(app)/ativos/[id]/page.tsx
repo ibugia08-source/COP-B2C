@@ -16,6 +16,7 @@ import {
   TASK_STATUS_META,
   type Tone,
 } from "@/lib/labels";
+import { formatDateOnly, isDateOnlyOverdue } from "@/lib/date";
 import { Icon } from "@/components/ui/icon";
 import { UrlTabs } from "@/components/ui/overlay";
 import {
@@ -120,8 +121,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
     createTask: hasPermission(session, "tasks.create"),
   };
 
-  const now = new Date();
-  const reviewPending = asset.nextReviewAt && asset.nextReviewAt < now;
+  const reviewPending = isDateOnlyOverdue(asset.nextReviewAt);
 
   const [groups, allClients, allUsers, statusOptionsAll] = await Promise.all([
     db.query.digitalAssetGroups.findMany({ where: eq(digitalAssetGroups.status, "ATIVO"), orderBy: [asc(digitalAssetGroups.name)] }),
@@ -157,7 +157,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         <Row label="Dono">{asset.ownerUser?.name ?? "—"}</Row>
         <Row label="Última checagem">{formatDate(asset.lastCheckedAt)}</Row>
         <Row label="Próxima revisão">
-          <span className={reviewPending ? "text-amber-400" : ""}>{formatDate(asset.nextReviewAt)}</span>
+          <span className={reviewPending ? "text-amber-400" : ""}>{formatDateOnly(asset.nextReviewAt)}</span>
         </Row>
       </div>
       <div className="space-y-4">

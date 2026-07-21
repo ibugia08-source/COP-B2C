@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ADS_META, AGENCY_BRAND_META, formatDate, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
+import { ADS_META, AGENCY_BRAND_META, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
+import { formatDateOnly, isDateOnlyOverdue, todayDateOnly } from "@/lib/date";
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { Icon } from "@/components/ui/icon";
@@ -23,7 +24,7 @@ export type KanbanClient = {
   pipelineStage: string;
   gestor1: string | null;
   estrategista: string | null;
-  nextDue: string | null; // ISO
+  nextDue: string | null; // data-only 'YYYY-MM-DD'
   pendencias: string[];
 };
 
@@ -68,7 +69,7 @@ export function OperationKanban({
       const result = await moveClientStage(client.id, toStage, extras);
       if (result.requires === "PERDIDO") {
         setChurnReason("");
-        setChurnDate(new Date().toISOString().slice(0, 10));
+        setChurnDate(todayDateOnly());
         setPendingMove({ client, toStage, kind: "PERDIDO" });
       } else if (result.error) {
         setToast(null);
@@ -215,8 +216,8 @@ export function OperationKanban({
                     </div>
                     <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
                       <span title="Estrategista"><Icon name="brain" /> {c.estrategista?.split(" ")[0] ?? "—"}</span>
-                      <span title="Próximo prazo" className={c.nextDue && new Date(c.nextDue) < new Date() ? "text-red-400" : ""}>
-                        <Icon name="clock" /> {c.nextDue ? formatDate(new Date(c.nextDue)) : "—"}
+                      <span title="Próximo prazo" className={isDateOnlyOverdue(c.nextDue) ? "text-red-400" : ""}>
+                        <Icon name="clock" /> {formatDateOnly(c.nextDue)}
                       </span>
                     </div>
                     {c.pendencias.length > 0 && (

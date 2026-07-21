@@ -239,7 +239,7 @@ export function AssetFormButton({
               <Input
                 name="nextReviewAt"
                 type="date"
-                defaultValue={asset?.nextReviewAt ? asset.nextReviewAt.toISOString().slice(0, 10) : ""}
+                defaultValue={asset?.nextReviewAt ?? ""}
               />
             </Field>
             <Field label="Tags (vírgula)">

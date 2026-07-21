@@ -5,7 +5,8 @@ import { clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { taskScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
-import { formatDate, PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META, type Tone } from "@/lib/labels";
+import { PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META, type Tone } from "@/lib/labels";
+import { addDaysDateOnly, formatDateOnly, todayDateOnly } from "@/lib/date";
 import {
   Badge,
   Button,
@@ -38,7 +39,6 @@ import { bulkAssignTasks, bulkDeleteTasks, bulkMoveTasks, bulkPrioritizeTasks, d
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
 
-const DAY = 24 * 60 * 60 * 1000;
 const FILTER_KEYS = ["cliente", "responsavel", "tipo", "status", "prioridade", "prazo", "tag", "criador"] as const;
 const LIST_COLUMNS = [
   { key: "tipo", label: "Tipo" },
@@ -80,18 +80,15 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   if (str(sp.criador)) filters.push(eq(tasks.createdById, str(sp.criador)!));
 
   const now = new Date();
+  const todayStr = todayDateOnly(); // dueDate é data-only 'YYYY-MM-DD'
   const prazo = str(sp.prazo);
   if (prazo === "atrasadas") {
-    filters.push(lt(tasks.dueDate, now), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])));
+    filters.push(lt(tasks.dueDate, todayStr), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])));
   } else if (prazo === "hoje") {
-    const start = new Date(now); start.setHours(0, 0, 0, 0);
-    const end = new Date(now); end.setHours(23, 59, 59, 999);
-    filters.push(not(isNull(tasks.dueDate)));
-    filters.push(lt(tasks.dueDate, end));
-    filters.push(not(lt(tasks.dueDate, start)));
+    filters.push(eq(tasks.dueDate, todayStr));
   } else if (prazo === "semana") {
     filters.push(not(isNull(tasks.dueDate)));
-    filters.push(lt(tasks.dueDate, new Date(now.getTime() + 7 * DAY)));
+    filters.push(lt(tasks.dueDate, addDaysDateOnly(todayStr, 7)));
   } else if (prazo === "sem") {
     filters.push(isNull(tasks.dueDate));
   }
@@ -119,7 +116,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     resolveOptions("tasks", "type", { activeOnly: true }),
     Promise.all([
       db.$count(tasks, and(eq(tasks.assignedToId, session.userId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])))),
-      db.$count(tasks, and(lt(tasks.dueDate, now), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])))),
+      db.$count(tasks, and(lt(tasks.dueDate, todayStr), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])))),
       db.$count(tasks, and(isNull(tasks.assignedToId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])), isNull(tasks.parentTaskId))),
     ]),
     visao === "calendario"
@@ -160,8 +157,8 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     type: t.type,
     clientName: t.client?.name ?? null,
     assignee: t.assignedTo?.name ?? null,
-    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-    overdue: !!t.dueDate && !t.completedAt && t.dueDate < now && t.status !== "CONCLUIDA" && t.status !== "CANCELADA",
+    dueDate: t.dueDate ?? null,
+    overdue: !!t.dueDate && !t.completedAt && t.dueDate < todayStr && t.status !== "CONCLUIDA" && t.status !== "CANCELADA",
   }));
 
   // --- helpers de URL (preservam filtros ao trocar visão/ordem) ------------
@@ -188,7 +185,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   else if (ordem === "titulo") sorted.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
   else if (ordem === "status") sorted.sort((a, b) => (statusRank.get(a.status) ?? 99) - (statusRank.get(b.status) ?? 99));
   else if (ordem === "criacao") sorted.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  else sorted.sort((a, b) => (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity));
+  else sorted.sort((a, b) => (a.dueDate ?? "9999-99-99").localeCompare(b.dueDate ?? "9999-99-99"));
   if (dir === "desc") sorted.reverse();
 
   const visibleCols = (str(sp.cols) ?? DEFAULT_COLS).split(",").filter(Boolean);
@@ -360,7 +357,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
             }
           >
             {sorted.map((t) => {
-              const overdue = !!t.dueDate && !t.completedAt && t.dueDate < now && !["CONCLUIDA", "CANCELADA"].includes(t.status);
+              const overdue = !!t.dueDate && !t.completedAt && t.dueDate < todayStr && !["CONCLUIDA", "CANCELADA"].includes(t.status);
               return (
                 <tr key={t.id} className="hover:bg-zinc-900/60">
                   <Td><SelectCircle id={t.id} /></Td>
@@ -403,7 +400,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                     </Td>
                   )}
                   {col("vencimento") && (
-                    <Td className={overdue ? "text-red-400" : "text-zinc-400"}>{formatDate(t.dueDate)}</Td>
+                    <Td className={overdue ? "text-red-400" : "text-zinc-400"}>{formatDateOnly(t.dueDate)}</Td>
                   )}
                   {col("tags") && (
                     <Td>

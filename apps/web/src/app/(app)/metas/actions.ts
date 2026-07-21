@@ -68,8 +68,8 @@ export async function saveGoal(
     unit: d.unit ?? null,
     ownerId: d.ownerId || null,
     autoProgress: d.autoProgress,
-    periodStart: d.periodStart ? new Date(d.periodStart) : null,
-    periodEnd: d.periodEnd ? new Date(d.periodEnd) : null,
+    periodStart: d.periodStart || null,
+    periodEnd: d.periodEnd || null,
   };
 
   if (goalId) {

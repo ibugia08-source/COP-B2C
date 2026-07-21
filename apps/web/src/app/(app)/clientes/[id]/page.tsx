@@ -21,6 +21,7 @@ import {
   TASK_STATUS_META,
   TASK_TYPE_META,
 } from "@/lib/labels";
+import { formatDateOnly, todayDateOnly } from "@/lib/date";
 import { getActiveServices } from "@/lib/settings";
 import { isGoogleMeetEnabled } from "@/lib/google-meet";
 import { resolveMeta } from "@/lib/config-options";
@@ -140,10 +141,10 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
             </a>
           ) : "—"}
         </InfoRow>
-        <InfoRow label="Entrada">{formatDate(client.startDate)}</InfoRow>
+        <InfoRow label="Entrada">{formatDateOnly(client.startDate)}</InfoRow>
         {client.status === "PERDIDO" && (
           <>
-            <InfoRow label="Perda">{formatDate(client.churnDate)}</InfoRow>
+            <InfoRow label="Perda">{formatDateOnly(client.churnDate)}</InfoRow>
             <InfoRow label="Motivo do churn">{client.churnReason ?? "—"}</InfoRow>
           </>
         )}
@@ -191,9 +192,9 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
   );
 
   // Resumo de tarefas: atrasadas + contagem por status
-  const nowTasks = new Date();
+  const todayStr = todayDateOnly(); // dueDate/nextReviewAt são data-only
   const overdueTasks = client.tasks.filter(
-    (t) => t.dueDate && !t.completedAt && t.dueDate < nowTasks && !["CONCLUIDA", "CANCELADA"].includes(t.status),
+    (t) => t.dueDate && !t.completedAt && t.dueDate < todayStr && !["CONCLUIDA", "CANCELADA"].includes(t.status),
   );
   const tasksByStatus = new Map<string, number>();
   for (const t of client.tasks) tasksByStatus.set(t.status, (tasksByStatus.get(t.status) ?? 0) + 1);
@@ -231,7 +232,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
           }
         >
           {client.tasks.map((t) => {
-            const overdue = !!t.dueDate && !t.completedAt && t.dueDate < nowTasks && !["CONCLUIDA", "CANCELADA"].includes(t.status);
+            const overdue = !!t.dueDate && !t.completedAt && t.dueDate < todayStr && !["CONCLUIDA", "CANCELADA"].includes(t.status);
             return (
               <tr key={t.id} className="hover:bg-zinc-900/60">
                 <Td>
@@ -244,7 +245,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
                 <Td><StatusBadge value={t.status} meta={taskStatusMeta} /></Td>
                 <Td>{t.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={t.assignedTo.name} size="sm" />{t.assignedTo.name.split(" ")[0]}</span> : <span className="text-amber-500">—</span>}</Td>
                 <Td className={overdue ? "text-red-400" : "text-zinc-400"}>
-                  {formatDate(t.dueDate)}
+                  {formatDateOnly(t.dueDate)}
                 </Td>
               </tr>
             );
@@ -255,8 +256,6 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
       )}
     </div>
   );
-
-  const now = new Date();
   const ativosDigitais = !canAssets ? (
     <EmptyState icon="lock" title="Acesso restrito" description="Você não tem permissão para ver os ativos digitais deste cliente." />
   ) : client.digitalAssets.length ? (
@@ -291,8 +290,8 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
             <Td className="text-zinc-400">{ASSET_PLATFORM_LABEL[a.platform]}</Td>
             <Td><StatusBadge value={a.status} meta={assetStatusMeta} /></Td>
             <Td>{a.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={a.assignedTo.name} size="sm" />{a.assignedTo.name.split(" ")[0]}</span> : "—"}</Td>
-            <Td className={a.nextReviewAt && a.nextReviewAt < now ? "text-purple-400" : "text-zinc-400"}>
-              {formatDate(a.nextReviewAt)}
+            <Td className={a.nextReviewAt && a.nextReviewAt < todayStr ? "text-purple-400" : "text-zinc-400"}>
+              {formatDateOnly(a.nextReviewAt)}
             </Td>
           </tr>
         ))}

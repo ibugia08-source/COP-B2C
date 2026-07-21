@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
 import {
   clients,
   conversationSummaries,
@@ -156,7 +157,7 @@ export async function executeCopilotAction(
             digitalAssetId: d.digitalAssetId || null,
             assignedToId: suggestion.userId,
             createdById: session.userId,
-            dueDate: new Date(Date.now() + d.dueDays * 86_400_000),
+            dueDate: addDaysDateOnly(todayDateOnly(), d.dueDays),
           })
           .returning();
         await logActivity({

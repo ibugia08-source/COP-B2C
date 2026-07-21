@@ -10,6 +10,7 @@ import {
   tasks,
   users,
 } from "@/db/schema";
+import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
 
 /**
  * Contexto operacional diário do gestor — montado APENAS com dados internos da
@@ -34,14 +35,14 @@ export type ContextTask = {
   title: string;
   status: string;
   priority: string;
-  dueDate: Date | null;
+  dueDate: string | null;
   clientId: string | null;
   clientName: string | null;
   createdByName: string | null;
 };
 export type ContextAsset = { id: string; title: string; clientId: string | null; clientName: string | null };
 export type ContextMeeting = { id: string; title: string; meetingDate: Date; clientId: string; clientName: string };
-export type ContextGoalAlert = { id: string; title: string; periodEnd: Date; overdue: boolean };
+export type ContextGoalAlert = { id: string; title: string; periodEnd: string; overdue: boolean };
 export type ContextActivity = { id: string; action: string; entityId: string | null; userName: string | null; createdAt: Date };
 
 export type ContextDocument = { id: string; title: string; clientId: string | null; clientName: string | null };
@@ -67,10 +68,8 @@ export type ManagerDailyContext = {
 
 export async function buildManagerDailyContext(userId: string): Promise<ManagerDailyContext> {
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
+  // Datas-only (dueDate/periodEnd) comparadas como string 'YYYY-MM-DD'.
+  const todayStr = todayDateOnly();
 
   // Carteira: clientes em que o usuário é gestor, estrategista ou responsável
   const clientRows = await db.query.clients.findMany({
@@ -119,9 +118,9 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
     createdByName: t.createdBy?.name ?? null,
   });
 
-  const overdueTasks = myOpenTasks.filter((t) => t.dueDate && t.dueDate < now).map(toTask);
+  const overdueTasks = myOpenTasks.filter((t) => t.dueDate && t.dueDate < todayStr).map(toTask);
   const todayTasks = myOpenTasks
-    .filter((t) => t.dueDate && t.dueDate >= todayStart && t.dueDate <= todayEnd)
+    .filter((t) => t.dueDate === todayStr)
     .map(toTask);
   const pendingRequests = myOpenTasks
     .filter((t) => t.createdById && t.createdById !== userId && (t.status === "A_FAZER" || t.status === "BACKLOG"))
@@ -182,8 +181,8 @@ export async function buildManagerDailyContext(userId: string): Promise<ManagerD
     columns: { id: true, title: true, periodEnd: true },
   });
   const goalsAlerts: ContextGoalAlert[] = goalRows
-    .filter((g) => g.periodEnd && g.periodEnd < new Date(now.getTime() + 3 * DAY))
-    .map((g) => ({ id: g.id, title: g.title, periodEnd: g.periodEnd!, overdue: g.periodEnd! < now }));
+    .filter((g) => g.periodEnd && g.periodEnd <= addDaysDateOnly(todayStr, 3))
+    .map((g) => ({ id: g.id, title: g.title, periodEnd: g.periodEnd!, overdue: g.periodEnd! < todayStr }));
 
   // Documentos vinculados aos clientes da carteira (mais recentes)
   const recentDocuments: ContextDocument[] = clientIds.length

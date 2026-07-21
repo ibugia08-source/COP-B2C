@@ -70,7 +70,7 @@ export async function moveClientStage(
   };
   if (toStage === "CLIENTE_PERDIDO") {
     updates.churnReason = extras!.churnReason!.trim();
-    updates.churnDate = new Date(extras!.churnDate!);
+    updates.churnDate = extras!.churnDate!;
   }
 
   await db.update(clients).set(updates).where(eq(clients.id, clientId));

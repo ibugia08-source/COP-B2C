@@ -22,6 +22,7 @@ import {
   type AssetStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
 import { writeAssetAudit, writeAssetAuditBatchStrict, writeAssetAuditStrict } from "@/lib/assets/audit";
 import { checkPermission } from "@/lib/auth/guard";
 import { can } from "@/lib/auth/access";
@@ -191,7 +192,7 @@ function assetValues(d: z.infer<typeof assetSchema>, userId: string) {
     recoveryEmail: d.recoveryEmail || null,
     notes: d.notes ?? null,
     tags: d.tags ? d.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-    nextReviewAt: d.nextReviewAt ? new Date(d.nextReviewAt) : null,
+    nextReviewAt: d.nextReviewAt || null,
     updatedById: userId,
   };
 }
@@ -527,7 +528,7 @@ export async function changeAssetStatus(
   };
   if (newStatus === "SENDO_ESQUENTADA") {
     const days = extras?.nextReviewDays && extras.nextReviewDays > 0 ? extras.nextReviewDays : 7;
-    set.nextReviewAt = new Date(Date.now() + days * 86400_000);
+    set.nextReviewAt = addDaysDateOnly(todayDateOnly(), days);
   }
 
   await db.update(digitalAssets).set(set).where(eq(digitalAssets.id, assetId));
@@ -678,7 +679,7 @@ export async function markAssetChecked(assetId: string, nextReviewDays: number):
     .update(digitalAssets)
     .set({
       lastCheckedAt: new Date(),
-      nextReviewAt: new Date(Date.now() + days * 86400_000),
+      nextReviewAt: addDaysDateOnly(todayDateOnly(), days),
       updatedById: auth.session.userId,
     })
     .where(eq(digitalAssets.id, assetId));
@@ -1109,7 +1110,7 @@ export async function bulkMoveAssets(ids: string[], status: string): Promise<Bul
     status: status as AssetStatus,
     updatedById: auth.session.userId,
   };
-  if (status === "SENDO_ESQUENTADA") set.nextReviewAt = new Date(Date.now() + 7 * 86400_000);
+  if (status === "SENDO_ESQUENTADA") set.nextReviewAt = addDaysDateOnly(todayDateOnly(), 7);
 
   // old→new coletados em memória; histórico/comentários/auditoria em INSERTs multi
   await db.transaction(async (tx) => {

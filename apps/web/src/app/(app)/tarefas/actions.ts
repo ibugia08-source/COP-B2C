@@ -169,8 +169,8 @@ export async function createTask(_prev: ActionState, formData: FormData): Promis
       digitalAssetId: d.digitalAssetId || null,
       assignedToId: d.assignedToId || null,
       createdById: auth.session.userId,
-      startDate: d.startDate ? new Date(d.startDate) : null,
-      dueDate: d.dueDate ? new Date(d.dueDate) : null,
+      startDate: d.startDate || null,
+      dueDate: d.dueDate || null,
       estimatedMinutes: d.estimatedMinutes ?? null,
       tags: d.tags ? d.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     })
@@ -245,8 +245,8 @@ export async function updateTask(
       creative: buildCreativeBrief(d, existing.creative),
       clientId: d.clientId || null,
       assignedToId: d.assignedToId || null,
-      startDate: d.startDate ? new Date(d.startDate) : null,
-      dueDate: d.dueDate ? new Date(d.dueDate) : null,
+      startDate: d.startDate || null,
+      dueDate: d.dueDate || null,
       estimatedMinutes: d.estimatedMinutes ?? null,
       tags: d.tags ? d.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     })

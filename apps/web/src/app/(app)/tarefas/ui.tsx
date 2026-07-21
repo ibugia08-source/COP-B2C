@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useActionState } from "react";
-import { formatDate, PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/labels";
+import { PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/labels";
+import { formatDateOnly } from "@/lib/date";
 import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
@@ -464,7 +465,7 @@ export function TasksKanban({
                         {t.assignee ? <UserAvatar name={t.assignee} size="sm" /> : <span className="text-amber-500">sem resp.</span>}
                       </span>
                       <span className={t.overdue ? "text-red-400" : ""}>
-                        {t.dueDate ? formatDate(new Date(t.dueDate)) : ""}
+                        {t.dueDate ? formatDateOnly(t.dueDate) : ""}
                       </span>
                     </div>
                   </div>

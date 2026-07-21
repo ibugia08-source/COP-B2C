@@ -10,9 +10,9 @@ import {
   ASSET_PRIORITY_META,
   ASSET_STATUS_META,
   ASSET_TYPE_LABEL,
-  formatDate,
   type Tone,
 } from "@/lib/labels";
+import { dateOnlyToLocalDate, formatDateOnly, isDateOnlyOverdue, todayDateOnly } from "@/lib/date";
 import {
   Badge,
   EmptyState,
@@ -51,6 +51,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
   const session = await requirePermission("digital_assets.view");
   const sp = await searchParams;
   const now = new Date();
+  const todayStr = todayDateOnly(); // nextReviewAt é data-only
 
   const canCreate = hasPermission(session, "digital_assets.create");
   const canUpdate = hasPermission(session, "digital_assets.update");
@@ -78,7 +79,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
   else if (resp) filters.push(eq(digitalAssets.assignedToId, resp));
   // containment jsonb (usa o índice GIN) — LIKE não existe para jsonb
   if (str(sp.tag)) filters.push(sql`${digitalAssets.tags} @> ${JSON.stringify([str(sp.tag)])}::jsonb`);
-  if (str(sp.revisao) === "pendente") filters.push(lt(digitalAssets.nextReviewAt, now));
+  if (str(sp.revisao) === "pendente") filters.push(lt(digitalAssets.nextReviewAt, todayStr));
 
   const [assets, groups, allClients, allUsers, statusOptionsAll] = await Promise.all([
     db.query.digitalAssets.findMany({
@@ -127,8 +128,8 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
     assignedName: a.assignedTo?.name ?? null,
     secretCount: a.secrets.length,
     attachmentCount: a.attachments.length,
-    reviewPending: !!a.nextReviewAt && a.nextReviewAt < now,
-    nextReview: a.nextReviewAt ? a.nextReviewAt.toISOString() : null,
+    reviewPending: isDateOnlyOverdue(a.nextReviewAt),
+    nextReview: a.nextReviewAt ?? null,
   }));
 
   // --- visões e URLs --------------------------------------------------------
@@ -152,17 +153,17 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
   const [calYear, calMonth] = /^\d{4}-\d{2}$/.test(mesParam ?? "")
     ? [Number(mesParam!.slice(0, 4)), Number(mesParam!.slice(5, 7)) - 1]
     : [now.getFullYear(), now.getMonth()];
-  const overdueReviews = assets.filter((a) => a.nextReviewAt && a.nextReviewAt < now);
+  const overdueReviews = assets.filter((a) => a.nextReviewAt && a.nextReviewAt < todayStr);
   const blocked = assets.filter((a) => a.status === "BLOQUEADA");
   const needDocs = assets.filter((a) => a.status === "PRECISA_DE_DOCUMENTOS");
   const calendarItems: CalendarItem[] = assets
-    .filter((a): a is AssetRow & { nextReviewAt: Date } => !!a.nextReviewAt)
+    .filter((a): a is AssetRow & { nextReviewAt: string } => !!a.nextReviewAt)
     .map((a) => ({
       kind: "task",
       id: a.id,
       title: `${a.client?.name ? `${a.client.name} — ` : ""}${a.title}`,
       href: `/ativos/${a.id}`,
-      date: a.nextReviewAt,
+      date: dateOnlyToLocalDate(a.nextReviewAt),
       done: a.status === "ARQUIVADA",
     }));
 
@@ -309,8 +310,8 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
               <Td><StatusBadge value={a.status} meta={statusMeta} /></Td>
               <Td className="text-zinc-400">{ASSET_PRIORITY_META[a.priority]?.label ?? a.priority}</Td>
               <Td>{a.assignedTo ? <UserAvatar name={a.assignedTo.name} size="sm" /> : <span className="text-amber-500">—</span>}</Td>
-              <Td className={a.nextReviewAt && a.nextReviewAt < now ? "text-amber-400" : "text-zinc-400"}>
-                {formatDate(a.nextReviewAt)}
+              <Td className={isDateOnlyOverdue(a.nextReviewAt) ? "text-amber-400" : "text-zinc-400"}>
+                {formatDateOnly(a.nextReviewAt)}
               </Td>
               <Td>
                 <span className="space-x-1">

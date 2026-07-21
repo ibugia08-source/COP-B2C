@@ -1,0 +1,2 @@
+ALTER TABLE "clients" ALTER COLUMN "start_date" SET DATA TYPE date USING "start_date"::date;--> statement-breakpoint
+ALTER TABLE "clients" ALTER COLUMN "churn_date" SET DATA TYPE date USING "churn_date"::date;

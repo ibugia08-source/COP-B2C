@@ -16,6 +16,7 @@ import {
   type RoleName,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { toDateOnly } from "@/lib/date";
 import { notifyRole, notifyUser } from "@/lib/notify";
 import { applyTemplateToClient } from "@/lib/templates";
 
@@ -152,7 +153,13 @@ export function validateAutomationFieldValue(
   if (!parsed.success) {
     return { ok: false, error: `Valor inválido para ${entity}.${field}: ${JSON.stringify(value)}` };
   }
-  const out = field === "dueDate" && !(parsed.data instanceof Date) ? new Date(parsed.data as string) : parsed.data;
+  // dueDate é data-only ('YYYY-MM-DD'): normaliza Date/ISO/data para string de dia.
+  const out =
+    field === "dueDate"
+      ? parsed.data instanceof Date
+        ? toDateOnly(parsed.data)
+        : String(parsed.data).slice(0, 10)
+      : parsed.data;
   return { ok: true, value: out };
 }
 

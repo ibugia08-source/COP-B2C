@@ -81,7 +81,7 @@ export function ClientForm({
             id="startDate"
             name="startDate"
             type="date"
-            defaultValue={client?.startDate ? client.startDate.toISOString().slice(0, 10) : ""}
+            defaultValue={client?.startDate ?? ""}
           />
         </Field>
         <Field label="Instagram" htmlFor="instagramUrl">

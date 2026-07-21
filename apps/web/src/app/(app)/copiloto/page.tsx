@@ -6,7 +6,8 @@ import { isAdmin, requirePermission } from "@/lib/auth/guard";
 import { buildManagerDailyContext } from "@/lib/copilot/context";
 import { SUGGESTION_STATUS_META, SUGGESTION_TYPE_LABELS } from "@/lib/copilot/labels";
 import { syncCopilotSuggestions } from "@/lib/copilot/suggestions";
-import { formatDate, HEALTH_META, PRIORITY_META } from "@/lib/labels";
+import { HEALTH_META, PRIORITY_META } from "@/lib/labels";
+import { formatDateOnly } from "@/lib/date";
 import { Alert, Badge, Card, EmptyState, PageHeader, StatCard, StatusBadge } from "@/components/ui/primitives";
 import { Icon } from "@/components/ui/icon";
 import { SuggestionCard, type ActionView, type SuggestionView } from "./ui";
@@ -258,7 +259,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
                 <p key={g.id}>
                   {g.overdue ? <><Icon name="clock" /> Meta vencida:</> : <><Icon name="goals" /> Meta perto do prazo:</>}{" "}
                   <Link href="/metas" className="text-zinc-200 hover:text-emerald-300">{g.title}</Link>
-                  <span className="text-zinc-500"> — {formatDate(g.periodEnd)}</span>
+                  <span className="text-zinc-500"> — {formatDateOnly(g.periodEnd)}</span>
                 </p>
               ))}
               {ctx.upcomingMeetings.slice(0, 4).map((m) => (
@@ -291,7 +292,7 @@ export default async function CopilotoPage({ searchParams }: { searchParams: Pro
                     <Link href={`/tarefas/${t.id}`} className="truncate text-zinc-200 hover:text-emerald-300">{t.title}</Link>
                     <span className="flex shrink-0 items-center gap-1.5 text-xs">
                       <StatusBadge value={t.priority} meta={PRIORITY_META} />
-                      <span className="text-red-400">{formatDate(t.dueDate)}</span>
+                      <span className="text-red-400">{formatDateOnly(t.dueDate)}</span>
                     </span>
                   </li>
                 ))}

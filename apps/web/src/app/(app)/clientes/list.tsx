@@ -7,9 +7,9 @@ import {
   AGENCY_BRAND_META,
   BUSINESS_MODEL_LABEL,
   CLIENT_STATUS_META,
-  formatDate,
   HEALTH_META,
 } from "@/lib/labels";
+import { formatDateOnly } from "@/lib/date";
 import { Alert, Button, Field, Select, StatusBadge, Table, Td, Th, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { Icon } from "@/components/ui/icon";
@@ -40,7 +40,7 @@ export type ClientRow = {
   adsStatus: string;
   gestor1Id: string | null;
   gestor1Name: string | null;
-  startDate: string | null; // ISO
+  startDate: string | null; // data-only 'YYYY-MM-DD'
 };
 
 type Options = {
@@ -252,7 +252,7 @@ export function ClientsList({
                 <span className="text-xs text-amber-500">sem gestor</span>
               )}
             </Td>
-            <Td className="text-zinc-400">{formatDate(c.startDate ? new Date(c.startDate) : null)}</Td>
+            <Td className="text-zinc-400">{formatDateOnly(c.startDate)}</Td>
             {hasActions && (
               <Td>
                 <div className="flex items-center justify-end gap-0.5">

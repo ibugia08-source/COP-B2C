@@ -86,10 +86,10 @@ export function GoalFormButton({
             </Select>
           </Field>
           <Field label="Início do período">
-            <Input name="periodStart" type="date" defaultValue={goal?.periodStart ? goal.periodStart.toISOString().slice(0, 10) : ""} />
+            <Input name="periodStart" type="date" defaultValue={goal?.periodStart ?? ""} />
           </Field>
           <Field label="Fim do período">
-            <Input name="periodEnd" type="date" defaultValue={goal?.periodEnd ? goal.periodEnd.toISOString().slice(0, 10) : ""} />
+            <Input name="periodEnd" type="date" defaultValue={goal?.periodEnd ?? ""} />
           </Field>
           <Field label="Descrição" className="sm:col-span-3">
             <Textarea name="description" defaultValue={goal?.description ?? ""} />

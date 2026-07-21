@@ -3,7 +3,8 @@ import { db } from "@/db";
 import { goals, users } from "@/db/schema";
 import { hasPermission, isAdmin, requirePermission } from "@/lib/auth/guard";
 import { syncGoalReminders } from "@/lib/goals/reminders";
-import { formatDate, GOAL_STATUS_META } from "@/lib/labels";
+import { GOAL_STATUS_META } from "@/lib/labels";
+import { formatDateOnly, todayDateOnly } from "@/lib/date";
 import { Badge, Card, EmptyState, PageHeader, StatCard, StatusBadge } from "@/components/ui/primitives";
 import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { GOAL_CATEGORY_LABELS, GoalFormButton, GoalProgressControls } from "./ui";
@@ -45,9 +46,9 @@ export default async function MetasPage({ searchParams }: { searchParams: Promis
     db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)).orderBy(asc(users.name)),
   ]);
 
-  const now = new Date();
+  const todayStr = todayDateOnly();
   const atingidas = rows.filter((g) => g.currentValue >= g.targetValue).length;
-  const atrasadas = rows.filter((g) => g.periodEnd && g.periodEnd < now && g.currentValue < g.targetValue).length;
+  const atrasadas = rows.filter((g) => g.periodEnd && g.periodEnd < todayStr && g.currentValue < g.targetValue).length;
 
   const fStatus = str(sp.status);
   const fCat = str(sp.categoria);
@@ -117,7 +118,7 @@ export default async function MetasPage({ searchParams }: { searchParams: Promis
                   </span>
                   <span>
                     {g.owner?.name ?? "Sem responsável"}
-                    {g.periodEnd && <> · até {formatDate(g.periodEnd)}</>}
+                    {g.periodEnd && <> · até {formatDateOnly(g.periodEnd)}</>}
                   </span>
                 </div>
                 <div className="mt-3">

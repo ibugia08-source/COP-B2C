@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, not, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssets, goals, tasks, users } from "@/db/schema";
+import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
 import type { MetricKey } from "@/lib/dashboard-metrics";
 
 export type DashboardFilters = {
@@ -35,7 +36,9 @@ export async function getDashboardData(
   canGlobal = false,
 ): Promise<DashboardData> {
   const now = new Date();
-  const in7days = new Date(now.getTime() + 7 * 86400_000);
+  // Datas-only (dueDate/nextReviewAt/periodEnd) comparadas como string 'YYYY-MM-DD'.
+  const todayStr = todayDateOnly();
+  const in7Str = addDaysDateOnly(todayStr, 7);
 
   const clientWhere: SQL[] = [];
   if (filters.empresa) clientWhere.push(eq(clients.agencyBrand, filters.empresa as never));
@@ -76,16 +79,21 @@ export async function getDashboardData(
 
   // Churn: perdidos nos últimos 6 meses (mês a mês)
   const churnSeries: { label: string; value: number }[] = [];
+  // churnDate é data-only ('YYYY-MM-DD'); comparamos contra limites de mês como
+  // string (ordem lexicográfica = cronológica), sem passar por Date/fuso.
+  const monthStartStr = (y: number, m0: number) => `${y}-${String(m0 + 1).padStart(2, "0")}-01`;
   for (let i = 5; i >= 0; i--) {
     const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const startStr = monthStartStr(start.getFullYear(), start.getMonth());
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    const endStr = monthStartStr(end.getFullYear(), end.getMonth());
     churnSeries.push({
       label: new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(start),
-      value: allClients.filter((c) => c.churnDate && c.churnDate >= start && c.churnDate < end).length,
+      value: allClients.filter((c) => c.churnDate && c.churnDate >= startStr && c.churnDate < endStr).length,
     });
   }
 
-  const overdueTasks = openTasks.filter((t) => t.dueDate && t.dueDate < now);
+  const overdueTasks = openTasks.filter((t) => t.dueDate && t.dueDate < todayStr);
   const creativeTasks = openTasks.filter((t) => t.type === "CRIATIVO");
 
   // Alertas operacionais: clientes com pendências que exigem ação
@@ -106,7 +114,7 @@ export async function getDashboardData(
           return {
             name: u.name,
             open: userTasks.length,
-            overdue: userTasks.filter((t) => t.dueDate && t.dueDate < now).length,
+            overdue: userTasks.filter((t) => t.dueDate && t.dueDate < todayStr).length,
             urgent: userTasks.filter((t) => t.priority === "URGENTE").length,
             clients: allClients.filter((c) => c.trafficManager1Id === u.id).length,
             creatives: creativeTasks.filter((t) => t.assignedToId === u.id).length,
@@ -123,16 +131,16 @@ export async function getDashboardData(
     tarefas_atrasadas: overdueTasks.length,
     tarefas_sem_responsavel: openTasks.filter((t) => !t.assignedToId).length,
     minhas_tarefas_pendentes: myOpenTasks.length,
-    minhas_tarefas_atrasadas: myOpenTasks.filter((t) => t.dueDate && t.dueDate < now).length,
+    minhas_tarefas_atrasadas: myOpenTasks.filter((t) => t.dueDate && t.dueDate < todayStr).length,
     solicitacoes_pendentes: pendingSignups,
     ativos_total: assets.length,
     ativos_bloqueados: assets.filter((a) => a.status === "BLOQUEADA").length,
     ativos_prontos: assets.filter((a) => a.status === "PRONTA_PARA_USO").length,
     ativos_precisa_documentos: assets.filter((a) => a.status === "PRECISA_DE_DOCUMENTOS").length,
     ativos_esquentando: assets.filter((a) => a.status === "SENDO_ESQUENTADA").length,
-    ativos_revisao_pendente: assets.filter((a) => a.nextReviewAt && a.nextReviewAt < now).length,
+    ativos_revisao_pendente: assets.filter((a) => a.nextReviewAt && a.nextReviewAt < todayStr).length,
     metas_andamento: openGoals.filter((g) => g.status === "EM_EXECUCAO").length,
-    metas_prazo: openGoals.filter((g) => g.periodEnd && g.periodEnd <= in7days).length,
+    metas_prazo: openGoals.filter((g) => g.periodEnd && g.periodEnd <= in7Str).length,
     alertas_operacionais: operationalAlerts,
   };
 

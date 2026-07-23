@@ -9,10 +9,11 @@ import { resolveDashboard } from "@/lib/dashboard-config";
 import { syncGoalReminders } from "@/lib/goals/reminders";
 import { METRIC_BY_KEY, METRIC_CATALOG, type MetricKey } from "@/lib/dashboard-metrics";
 import { ASSET_STATUS_META, CLIENT_STATUS_META, formatDate, TASK_STATUS_META } from "@/lib/labels";
-import { Badge, Card, EmptyState, StatCard, Table, Td, Th } from "@/components/ui/primitives";
+import { Badge, Card, EmptyState, Table, Td, Th } from "@/components/ui/primitives";
 import { Icon } from "@/components/ui/icon";
 import { DashboardControls } from "./dashboard-controls";
 import { DashboardFilterBar } from "./dashboard-filters";
+import { MetricCards } from "./metric-cards";
 
 const NOTIF_TONES: Record<string, "blue" | "amber" | "red" | "green" | "zinc"> = {
   INFO: "blue",
@@ -177,21 +178,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           description="Use “+ Adicionar métrica” para escolher o que acompanhar aqui."
         />
       ) : (
-        <div className={`mb-6 grid gap-3 ${gridClass}`}>
-          {dash.metrics.map((key: MetricKey) => {
+        <MetricCards
+          gridClass={gridClass}
+          filters={{ empresa: filters.empresa, gestor: filters.gestor, nicho: filters.nicho }}
+          metrics={dash.metrics.map((key: MetricKey) => {
             const def = METRIC_BY_KEY[key];
-            return (
-              <StatCard
-                key={key}
-                label={def.label}
-                value={data.metrics[key] ?? 0}
-                tone={def.tone}
-                href={def.href}
-                hint={def.hint}
-              />
-            );
+            return {
+              key,
+              label: def.label,
+              value: data.metrics[key] ?? 0,
+              tone: def.tone,
+              hint: def.hint,
+              href: def.href,
+            };
           })}
-        </div>
+        />
       )}
 
       {/* Gráficos analíticos (permanecem fixos, sem "Clientes por nicho") */}

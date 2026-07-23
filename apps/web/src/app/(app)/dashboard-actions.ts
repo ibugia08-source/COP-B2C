@@ -7,6 +7,8 @@ import { appSettings, userDashboardConfigs } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { getSession } from "@/lib/auth/session-server";
 import { isAdminGeral } from "@/lib/auth/access";
+import { hasPermission } from "@/lib/auth/guard";
+import { getMetricItems, METRIC_ITEMS_LIMIT, type MetricItem } from "@/lib/dashboard-lists";
 import {
   BUILTIN_DEFAULT_METRICS,
   isValidMetricKey,
@@ -169,4 +171,32 @@ export async function restoreGlobalDefault(): Promise<ActionState> {
   });
   revalidatePath("/");
   return { success: "Padrão global restaurado ao original do sistema." };
+}
+
+// ---------------------------------------------------------------------------
+// Detalhamento de métrica (modal do dashboard)
+// ---------------------------------------------------------------------------
+
+/**
+ * Devolve os itens que compõem uma métrica, para o modal de detalhamento.
+ *
+ * SEGURANÇA: revalida no servidor a permissão da métrica. O card só aparece se
+ * o usuário tem a permissão, mas isso é gating de RENDER — uma action pode ser
+ * chamada direto, sem passar pela UI. Por isso a checagem é refeita aqui.
+ */
+export async function fetchMetricItems(
+  key: string,
+  filters: { empresa?: string; gestor?: string; nicho?: string },
+): Promise<{ items?: MetricItem[]; truncated?: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session) return { error: "Sessão expirada." };
+  if (!isValidMetricKey(key)) return { error: "Métrica desconhecida." };
+
+  const def = METRIC_BY_KEY[key];
+  if (def.permission && !hasPermission(session, def.permission)) {
+    return { error: "Sem permissão para ver esta métrica." };
+  }
+
+  const items = await getMetricItems(key, filters, session.userId);
+  return { items, truncated: items.length >= METRIC_ITEMS_LIMIT };
 }

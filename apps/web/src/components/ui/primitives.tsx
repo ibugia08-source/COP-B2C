@@ -150,12 +150,16 @@ export function StatCard({
   tone = "text-zinc-100",
   href,
   hint,
+  onClick,
 }: {
   label: string;
   value: ReactNode;
   tone?: string;
   href?: string;
   hint?: string;
+  /** Quando presente, o card vira botão (abre o detalhamento) em vez de navegar.
+   *  Só pode ser passado por Client Components. */
+  onClick?: () => void;
 }) {
   const inner = (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition group-hover:-translate-y-0.5 group-hover:border-zinc-700">
@@ -164,6 +168,13 @@ export function StatCard({
       {hint && <p className="mt-0.5 text-[11px] text-zinc-500">{hint}</p>}
     </div>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className="group block w-full text-left">
+        {inner}
+      </button>
+    );
+  }
   return href ? (
     <Link href={href} className="group block">
       {inner}

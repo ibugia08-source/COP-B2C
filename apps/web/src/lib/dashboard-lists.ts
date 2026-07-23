@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, not, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, ne, not, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, digitalAssets, goals, tasks, users } from "@/db/schema";
 import { addDaysDateOnly, todayDateOnly } from "@/lib/date";
@@ -26,6 +26,9 @@ export type MetricItem = {
 
 /** Teto de itens no modal — evita payload gigante; a UI avisa quando trunca. */
 export const METRIC_ITEMS_LIMIT = 100;
+
+/** Cliente que saiu da base não entra nas métricas de saúde/ads. */
+const inBase = ne(clients.status, "PERDIDO");
 
 const OPEN_TASK = ["CONCLUIDA", "CANCELADA"] as const;
 const OPEN_GOAL = ["PLANEJADA", "EM_EXECUCAO", "FINALIZANDO"] as const;
@@ -160,12 +163,14 @@ export async function getMetricItems(
     // ---------------- clientes ----------------
     case "clientes_ativos":
       return listClients(filters, eq(clients.status, "ATIVO"));
+    // saúde/ads: só quem ainda está na base (PERDIDO já saiu) — mesmo critério
+    // da contagem em lib/dashboard.ts (`inBase`)
     case "clientes_criticos":
-      return listClients(filters, eq(clients.healthStatus, "CRITICO"));
+      return listClients(filters, and(inBase, eq(clients.healthStatus, "CRITICO"))!);
     case "clientes_observacao":
-      return listClients(filters, eq(clients.healthStatus, "OBSERVACAO"));
+      return listClients(filters, and(inBase, eq(clients.healthStatus, "OBSERVACAO"))!);
     case "clientes_ads_pausado":
-      return listClients(filters, eq(clients.adsStatus, "PAUSADO"));
+      return listClients(filters, and(inBase, eq(clients.adsStatus, "PAUSADO"))!);
 
     // ---------------- tarefas ----------------
     case "tarefas_atrasadas":

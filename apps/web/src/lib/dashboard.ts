@@ -123,11 +123,20 @@ export async function getDashboardData(
         })
         .filter((w) => w.open || w.clients || w.creatives || w.assets);
 
+  // Métricas de saúde/ads consideram só quem AINDA ESTÁ NA BASE: cliente
+  // PERDIDO já saiu, então "crítico"/"em observação"/"ads pausado" não são mais
+  // acionáveis para ele e só poluíam o número.
+  //
+  // Não filtramos por status === "ATIVO" de propósito: o status é DERIVADO
+  // (lib/clients/state.ts) com precedência PERDIDO > PAUSADO > EM_RISCO, então
+  // saúde CRÍTICA sempre vira EM_RISCO — filtrar por ATIVO zeraria a métrica.
+  const inBase = allClients.filter((c) => c.status !== "PERDIDO");
+
   const metrics: Record<MetricKey, number> = {
     clientes_ativos: allClients.filter((c) => c.status === "ATIVO").length,
-    clientes_criticos: allClients.filter((c) => c.healthStatus === "CRITICO").length,
-    clientes_observacao: allClients.filter((c) => c.healthStatus === "OBSERVACAO").length,
-    clientes_ads_pausado: allClients.filter((c) => c.adsStatus === "PAUSADO").length,
+    clientes_criticos: inBase.filter((c) => c.healthStatus === "CRITICO").length,
+    clientes_observacao: inBase.filter((c) => c.healthStatus === "OBSERVACAO").length,
+    clientes_ads_pausado: inBase.filter((c) => c.adsStatus === "PAUSADO").length,
     tarefas_atrasadas: overdueTasks.length,
     tarefas_sem_responsavel: openTasks.filter((t) => !t.assignedToId).length,
     minhas_tarefas_pendentes: myOpenTasks.length,

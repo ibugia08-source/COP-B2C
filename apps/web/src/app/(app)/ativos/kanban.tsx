@@ -7,6 +7,7 @@ import { ASSET_PLATFORM_LABEL, ASSET_TYPE_LABEL, TONE_CLASSES, type Tone } from 
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/overlay";
+import { useBoardPan } from "@/components/use-board-pan";
 import { MoveMenu } from "@/components/ui/move-menu";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
 import { changeAssetStatus, deleteAsset, moveAssetToGroup, quickCreateAsset } from "./actions";
@@ -137,6 +138,7 @@ export function AssetKanban({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { ref: boardRef, panProps } = useBoardPan<HTMLDivElement>();
 
   // modal de regra (bloqueio/esquentamento) ao arrastar
   const [ruleModal, setRuleModal] = useState<{ assetId: string; status: string } | null>(null);
@@ -197,7 +199,11 @@ export function AssetKanban({
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
       {toast && <div className="mb-3"><Alert tone="green">{toast}</Alert></div>}
 
-      <div className={`flex gap-3 overflow-x-auto pb-4 ${isPending ? "opacity-70" : ""}`}>
+      <div
+        ref={boardRef}
+        {...panProps}
+        className={`flex cursor-grab gap-3 overflow-x-auto pb-4 active:cursor-grabbing ${isPending ? "opacity-70" : ""}`}
+      >
         {allColumns.map((col) => {
           const items = col.value === "__outros__" ? orphans : assets.filter((a) => key(a) === col.value);
           return (

@@ -8,6 +8,7 @@ import { PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/la
 import { formatDateOnly } from "@/lib/date";
 import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { useBoardPan } from "@/components/use-board-pan";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
 import { changeTaskStatus, createTask, deleteTask, quickCreateTask, reorderTaskOnBoard, type ActionState } from "./actions";
 
@@ -382,6 +383,7 @@ export function TasksKanban({
   const [overCardId, setOverCardId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { ref: boardRef, panProps } = useBoardPan<HTMLDivElement>();
 
   // tarefas cujo status não corresponde a nenhuma coluna ativa (ex.: coluna desativada)
   const known = new Set(columns.map((c) => c.value));
@@ -437,7 +439,11 @@ export function TasksKanban({
   return (
     <div>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
-      <div className={`flex gap-3 overflow-x-auto pb-4 ${isPending ? "opacity-70" : ""}`}>
+      <div
+        ref={boardRef}
+        {...panProps}
+        className={`flex cursor-grab gap-3 overflow-x-auto pb-4 active:cursor-grabbing ${isPending ? "opacity-70" : ""}`}
+      >
         {allColumns.map((col) => {
           const columnTasks =
             col.value === "__outros__" ? orphans : items.filter((t) => t.status === col.value);
@@ -469,7 +475,7 @@ export function TasksKanban({
                 </span>
               </div>
               <div className="flex flex-col gap-2 p-2">
-                <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto pr-0.5">
+                <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-scroll pr-1 [scrollbar-gutter:stable]">
                 {columnTasks.length === 0 && (
                   <p className="py-3 text-center text-[11px] text-zinc-600">vazio</p>
                 )}

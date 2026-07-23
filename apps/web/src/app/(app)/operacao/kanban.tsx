@@ -7,6 +7,7 @@ import { ADS_META, AGENCY_BRAND_META, HEALTH_META, TONE_CLASSES, type Tone } fro
 import { formatDateOnly, isDateOnlyOverdue, todayDateOnly } from "@/lib/date";
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { useBoardPan } from "@/components/use-board-pan";
 import { Icon } from "@/components/ui/icon";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
 import { MoveMenu } from "@/components/ui/move-menu";
@@ -51,6 +52,7 @@ export function OperationKanban({
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { ref: boardRef, panProps } = useBoardPan<HTMLDivElement>();
 
   // campos do modal obrigatório de churn
   const [churnReason, setChurnReason] = useState("");
@@ -130,7 +132,11 @@ export function OperationKanban({
         </div>
       )}
 
-      <div className={`flex gap-3 overflow-x-auto pb-4 ${isPending ? "opacity-70" : ""}`}>
+      <div
+        ref={boardRef}
+        {...panProps}
+        className={`flex cursor-grab gap-3 overflow-x-auto pb-4 active:cursor-grabbing ${isPending ? "opacity-70" : ""}`}
+      >
         {allColumns.map((col) => {
           const stageClients =
             col.value === "__outros__" ? orphans : clients.filter((c) => c.pipelineStage === col.value);
@@ -159,7 +165,7 @@ export function OperationKanban({
                 </span>
               </div>
               <div className="flex flex-col gap-2 p-2">
-                <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto pr-0.5">
+                <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-scroll pr-1 [scrollbar-gutter:stable]">
                 {stageClients.length === 0 && (
                   <p className="py-3 text-center text-[11px] text-zinc-600">vazio</p>
                 )}

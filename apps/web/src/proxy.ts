@@ -10,7 +10,9 @@ import {
 // - /login        — tela de entrada; o auto-cadastro é uma ABA dela (não há /signup)
 // - /acesso-negado — destino dos redirects de permissão (evita loop com /login)
 // - /api/health   — monitoramento/uptime (não toca no banco)
-const PUBLIC_PATHS = ["/login", "/acesso-negado", "/api/health"];
+// - /api/cron   — disparado pelo agendador da Vercel (não tem cookie de sessão);
+//                 protegido por CRON_SECRET dentro da própria rota
+const PUBLIC_PATHS = ["/login", "/acesso-negado", "/api/health", "/api/cron"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

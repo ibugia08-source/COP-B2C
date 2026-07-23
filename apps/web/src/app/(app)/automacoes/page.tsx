@@ -27,6 +27,22 @@ const EXEC_TONES: Record<string, "green" | "red" | "zinc"> = {
   IGNORADA: "zinc",
 };
 
+/**
+ * Formata as condições da regra para exibição. O engine aceita 3 formatos
+ * (evaluateConditions em lib/automations/engine.ts): objeto plano legado
+ * {campo: valor}, regra {op, field, value} e array de regras. Antes só o
+ * primeiro era renderizado (os outros saíam como "[object Object]").
+ */
+function formatConditions(c: unknown): string {
+  if (!c || typeof c !== "object") return "";
+  const one = (r: Record<string, unknown>) =>
+    "field" in r ? `${String(r.field)} ${String(r.op ?? "=")} ${JSON.stringify(r.value)}` : "";
+  if (Array.isArray(c)) return c.map((r) => one(r as Record<string, unknown>)).filter(Boolean).join(" e ");
+  const obj = c as Record<string, unknown>;
+  if ("field" in obj) return one(obj);
+  return Object.entries(obj).map(([k, v]) => `${k}=${String(v)}`).join(", ");
+}
+
 export default async function AutomacoesPage() {
   const session = await requirePermission("automations.view");
   const canUpdate = hasPermission(session, "automations.update");
@@ -66,10 +82,8 @@ export default async function AutomacoesPage() {
             <tr key={r.id} className={`hover:bg-zinc-900/60 ${r.enabled ? "" : "opacity-50"}`}>
               <Td>
                 <p className="font-medium text-zinc-100">{r.name}</p>
-                {r.conditions && (
-                  <p className="text-[11px] text-zinc-500">
-                    condição: {Object.entries(r.conditions).map(([k, v]) => `${k}=${v}`).join(", ")}
-                  </p>
+                {formatConditions(r.conditions) && (
+                  <p className="text-[11px] text-zinc-500">condição: {formatConditions(r.conditions)}</p>
                 )}
               </Td>
               <Td><Badge tone="purple">{TRIGGER_LABELS[r.triggerType] ?? r.triggerType}</Badge></Td>

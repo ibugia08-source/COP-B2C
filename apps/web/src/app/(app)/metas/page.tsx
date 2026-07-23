@@ -2,7 +2,6 @@ import { asc, desc, eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { goals, users } from "@/db/schema";
 import { hasPermission, isAdmin, requirePermission } from "@/lib/auth/guard";
-import { syncGoalReminders } from "@/lib/goals/reminders";
 import { GOAL_STATUS_META } from "@/lib/labels";
 import { formatDateOnly, todayDateOnly } from "@/lib/date";
 import { Badge, Card, EmptyState, PageHeader, StatCard, StatusBadge } from "@/components/ui/primitives";
@@ -32,9 +31,6 @@ export default async function MetasPage({ searchParams }: { searchParams: Promis
   const canUpdate = hasPermission(session, "goals.update");
   const canDelete = hasPermission(session, "goals.delete");
   const admin = isAdmin(session);
-
-  // gera lembretes de metas próximas do prazo/atrasadas (idempotente)
-  await syncGoalReminders();
 
   // Admin vê todas as metas; usuário comum vê apenas as suas ou as gerais (AGENCIA).
   const visibility = admin

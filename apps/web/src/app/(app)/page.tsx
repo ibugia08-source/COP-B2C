@@ -6,7 +6,6 @@ import { hasPermission, requireSession } from "@/lib/auth/guard";
 import { isAdminGeral } from "@/lib/auth/access";
 import { getDashboardData, type DashboardFilters } from "@/lib/dashboard";
 import { resolveDashboard } from "@/lib/dashboard-config";
-import { syncGoalReminders } from "@/lib/goals/reminders";
 import { METRIC_BY_KEY, METRIC_CATALOG, type MetricKey } from "@/lib/dashboard-metrics";
 import { ASSET_STATUS_META, CLIENT_STATUS_META, formatDate, TASK_STATUS_META } from "@/lib/labels";
 import { Badge, Card, EmptyState, Table, Td, Th } from "@/components/ui/primitives";
@@ -76,9 +75,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const canGlobal = hasPermission(session, "dashboard.view_global");
 
   const dash = await resolveDashboard(session);
-
-  // gera lembretes de metas próximas do prazo/atrasadas antes de ler as notificações
-  await syncGoalReminders();
 
   // filtros: URL tem prioridade; senão usa os filtros padrão salvos pelo usuário
   const filters: DashboardFilters = {

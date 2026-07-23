@@ -601,6 +601,9 @@ export const tasks = pgTable(
     cancelReason: text("cancel_reason"),
     dueDate: date("due_date", { mode: "string" }),
     startDate: date("start_date", { mode: "string" }),
+    // Ordem manual do card na coluna do Kanban de Tarefas (menor = topo).
+    // Mesmo padrão de clients.boardOrder; tarefa nova entra no fim (maior valor).
+    boardOrder: integer("board_order").notNull().default(0),
     completedAt: timestamp("completed_at", { mode: "date" }),
     estimatedMinutes: integer("estimated_minutes"),
     trackedMinutes: integer("tracked_minutes").notNull().default(0),

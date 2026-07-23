@@ -127,6 +127,13 @@
       "when": 1784655290415,
       "tag": "0017_aspiring_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784846660377,
+      "tag": "0018_chunky_siren",
+      "breakpoints": true
     }
   ]
 }

@@ -110,7 +110,8 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   const [rows, allUsers, allClients, statusOptionsAll, typeOptionsAll, counts, meetings, allTags] = await Promise.all([
     db.query.tasks.findMany({
       where: and(...filters),
-      orderBy: [asc(tasks.dueDate)],
+      // ordem manual do Kanban (boardOrder) primeiro; empate cai no vencimento
+      orderBy: [asc(tasks.boardOrder), asc(tasks.dueDate)],
       with: { client: true, assignedTo: true, createdBy: true, subtasks: true },
       limit: 300,
     }),

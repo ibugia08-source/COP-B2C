@@ -9,7 +9,7 @@ import { formatDateOnly } from "@/lib/date";
 import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
-import { changeTaskStatus, createTask, deleteTask, quickCreateTask, type ActionState } from "./actions";
+import { changeTaskStatus, createTask, deleteTask, quickCreateTask, reorderTaskOnBoard, type ActionState } from "./actions";
 
 const selectClass =
   "rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-emerald-600";
@@ -378,6 +378,8 @@ export function TasksKanban({
   const router = useRouter();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
+  // card sob o cursor: abre espaço acima dele (indicador de onde vai inserir)
+  const [overCardId, setOverCardId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -388,18 +390,48 @@ export function TasksKanban({
     ? [...columns, { value: "__outros__", label: "Sem coluna", color: "zinc" }]
     : columns;
 
-  function onDrop(status: string) {
-    setOverCol(null);
-    if (!dragId || !canUpdate || status === "__outros__") return;
-    const task = items.find((t) => t.id === dragId);
-    setDragId(null);
-    if (!task || task.status === status) return;
+  function runAction(fn: () => Promise<{ error?: string }>) {
     setError(null);
     startTransition(async () => {
-      const result = await changeTaskStatus(task.id, status);
+      const result = await fn();
       if (result.error) setError(result.error);
       else router.refresh();
     });
+  }
+
+  // troca de coluna (muda o status, com as regras de negócio da action)
+  function doMove(taskId: string, status: string) {
+    runAction(() => changeTaskStatus(taskId, status));
+  }
+  // reordena dentro da mesma coluna (só posição; não passa pelas regras de status)
+  function doReorder(taskId: string, beforeTaskId: string | null) {
+    runAction(() => reorderTaskOnBoard(taskId, beforeTaskId));
+  }
+
+  // soltar na ÁREA da coluna: mesma coluna = manda para o fim; outra = troca status
+  function onDrop(status: string) {
+    setOverCol(null);
+    setOverCardId(null);
+    const draggedId = dragId;
+    setDragId(null);
+    if (!draggedId || !canUpdate || status === "__outros__") return;
+    const task = items.find((t) => t.id === draggedId);
+    if (!task) return;
+    if (task.status === status) doReorder(draggedId, null);
+    else doMove(draggedId, status);
+  }
+
+  // soltar SOBRE um card: mesma coluna = insere antes dele; outra = troca status
+  function onDropCard(targetId: string, targetStatus: string) {
+    setOverCol(null);
+    setOverCardId(null);
+    const draggedId = dragId;
+    setDragId(null);
+    if (!draggedId || !canUpdate || draggedId === targetId || targetStatus === "__outros__") return;
+    const dragged = items.find((t) => t.id === draggedId);
+    if (!dragged) return;
+    if (dragged.status === targetStatus) doReorder(draggedId, targetId);
+    else doMove(draggedId, targetStatus);
   }
 
   return (
@@ -418,7 +450,10 @@ export function TasksKanban({
                   setOverCol(col.value);
                 }
               }}
-              onDragLeave={() => setOverCol((c) => (c === col.value ? null : c))}
+              onDragLeave={() => {
+                setOverCol((c) => (c === col.value ? null : c));
+                setOverCardId(null);
+              }}
               onDrop={() => onDrop(col.value)}
               className={`flex w-60 shrink-0 flex-col rounded-xl border bg-zinc-900/50 ${
                 overCol === col.value ? "border-emerald-500" : "border-zinc-800"
@@ -443,10 +478,29 @@ export function TasksKanban({
                     key={t.id}
                     draggable={canUpdate}
                     onDragStart={() => setDragId(t.id)}
-                    onDragEnd={() => setDragId(null)}
-                    className={`group rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition hover:border-zinc-600 ${
+                    onDragEnd={() => {
+                      setDragId(null);
+                      setOverCardId(null);
+                    }}
+                    onDragOver={(e) => {
+                      if (!canUpdate || !dragId || dragId === t.id) return;
+                      // impede que a coluna trate o evento (senão iria para o fim)
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setOverCardId(t.id);
+                    }}
+                    onDragLeave={() => setOverCardId((c) => (c === t.id ? null : c))}
+                    onDrop={(e) => {
+                      e.stopPropagation();
+                      onDropCard(t.id, col.value);
+                    }}
+                    className={`group rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition-all duration-150 hover:border-zinc-600 ${
                       canUpdate ? "cursor-grab active:cursor-grabbing" : ""
-                    } ${dragId === t.id ? "opacity-50" : ""}`}
+                    } ${dragId === t.id ? "scale-[0.98] opacity-40" : ""} ${
+                      overCardId === t.id && dragId !== t.id
+                        ? "mt-8 border-t-2 border-t-emerald-500"
+                        : ""
+                    }`}
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <SelectCircle id={t.id} />

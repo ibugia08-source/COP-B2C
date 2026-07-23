@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNull, max, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
@@ -155,9 +155,12 @@ export async function createTask(_prev: ActionState, formData: FormData): Promis
     if (denied) return denied;
   }
 
+  // tarefa nova entra no fim da fila do Kanban (maior boardOrder)
+  const [aggOrder] = await db.select({ m: max(tasks.boardOrder) }).from(tasks);
   const [task] = await db
     .insert(tasks)
     .values({
+      boardOrder: (aggOrder?.m ?? 0) + 10,
       title: d.title,
       description: d.description ?? null,
       type: d.type,
@@ -268,6 +271,58 @@ export async function updateTask(
 
   revalidateTaskPaths(taskId, existing.clientId);
   return { success: "Tarefa atualizada." };
+}
+
+/**
+ * Reordena um card DENTRO da mesma coluna do Kanban (não muda status).
+ * `beforeTaskId` = card antes do qual inserir; null = manda para o fim.
+ *
+ * Não passa pelas regras de `changeTaskStatus` (cancelamento/conclusão) de
+ * propósito: aqui o status não muda, só a posição visual.
+ */
+export async function reorderTaskOnBoard(
+  taskId: string,
+  beforeTaskId: string | null,
+): Promise<ActionState> {
+  const auth = await checkPermission("tasks.update");
+  if (!auth.ok) return { error: auth.error };
+  if (taskId === beforeTaskId) return { success: "Sem mudança." };
+
+  const task = await db.query.tasks.findFirst({
+    where: eq(tasks.id, taskId),
+    columns: { id: true, status: true },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+
+  const denied = await denyTaskOutOfScope(auth.session, taskId, "reorderTaskOnBoard");
+  if (denied) return denied;
+
+  // demais cards da mesma coluna, na ordem atual
+  const col = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.status, task.status), ne(tasks.id, taskId), isNull(tasks.parentTaskId)))
+    .orderBy(asc(tasks.boardOrder), asc(tasks.createdAt));
+
+  const idx = beforeTaskId ? col.findIndex((t) => t.id === beforeTaskId) : -1;
+  const insertAt = idx < 0 ? col.length : idx;
+  const orderedIds = [
+    ...col.slice(0, insertAt).map((t) => t.id),
+    taskId,
+    ...col.slice(insertAt).map((t) => t.id),
+  ];
+
+  // renumera a coluna inteira num único UPDATE (VALUES), com folga de 10
+  const values = sql.join(
+    orderedIds.map((id, i) => sql`(${id}::text, ${(i + 1) * 10}::int)`),
+    sql`, `,
+  );
+  await db.execute(
+    sql`UPDATE "tasks" AS t SET "board_order" = v.ord FROM (VALUES ${values}) AS v(id, ord) WHERE t.id = v.id`,
+  );
+
+  revalidatePath("/tarefas");
+  return { success: "Ordem atualizada." };
 }
 
 export async function changeTaskStatus(taskId: string, status: string): Promise<ActionState> {
@@ -502,9 +557,12 @@ export async function quickCreateTask(
     if (denied) return denied;
   }
 
+  // tarefa nova entra no fim da fila do Kanban (maior boardOrder)
+  const [aggQuickOrder] = await db.select({ m: max(tasks.boardOrder) }).from(tasks);
   const [task] = await db
     .insert(tasks)
     .values({
+      boardOrder: (aggQuickOrder?.m ?? 0) + 10,
       title: clean,
       type: "OPERACIONAL",
       priority: "MEDIA",

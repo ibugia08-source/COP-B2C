@@ -16,6 +16,7 @@ import {
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
 import { clientScopeCondition } from "@/lib/auth/ownership";
 import { dateOnlyToLocalDate } from "@/lib/date";
+import { avatarSrc } from "@/lib/avatar";
 import { resolveOptions } from "@/lib/config-options";
 import {
   ADS_META,
@@ -205,6 +206,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       adsStatus: c.adsStatus,
       pipelineStage: c.pipelineStage,
       gestor1: c.trafficManager1?.name ?? null,
+      gestor1Avatar: avatarSrc(c.trafficManager1?.id, c.trafficManager1?.avatarUrl) ?? null,
       estrategista: c.strategist?.name ?? null,
       nextDue: nextDue ?? null,
       pendencias,
@@ -324,6 +326,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     adsStatus: c.adsStatus,
     gestor1Id: c.trafficManager1Id,
     gestor1Name: c.trafficManager1?.name ?? null,
+    gestor1Avatar: avatarSrc(c.trafficManager1?.id, c.trafficManager1?.avatarUrl) ?? null,
     startDate: c.startDate ?? null,
   }));
   const listOptions = {

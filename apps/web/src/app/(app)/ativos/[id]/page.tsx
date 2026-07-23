@@ -17,6 +17,7 @@ import {
   type Tone,
 } from "@/lib/labels";
 import { formatDateOnly, isDateOnlyOverdue } from "@/lib/date";
+import { avatarSrc } from "@/lib/avatar";
 import { Icon } from "@/components/ui/icon";
 import { UrlTabs } from "@/components/ui/overlay";
 import {
@@ -251,7 +252,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
         asset.comments.map((c) => (
           <div key={c.id} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
             <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-              <UserAvatar name={c.author?.name ?? "Sistema"} size="sm" />
+              <UserAvatar name={c.author?.name ?? "Sistema"} size="sm" src={avatarSrc(c.author?.id, c.author?.avatarUrl)} />
               <span>{c.author?.name ?? "Sistema"}</span>
               <StatusBadge value={c.type} meta={ASSET_COMMENT_TYPE_META} />
               <span>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(c.createdAt)}</span>
@@ -367,7 +368,7 @@ export default async function AtivoDetalhePage({ params }: { params: Promise<{ i
                 <Link href={`/tarefas/${t.id}`} className="text-zinc-200 hover:text-emerald-300"><Icon name="tasks" /> {t.title}</Link>
                 <span className="flex items-center gap-2 text-xs">
                   <StatusBadge value={t.status} meta={TASK_STATUS_META} />
-                  {t.assignedTo && <UserAvatar name={t.assignedTo.name} size="sm" />}
+                  {t.assignedTo && <UserAvatar name={t.assignedTo.name} size="sm" src={avatarSrc(t.assignedTo.id, t.assignedTo.avatarUrl)} />}
                 </span>
               </li>
             ))}

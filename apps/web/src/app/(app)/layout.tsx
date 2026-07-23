@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { and, count, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { notifications } from "@/db/schema";
+import { notifications, users } from "@/db/schema";
+import { avatarSrc } from "@/lib/avatar";
 import { logout } from "@/lib/auth/actions";
 import { requireSession, sessionPermissions } from "@/lib/auth/guard";
 import { CARGO_LABELS, type PermissionKey } from "@/lib/auth/permissions";
@@ -53,10 +54,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .map(({ href, label, icon }) => ({ href, label, icon })),
   })).filter((g) => g.items.length > 0);
 
-  const [{ n: unread }] = await db
-    .select({ n: count() })
-    .from(notifications)
-    .where(and(eq(notifications.userId, session.userId), isNull(notifications.readAt)));
+  // A foto vem do banco (não do JWT) para não invalidar sessões existentes.
+  // Mesma onda da contagem de notificações — sem round-trip extra em série.
+  const [[{ n: unread }], me] = await Promise.all([
+    db
+      .select({ n: count() })
+      .from(notifications)
+      .where(and(eq(notifications.userId, session.userId), isNull(notifications.readAt))),
+    db.query.users.findFirst({
+      where: eq(users.id, session.userId),
+      columns: { avatarUrl: true },
+    }),
+  ]);
+  const myAvatar = avatarSrc(session.userId, me?.avatarUrl);
 
   // Navegação mobile: 4 primários na bottom bar + o restante na folha "Mais"
   const flatNav = navGroups.flatMap((g) => g.items);
@@ -77,7 +87,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppNav groups={navGroups} />
         <div className="border-t border-zinc-800 p-3 max-lg:p-2">
           <div className="mb-2 flex items-center gap-2 max-lg:justify-center">
-            <UserAvatar name={session.name} size="sm" />
+            <UserAvatar name={session.name} size="sm" src={myAvatar} />
             <div className="min-w-0 max-lg:hidden">
               <p className="truncate text-xs font-medium text-zinc-100">{session.name}</p>
               <p className="truncate text-[10px] text-zinc-500">{cargoLabel}</p>

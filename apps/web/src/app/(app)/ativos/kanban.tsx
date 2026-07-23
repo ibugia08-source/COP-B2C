@@ -23,6 +23,7 @@ export type AssetCardData = {
   groupName: string;
   clientName: string | null;
   assignedName: string | null;
+  assignedAvatar?: string | null;
   secretCount: number;
   attachmentCount: number;
   reviewPending: boolean;
@@ -86,7 +87,7 @@ function AssetCard({
         <Link href={`/ativos/${asset.id}`} className="text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300">
           {asset.title}
         </Link>
-        {asset.assignedName && <UserAvatar name={asset.assignedName} size="sm" title={asset.assignedName} />}
+        {asset.assignedName && <UserAvatar name={asset.assignedName} size="sm" title={asset.assignedName} src={asset.assignedAvatar} />}
       </div>
       <p className="mt-0.5 text-[11px] text-zinc-500">
         {ASSET_TYPE_LABEL[asset.assetType] ?? asset.assetType} · {ASSET_PLATFORM_LABEL[asset.platform] ?? asset.platform}

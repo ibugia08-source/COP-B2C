@@ -301,6 +301,7 @@ export type KanbanTask = {
   type: string;
   clientName: string | null;
   assignee: string | null;
+  assigneeAvatar?: string | null;
   dueDate: string | null;
   overdue: boolean;
 };
@@ -462,7 +463,7 @@ export function TasksKanban({
                     </div>
                     <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
                       <span className="flex items-center gap-1">
-                        {t.assignee ? <UserAvatar name={t.assignee} size="sm" /> : <span className="text-amber-500">sem resp.</span>}
+                        {t.assignee ? <UserAvatar name={t.assignee} size="sm" src={t.assigneeAvatar} /> : <span className="text-amber-500">sem resp.</span>}
                       </span>
                       <span className={t.overdue ? "text-red-400" : ""}>
                         {t.dueDate ? formatDateOnly(t.dueDate) : ""}

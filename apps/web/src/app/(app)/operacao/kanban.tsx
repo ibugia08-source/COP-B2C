@@ -23,6 +23,7 @@ export type KanbanClient = {
   adsStatus: string;
   pipelineStage: string;
   gestor1: string | null;
+  gestor1Avatar?: string | null;
   estrategista: string | null;
   nextDue: string | null; // data-only 'YYYY-MM-DD'
   pendencias: string[];
@@ -206,7 +207,7 @@ export function OperationKanban({
                       >
                         {c.name}
                       </Link>
-                      <UserAvatar name={c.gestor1} size="sm" title={`Gestor 1: ${c.gestor1 ?? "—"}`} />
+                      <UserAvatar name={c.gestor1} size="sm" title={`Gestor 1: ${c.gestor1 ?? "—"}`} src={c.gestor1Avatar} />
                     </div>
                     {c.niche && <p className="mt-0.5 text-[11px] text-zinc-500">{c.niche}</p>}
                     <div className="mt-2 flex flex-wrap gap-1">

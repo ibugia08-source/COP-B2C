@@ -40,6 +40,7 @@ export type ClientRow = {
   adsStatus: string;
   gestor1Id: string | null;
   gestor1Name: string | null;
+  gestor1Avatar?: string | null;
   startDate: string | null; // data-only 'YYYY-MM-DD'
 };
 
@@ -245,7 +246,7 @@ export function ClientsList({
             <Td>
               {c.gestor1Name ? (
                 <span className="flex items-center gap-1.5">
-                  <UserAvatar name={c.gestor1Name} size="sm" />
+                  <UserAvatar name={c.gestor1Name} size="sm" src={c.gestor1Avatar} />
                   <span className="text-xs text-zinc-400">{c.gestor1Name.split(" ")[0]}</span>
                 </span>
               ) : (

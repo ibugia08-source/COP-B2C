@@ -17,6 +17,7 @@ import {
   type Tone,
 } from "@/lib/labels";
 import { formatDateOnly, isDateOnlyOverdue } from "@/lib/date";
+import { avatarSrc } from "@/lib/avatar";
 import {
   Badge,
   EmptyState,
@@ -190,7 +191,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
                   </Link>
                   <span className="flex items-center gap-2 text-xs text-zinc-500">
                     <StatusBadge value={s.status} meta={statusMeta} />
-                    {s.assignedTo && <UserAvatar name={s.assignedTo.name} size="sm" />}
+                    {s.assignedTo && <UserAvatar name={s.assignedTo.name} size="sm" src={avatarSrc(s.assignedTo.id, s.assignedTo.avatarUrl)} />}
                     {s.dueDate && formatDateOnly(s.dueDate)}
                   </span>
                 </li>
@@ -209,7 +210,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
               task.comments.map((c) => (
                 <div key={c.id} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
                   <div className="mb-1 flex items-center gap-2 text-xs text-zinc-500">
-                    <UserAvatar name={c.author?.name} size="sm" />
+                    <UserAvatar name={c.author?.name} size="sm" src={avatarSrc(c.author?.id, c.author?.avatarUrl)} />
                     <span>{c.author?.name ?? "Sistema"}</span>
                     <span>·</span>
                     <span>{formatDate(c.createdAt)}</span>
@@ -255,7 +256,7 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
                 <dt className="text-zinc-500">Outros</dt>
                 <dd className="flex flex-wrap justify-end gap-1">
                   {task.assignees.map((a) => (
-                    <UserAvatar key={a.userId} name={a.user.name} size="sm" />
+                    <UserAvatar key={a.userId} name={a.user.name} size="sm" src={avatarSrc(a.user.id, a.user.avatarUrl)} />
                   ))}
                 </dd>
               </div>

@@ -13,6 +13,7 @@ import {
   type Tone,
 } from "@/lib/labels";
 import { dateOnlyToLocalDate, formatDateOnly, isDateOnlyOverdue, todayDateOnly } from "@/lib/date";
+import { avatarSrc } from "@/lib/avatar";
 import {
   Badge,
   EmptyState,
@@ -42,7 +43,7 @@ const FILTER_KEYS = ["q", "cliente", "grupo", "tipo", "plataforma", "status", "r
 type AssetRow = typeof digitalAssets.$inferSelect & {
   group: { id: string; name: string };
   client: { id: string; name: string } | null;
-  assignedTo: { name: string } | null;
+  assignedTo: { id: string; name: string; avatarUrl: string | null } | null;
   secrets: { id: string }[];
   attachments: { id: string }[];
 };
@@ -87,7 +88,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
       with: {
         group: { columns: { id: true, name: true } },
         client: { columns: { id: true, name: true } },
-        assignedTo: { columns: { name: true } },
+        assignedTo: { columns: { id: true, name: true, avatarUrl: true } },
         secrets: { columns: { id: true } },
         attachments: { columns: { id: true } },
       },
@@ -126,6 +127,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
     groupName: a.group.name,
     clientName: a.client?.name ?? null,
     assignedName: a.assignedTo?.name ?? null,
+    assignedAvatar: avatarSrc(a.assignedTo?.id, a.assignedTo?.avatarUrl) ?? null,
     secretCount: a.secrets.length,
     attachmentCount: a.attachments.length,
     reviewPending: isDateOnlyOverdue(a.nextReviewAt),
@@ -309,7 +311,7 @@ export default async function AtivosPage({ searchParams }: { searchParams: Promi
               <Td className="text-zinc-400">{ASSET_PLATFORM_LABEL[a.platform]}</Td>
               <Td><StatusBadge value={a.status} meta={statusMeta} /></Td>
               <Td className="text-zinc-400">{ASSET_PRIORITY_META[a.priority]?.label ?? a.priority}</Td>
-              <Td>{a.assignedTo ? <UserAvatar name={a.assignedTo.name} size="sm" /> : <span className="text-amber-500">—</span>}</Td>
+              <Td>{a.assignedTo ? <UserAvatar name={a.assignedTo.name} size="sm" src={avatarSrc(a.assignedTo.id, a.assignedTo.avatarUrl)} /> : <span className="text-amber-500">—</span>}</Td>
               <Td className={isDateOnlyOverdue(a.nextReviewAt) ? "text-amber-400" : "text-zinc-400"}>
                 {formatDateOnly(a.nextReviewAt)}
               </Td>

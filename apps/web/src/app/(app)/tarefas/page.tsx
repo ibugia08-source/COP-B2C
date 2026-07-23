@@ -7,6 +7,7 @@ import { taskScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import { PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META, type Tone } from "@/lib/labels";
 import { addDaysDateOnly, formatDateOnly, todayDateOnly } from "@/lib/date";
+import { avatarSrc } from "@/lib/avatar";
 import {
   Badge,
   Button,
@@ -68,7 +69,10 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   if (cliente === "__none__") filters.push(isNull(tasks.clientId));
   else if (cliente) filters.push(eq(tasks.clientId, cliente));
   const resp = str(sp.responsavel);
+  // __none__ = sem responsável; __me__ = o usuário logado (usado pelos cards de
+  // métrica do dashboard, que são estáticos e não conhecem o userId).
   if (resp === "__none__") filters.push(isNull(tasks.assignedToId));
+  else if (resp === "__me__") filters.push(eq(tasks.assignedToId, session.userId));
   else if (resp) filters.push(eq(tasks.assignedToId, resp));
   if (str(sp.tipo)) filters.push(eq(tasks.type, str(sp.tipo) as never));
   const status = str(sp.status);
@@ -157,6 +161,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     type: t.type,
     clientName: t.client?.name ?? null,
     assignee: t.assignedTo?.name ?? null,
+    assigneeAvatar: avatarSrc(t.assignedTo?.id, t.assignedTo?.avatarUrl) ?? null,
     dueDate: t.dueDate ?? null,
     overdue: !!t.dueDate && !t.completedAt && t.dueDate < todayStr && t.status !== "CONCLUIDA" && t.status !== "CANCELADA",
   }));
@@ -393,7 +398,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                     <Td>
                       {t.assignedTo ? (
                         <span className="flex items-center gap-1.5">
-                          <UserAvatar name={t.assignedTo.name} size="sm" />
+                          <UserAvatar name={t.assignedTo.name} size="sm" src={avatarSrc(t.assignedTo.id, t.assignedTo.avatarUrl)} />
                           <span className="text-xs text-zinc-400">{t.assignedTo.name.split(" ")[0]}</span>
                         </span>
                       ) : <span className="text-amber-500">—</span>}

@@ -22,6 +22,7 @@ import {
   TASK_TYPE_META,
 } from "@/lib/labels";
 import { formatDateOnly, todayDateOnly } from "@/lib/date";
+import { avatarSrc } from "@/lib/avatar";
 import { getActiveServices } from "@/lib/settings";
 import { isGoogleMeetEnabled } from "@/lib/google-meet";
 import { resolveMeta } from "@/lib/config-options";
@@ -243,7 +244,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
                 </Td>
                 <Td><StatusBadge value={t.type} meta={TASK_TYPE_META} /></Td>
                 <Td><StatusBadge value={t.status} meta={taskStatusMeta} /></Td>
-                <Td>{t.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={t.assignedTo.name} size="sm" />{t.assignedTo.name.split(" ")[0]}</span> : <span className="text-amber-500">—</span>}</Td>
+                <Td>{t.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={t.assignedTo.name} size="sm" src={avatarSrc(t.assignedTo.id, t.assignedTo.avatarUrl)} />{t.assignedTo.name.split(" ")[0]}</span> : <span className="text-amber-500">—</span>}</Td>
                 <Td className={overdue ? "text-red-400" : "text-zinc-400"}>
                   {formatDateOnly(t.dueDate)}
                 </Td>
@@ -289,7 +290,7 @@ export default async function ClienteDetalhePage({ params }: { params: Promise<{
             <Td className="text-zinc-400">{ASSET_TYPE_LABEL[a.assetType]}</Td>
             <Td className="text-zinc-400">{ASSET_PLATFORM_LABEL[a.platform]}</Td>
             <Td><StatusBadge value={a.status} meta={assetStatusMeta} /></Td>
-            <Td>{a.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={a.assignedTo.name} size="sm" />{a.assignedTo.name.split(" ")[0]}</span> : "—"}</Td>
+            <Td>{a.assignedTo ? <span className="flex items-center gap-1.5"><UserAvatar name={a.assignedTo.name} size="sm" src={avatarSrc(a.assignedTo.id, a.assignedTo.avatarUrl)} />{a.assignedTo.name.split(" ")[0]}</span> : "—"}</Td>
             <Td className={a.nextReviewAt && a.nextReviewAt < todayStr ? "text-purple-400" : "text-zinc-400"}>
               {formatDateOnly(a.nextReviewAt)}
             </Td>

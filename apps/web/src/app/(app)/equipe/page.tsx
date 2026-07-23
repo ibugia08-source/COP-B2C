@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import { avatarSrc } from "@/lib/avatar";
 import { hasPermission, requireAdmin } from "@/lib/auth/guard";
 import { PageHeader } from "@/components/ui/primitives";
 import { MemberForm, MemberRow, PendingRow } from "./ui";
@@ -76,10 +77,7 @@ export default async function EquipePage() {
                     phone: member.teamMember?.phone ?? null,
                     extras: member.userPermissions.map((p) => p.permission),
                     isSelf: member.id === session.userId,
-                    // rota autenticada; ?v muda a cada upload (busta o cache do browser)
-                    avatarUrl: member.avatarUrl
-                      ? `/equipe/avatar/${member.id}?v=${member.avatarUrl.split("/").pop()?.split("__")[0]?.slice(0, 8) ?? ""}`
-                      : null,
+                    avatarUrl: avatarSrc(member.id, member.avatarUrl) ?? null,
                   }}
                   canUpdate={canUpdate}
                   canDeactivate={canDeactivate}

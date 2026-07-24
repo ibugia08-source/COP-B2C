@@ -10,7 +10,7 @@ import { Alert, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar 
 import { Modal } from "@/components/ui/overlay";
 import { Icon } from "@/components/ui/icon";
 import { useBoardPan } from "@/components/use-board-pan";
-import { CardTrash, SelectCircle } from "@/components/bulk-select";
+import { CardTrash, ColumnSelectAll, SelectCircle } from "@/components/bulk-select";
 import { changeTaskStatus, createTask, deleteTask, quickCreateTask, reorderTaskOnBoard, type ActionState } from "./actions";
 
 const selectClass =
@@ -755,6 +755,7 @@ export function TasksKanban({
             >
               <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+                  <ColumnSelectAll ids={columnTasks.map((t) => t.id)} />
                   <span className={`inline-block h-2 w-2 rounded-full border ${TONE_CLASSES[col.color]}`} />
                   {col.label}
                 </span>

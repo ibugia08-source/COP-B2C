@@ -685,6 +685,51 @@ export async function bulkDeleteTasks(ids: string[]): Promise<BulkResult> {
   return { ok, fail: ids.length - ok, success: `${ok} tarefa(s) excluída(s).` };
 }
 
+/**
+ * Arquivar/desarquivar em massa. Arquivar tira a tarefa do quadro e das listas
+ * sem excluir — o histórico fica consultável na visão "Arquivadas".
+ *
+ * Usa `tasks.update` (não `tasks.delete`): arquivar é reversível.
+ */
+async function setTasksArchived(ids: string[], archived: boolean): Promise<BulkResult> {
+  const auth = await checkPermission("tasks.update");
+  if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };
+  let ok = 0;
+  const clientIds = new Set<string>();
+  for (const id of ids) {
+    const existing = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
+    if (!existing) continue;
+    if (await denyTaskOutOfScope(auth.session, id, archived ? "bulkArchiveTasks" : "bulkUnarchiveTasks")) continue;
+    await db
+      .update(tasks)
+      .set({ archivedAt: archived ? new Date() : null })
+      .where(eq(tasks.id, id));
+    if (existing.clientId) clientIds.add(existing.clientId);
+    ok++;
+  }
+  await logActivity({
+    userId: auth.session.userId,
+    action: archived ? "task.bulkArchived" : "task.bulkUnarchived",
+    entityType: "task",
+    metadata: { count: ok },
+  });
+  revalidatePath("/tarefas");
+  for (const c of clientIds) revalidatePath(`/clientes/${c}`);
+  return {
+    ok,
+    fail: ids.length - ok,
+    success: `${ok} tarefa(s) ${archived ? "arquivada(s)" : "desarquivada(s)"}.`,
+  };
+}
+
+export async function bulkArchiveTasks(ids: string[]): Promise<BulkResult> {
+  return setTasksArchived(ids, true);
+}
+
+export async function bulkUnarchiveTasks(ids: string[]): Promise<BulkResult> {
+  return setTasksArchived(ids, false);
+}
+
 export async function bulkMoveTasks(ids: string[], status: string): Promise<BulkResult> {
   const auth = await checkPermission("tasks.update");
   if (!auth.ok) return { ok: 0, fail: 0, error: auth.error };

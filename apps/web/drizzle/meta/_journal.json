@@ -134,6 +134,13 @@
       "when": 1784846660377,
       "tag": "0018_chunky_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784855676836,
+      "tag": "0019_plain_katie_power",
+      "breakpoints": true
     }
   ]
 }

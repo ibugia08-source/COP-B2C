@@ -23,6 +23,8 @@ type Ctx = {
   selected: Set<string>;
   has: (id: string) => boolean;
   toggle: (id: string) => void;
+  /** marca/desmarca um lote de uma vez (usado pelo "selecionar coluna") */
+  setMany: (ids: string[], on: boolean) => void;
   clear: () => void;
   count: number;
 };
@@ -39,10 +41,20 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+  const setMany = useCallback((ids: string[], on: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }, []);
   const clear = useCallback(() => setSelected(new Set()), []);
   const value = useMemo<Ctx>(
-    () => ({ selected, has: (id) => selected.has(id), toggle, clear, count: selected.size }),
-    [selected, toggle, clear],
+    () => ({ selected, has: (id) => selected.has(id), toggle, setMany, clear, count: selected.size }),
+    [selected, toggle, setMany, clear],
   );
   return <SelectionCtx.Provider value={value}>{children}</SelectionCtx.Provider>;
 }
@@ -73,6 +85,35 @@ export function SelectCircle({ id, className = "" }: { id: string; className?: s
       } ${className}`}
     >
       <Icon name="check" className="text-[11px]" />
+    </button>
+  );
+}
+
+/**
+ * Marca/desmarca TODOS os cards de uma coluna de uma vez.
+ *
+ * A seleção é global (um único conjunto no provider), então dá para marcar a
+ * coluna A, depois a coluna B, e agir sobre as duas juntas na BulkBar.
+ */
+export function ColumnSelectAll({ ids, className = "" }: { ids: string[]; className?: string }) {
+  const { has, setMany } = useSelection();
+  if (ids.length === 0) return null;
+  const allOn = ids.every((id) => has(id));
+  const someOn = !allOn && ids.some((id) => has(id));
+  return (
+    <button
+      type="button"
+      onClick={() => setMany(ids, !allOn)}
+      title={allOn ? "Desmarcar todas desta coluna" : "Selecionar todas desta coluna"}
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] transition ${
+        allOn
+          ? "border-emerald-600 bg-emerald-600 text-white"
+          : someOn
+            ? "border-emerald-600 bg-emerald-900/60 text-emerald-300"
+            : "border-zinc-600 text-transparent hover:border-emerald-500"
+      } ${className}`}
+    >
+      <Icon name="check" />
     </button>
   );
 }
@@ -145,15 +186,23 @@ export type BulkMenu = {
   run: (ids: string[], value: string) => Promise<BulkResult>;
 };
 
+/** Ação simples em massa (vira botão, sem dropdown). Ex.: Arquivar. */
+export type BulkAction = {
+  label: string;
+  run: (ids: string[]) => Promise<BulkResult>;
+};
+
 export function BulkBar({
   entityLabel = "itens",
   deleteAction,
   menus = [],
+  actions = [],
   raised = false,
 }: {
   entityLabel?: string;
   deleteAction?: (ids: string[]) => Promise<BulkResult>;
   menus?: BulkMenu[];
+  actions?: BulkAction[];
   /** eleva a barra (para não sobrepor outra BulkBar na mesma tela). */
   raised?: boolean;
 }) {
@@ -196,6 +245,18 @@ export function BulkBar({
           </span>
           <span className="text-zinc-500 max-sm:hidden">{entityLabel} selecionado(s)</span>
         </span>
+
+        {actions.map((a) => (
+          <button
+            key={a.label}
+            type="button"
+            disabled={pending}
+            onClick={() => apply(() => a.run(ids()))}
+            className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-500 hover:text-white disabled:opacity-50"
+          >
+            {a.label}
+          </button>
+        ))}
 
         {menus.map((menu) => (
           <select

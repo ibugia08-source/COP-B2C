@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, gte, isNull, lt, not, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, isNull, lt, not, inArray, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
@@ -35,7 +35,15 @@ import { Segmented } from "@/components/ui/toolbar";
 import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
-import { bulkAssignTasks, bulkDeleteTasks, bulkMoveTasks, bulkPrioritizeTasks, deleteTask } from "./actions";
+import {
+  bulkArchiveTasks,
+  bulkAssignTasks,
+  bulkDeleteTasks,
+  bulkMoveTasks,
+  bulkPrioritizeTasks,
+  bulkUnarchiveTasks,
+  deleteTask,
+} from "./actions";
 
 type Search = Record<string, string | string[] | undefined>;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
@@ -62,6 +70,9 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
 
   // --- filtros combinados -------------------------------------------------
   const filters: SQL[] = [isNull(tasks.parentTaskId)];
+  // arquivadas saem do quadro/listas; a visão "arquivadas" inverte o filtro
+  const verArquivadas = str(sp.visao) === "arquivadas";
+  filters.push(verArquivadas ? isNotNull(tasks.archivedAt) : isNull(tasks.archivedAt));
   // escopo de ownership: quem não é OWNER/ADMIN só vê tarefas suas ou de clientes que gerencia
   const scope = taskScopeCondition(session);
   if (scope) filters.push(scope);
@@ -213,6 +224,13 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     { label: "Prioridade…", options: Object.entries(PRIORITY_META).map(([v, m]) => ({ value: v, label: m.label })), run: bulkPrioritizeTasks },
   ];
 
+  // arquivar é reversível: na visão de arquivadas o botão vira 'Desarquivar'
+  const bulkActions = canUpdate
+    ? [verArquivadas
+        ? { label: "Desarquivar", run: bulkUnarchiveTasks }
+        : { label: "Arquivar", run: bulkArchiveTasks }]
+    : [];
+
   const filterConfig: FilterDef[] = [
     { key: "status", kind: "select", label: "Status", emptyLabel: "Status: todos", options: [{ value: "__abertas__", label: "Abertas" }, ...statusFilterOptions.map((o) => ({ value: o.value, label: o.label }))] },
     { key: "responsavel", kind: "select", label: "Responsável", options: [{ value: "__none__", label: "Sem responsável" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))] },
@@ -249,6 +267,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                 { value: "kanban", label: "Kanban", href: buildHref({ visao: null }) },
                 { value: "lista", label: "Lista", href: buildHref({ visao: "lista" }) },
                 { value: "calendario", label: "Calendário", href: buildHref({ visao: "calendario" }) },
+                { value: "arquivadas", label: "Arquivadas", href: buildHref({ visao: "arquivadas" }) },
               ]}
             />
             <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" buttonLabel="Config." />
@@ -341,7 +360,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
       ) : rows.length === 0 ? (
         <>
           <EmptyState icon="tasks" title="Nenhuma tarefa encontrada" description="Crie uma tarefa ou ajuste os filtros." />
-          {canCreate && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
+          {canCreate && !verArquivadas && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
         </>
       ) : (
         <div>
@@ -426,10 +445,15 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
               );
             })}
           </Table>
-          {canCreate && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
+          {canCreate && !verArquivadas && <ListQuickAdd defaultStatus={defaultStatus} clientId={cliente !== "__none__" ? cliente : undefined} />}
         </div>
       )}
-        <BulkBar entityLabel="tarefas" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteTasks : undefined} />
+        <BulkBar
+          entityLabel="tarefas"
+          menus={bulkMenus}
+          actions={bulkActions}
+          deleteAction={canDelete ? bulkDeleteTasks : undefined}
+        />
       </SelectionProvider>
     </div>
   );

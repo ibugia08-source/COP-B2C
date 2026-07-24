@@ -604,6 +604,9 @@ export const tasks = pgTable(
     // Ordem manual do card na coluna do Kanban de Tarefas (menor = topo).
     // Mesmo padrão de clients.boardOrder; tarefa nova entra no fim (maior valor).
     boardOrder: integer("board_order").notNull().default(0),
+    // Arquivamento: tira a tarefa do quadro/listas sem excluir. Vira histórico
+    // consultável na visão "Arquivadas". NULL = ativa.
+    archivedAt: timestamp("archived_at", { mode: "date" }),
     completedAt: timestamp("completed_at", { mode: "date" }),
     estimatedMinutes: integer("estimated_minutes"),
     trackedMinutes: integer("tracked_minutes").notNull().default(0),

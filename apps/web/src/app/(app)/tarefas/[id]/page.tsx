@@ -17,6 +17,7 @@ import {
   type Tone,
 } from "@/lib/labels";
 import { formatDateOnly, isDateOnlyOverdue } from "@/lib/date";
+import { BackLink } from "@/components/ui/back-link";
 import { avatarSrc } from "@/lib/avatar";
 import {
   Badge,
@@ -98,9 +99,9 @@ export default async function TarefaDetalhePage({ params }: { params: Promise<{ 
 
   return (
     <div>
-      <Link href="/tarefas" className="mb-4 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition hover:text-zinc-200">
+      <BackLink href="/tarefas" className="mb-4 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition hover:text-zinc-200">
         <Icon name="chevronRight" className="rotate-180 text-[10px]" /> Voltar para Tarefas
-      </Link>
+      </BackLink>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
       <div className="order-2 space-y-6 xl:order-1 xl:col-span-2">
         <div>

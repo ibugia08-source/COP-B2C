@@ -1,6 +1,6 @@
 import { eq, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, digitalAssetGroups, digitalAssets, documents, tasks } from "@/db/schema";
+import { clients, digitalAssetGroups, digitalAssets, documents, taskAssignees, tasks } from "@/db/schema";
 import type { SessionPayload } from "./session";
 import { can, canActOnAll, isAdminGeral } from "./access";
 import type { PermissionKey } from "./permissions";
@@ -92,6 +92,34 @@ export function clientScopeCondition(_session: SessionPayload): SQL | undefined 
 /** Tarefas: LEITURA aberta a todos — sem filtro. */
 export function taskScopeCondition(_session: SessionPayload): SQL | undefined {
   return undefined;
+}
+
+/**
+ * "Tarefas atreladas a mim": filtro OPCIONAL da tela de Tarefas (não é escopo
+ * de permissão). Considera todos os vínculos possíveis do usuário:
+ *  - é o responsável direto;
+ *  - é responsável adicional (task_assignees);
+ *  - criou a tarefa;
+ *  - é estrategista / gestor 1 / gestor 2 do CLIENTE da tarefa.
+ *
+ * O último caso é o que o usuário pediu: ver o que cai na conta dele por ser
+ * G1/G2/estrategista da conta, mesmo sem estar como responsável da tarefa.
+ */
+export function myTasksCondition(userId: string): SQL {
+  const managedClients = db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(managedClientsCondition(userId));
+  const asExtraAssignee = db
+    .select({ id: taskAssignees.taskId })
+    .from(taskAssignees)
+    .where(eq(taskAssignees.userId, userId));
+  return or(
+    eq(tasks.assignedToId, userId),
+    eq(tasks.createdById, userId),
+    inArray(tasks.id, asExtraAssignee),
+    inArray(tasks.clientId, managedClients),
+  )!;
 }
 
 /** true se a sessão enxerga QUALQUER ativo (Admin Geral ou access_all). */

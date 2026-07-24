@@ -3,7 +3,7 @@ import { and, asc, eq, gte, isNotNull, isNull, lt, not, inArray, sql, type SQL }
 import { db } from "@/db";
 import { clientMeetings, clients, tasks, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth/guard";
-import { taskScopeCondition } from "@/lib/auth/ownership";
+import { myTasksCondition, taskScopeCondition } from "@/lib/auth/ownership";
 import { resolveOptions } from "@/lib/config-options";
 import { PRIORITY_META, TASK_STATUS_META, TASK_TYPE_META, type Tone } from "@/lib/labels";
 import { addDaysDateOnly, formatDateOnly, todayDateOnly } from "@/lib/date";
@@ -84,6 +84,8 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
   // métrica do dashboard, que são estáticos e não conhecem o userId).
   if (resp === "__none__") filters.push(isNull(tasks.assignedToId));
   else if (resp === "__me__") filters.push(eq(tasks.assignedToId, session.userId));
+  // __meus__ = qualquer vínculo comigo (resp., adicional, criador ou meus clientes como G1/G2/estrategista)
+  else if (resp === "__meus__") filters.push(myTasksCondition(session.userId));
   else if (resp) filters.push(eq(tasks.assignedToId, resp));
   if (str(sp.tipo)) filters.push(eq(tasks.type, str(sp.tipo) as never));
   const status = str(sp.status);
@@ -233,7 +235,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
 
   const filterConfig: FilterDef[] = [
     { key: "status", kind: "select", label: "Status", emptyLabel: "Status: todos", options: [{ value: "__abertas__", label: "Abertas" }, ...statusFilterOptions.map((o) => ({ value: o.value, label: o.label }))] },
-    { key: "responsavel", kind: "select", label: "Responsável", options: [{ value: "__none__", label: "Sem responsável" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))] },
+    { key: "responsavel", kind: "select", label: "Responsável", options: [{ value: "__meus__", label: "Atreladas a mim" }, { value: "__none__", label: "Sem responsável" }, ...allUsers.map((u) => ({ value: u.id, label: u.name }))] },
     { key: "cliente", kind: "select", label: "Cliente", options: [{ value: "__none__", label: "Sem cliente" }, ...allClients.map((c) => ({ value: c.id, label: c.name }))] },
     { key: "tipo", kind: "select", label: "Tipo", options: typeOptions.map((o) => ({ value: o.value, label: o.label })) },
     { key: "prioridade", kind: "select", label: "Prioridade", options: Object.entries(PRIORITY_META).map(([v, m]) => ({ value: v, label: m.label })) },

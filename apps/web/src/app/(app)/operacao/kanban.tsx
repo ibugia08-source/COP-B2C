@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { ADS_META, AGENCY_BRAND_META, BUSINESS_MODEL_LABEL, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { formatDateOnly, isDateOnlyOverdue, todayDateOnly } from "@/lib/date";
-import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
+import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { useBoardPan } from "@/components/use-board-pan";
 import { QuickPicker } from "@/components/ui/quick-picker";
+import { PersonRow } from "@/components/ui/person-row";
 import { AGENCY_BRANDS, BUSINESS_MODELS, HEALTH_STATUSES } from "@/db/schema";
 import { Icon } from "@/components/ui/icon";
 import { CardTrash, ColumnSelectAll, SelectCircle } from "@/components/bulk-select";
@@ -321,26 +322,6 @@ export function OperationKanban({
   );
 }
 
-/** Linha de pessoa no card: rótulo/ícone + foto + nome. */
-function PersonRow({
-  icon,
-  name,
-  avatar,
-  title,
-}: {
-  icon: React.ReactNode;
-  name: string;
-  avatar?: string | null;
-  title: string;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 text-[11px] text-zinc-400" title={title}>
-      <span className="flex w-4 shrink-0 justify-center text-zinc-500">{icon}</span>
-      <UserAvatar name={name} size="sm" src={avatar} />
-      <span className="truncate">{name}</span>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Card de criação rápida de cliente (inline na coluna)

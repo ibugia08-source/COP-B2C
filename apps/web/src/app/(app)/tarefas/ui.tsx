@@ -6,11 +6,12 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useActionState } from "react";
 import { PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { formatDateOnly } from "@/lib/date";
-import { Alert, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
+import { Alert, Button, Field, Input, Select, StatusBadge, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { Icon } from "@/components/ui/icon";
 import { useBoardPan } from "@/components/use-board-pan";
 import { QuickPicker } from "@/components/ui/quick-picker";
+import { PersonRow } from "@/components/ui/person-row";
 import { CardTrash, ColumnSelectAll, SelectCircle } from "@/components/bulk-select";
 import { changeTaskStatus, createTask, deleteTask, quickCreateTask, reorderTaskOnBoard, type ActionState } from "./actions";
 
@@ -714,11 +715,18 @@ export function TasksKanban({
                       {t.title}
                     </Link>
 
+                    {/* 1. contexto (equivale ao nicho no card de Operação) */}
                     {t.clientName && (
-                      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-400" title={t.clientName}>
-                        <Icon name="clients" /> <span className="truncate">{t.clientName}</span>
+                      <p className="mt-0.5 truncate text-[11px] text-zinc-500" title={t.clientName}>
+                        {t.clientName}
                       </p>
                     )}
+
+                    {/* 2. classificação */}
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <StatusBadge value={t.priority} meta={PRIORITY_META} />
+                      <StatusBadge value={t.type} meta={typeMeta} />
+                    </div>
 
                     {t.tags.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -730,18 +738,26 @@ export function TasksKanban({
                       </div>
                     )}
 
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5">
-                        {t.assignee && <UserAvatar name={t.assignee} size="sm" src={t.assigneeAvatar} />}
-                        <StatusBadge value={t.priority} meta={PRIORITY_META} />
-                        <StatusBadge value={t.type} meta={typeMeta} />
-                      </span>
-                      {t.dueDate && (
-                        <span className={`flex shrink-0 items-center gap-1 text-[11px] ${t.overdue ? "text-red-400" : "text-zinc-500"}`}>
-                          <Icon name="calendar" /> {formatDateOnly(t.dueDate)}
+                    {/* 3. prazo — linha própria, senão a data era cortada */}
+                    {t.dueDate && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                        <span title="Prazo" className={t.overdue ? "text-red-400" : "text-zinc-500"}>
+                          <Icon name="clock" /> {formatDateOnly(t.dueDate)}
                         </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
+
+                    {/* 4. pessoas por último, como no card de Operação */}
+                    {t.assignee && (
+                      <div className="mt-2 space-y-1 border-t border-zinc-800 pt-2">
+                        <PersonRow
+                          icon={<Icon name="user" />}
+                          name={t.assignee}
+                          avatar={t.assigneeAvatar}
+                          title={`Responsável: ${t.assignee}`}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
                 </div>

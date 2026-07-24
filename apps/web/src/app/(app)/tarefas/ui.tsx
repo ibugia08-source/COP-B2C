@@ -474,8 +474,8 @@ export function TasksKanban({
                   {columnTasks.length}
                 </span>
               </div>
-              <div className="flex flex-col gap-2 p-2">
-                <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-scroll pr-1 [scrollbar-gutter:stable]">
+              <div className="flex flex-col gap-2 p-2 pr-1">
+                <div className="kanban-scroll flex max-h-[32rem] flex-col gap-2 overflow-y-scroll">
                 {columnTasks.length === 0 && (
                   <p className="py-3 text-center text-[11px] text-zinc-600">vazio</p>
                 )}

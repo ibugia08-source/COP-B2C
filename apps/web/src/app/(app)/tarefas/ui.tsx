@@ -554,6 +554,7 @@ export function TasksKanban({
   tagOptions = [],
   typeOptions = [],
   defaultType = "OPERACIONAL",
+  typeMeta = TASK_TYPE_META,
 }: {
   items: KanbanTask[];
   columns: Option[];
@@ -567,6 +568,8 @@ export function TasksKanban({
   tagOptions?: string[];
   typeOptions?: Option[];
   defaultType?: string;
+  /** rótulo/cor por tipo, já incluindo os criados pelo admin */
+  typeMeta?: Record<string, { label: string; tone: Tone }>;
 }) {
   const router = useRouter();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -731,6 +734,7 @@ export function TasksKanban({
                       <span className="flex items-center gap-1.5">
                         {t.assignee && <UserAvatar name={t.assignee} size="sm" src={t.assigneeAvatar} />}
                         <StatusBadge value={t.priority} meta={PRIORITY_META} />
+                        <StatusBadge value={t.type} meta={typeMeta} />
                       </span>
                       {t.dueDate && (
                         <span className={`flex shrink-0 items-center gap-1 text-[11px] ${t.overdue ? "text-red-400" : "text-zinc-500"}`}>

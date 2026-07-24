@@ -165,6 +165,10 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     kanbanColumns[0]?.value ?? "A_FAZER";
   const statusFilterOptions: Option[] = statusActive.map((o) => ({ value: o.value, label: o.label, color: o.color }));
   const typeOptions: Option[] = typeOptionsAll.map((o) => ({ value: o.value, label: o.label, color: o.color }));
+  // rótulo/cor do tipo: built-in + tipos criados pelo admin (senão o custom
+  // apareceria com o valor cru, sem rótulo nem cor)
+  const typeMeta: Record<string, { label: string; tone: Tone }> = { ...TASK_TYPE_META };
+  for (const o of typeOptionsAll) typeMeta[o.value] = { label: o.label, tone: o.color };
   const defaultType = typeOptionsAll.find((o) => o.isDefault)?.value ?? typeOptions[0]?.value ?? "OPERACIONAL";
 
   const tags = Array.from(new Set(allTags.flatMap((t) => t.tags))).sort();
@@ -335,6 +339,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
           tagOptions={tags}
           typeOptions={typeOptions}
           defaultType={defaultType}
+          typeMeta={typeMeta}
         />
       ) : visao === "calendario" ? (
         <CalendarMonth
@@ -407,7 +412,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                       {!t.assignedToId && <Badge tone="amber">sem responsável</Badge>}
                     </span>
                   </Td>
-                  {col("tipo") && <Td><StatusBadge value={t.type} meta={TASK_TYPE_META} /></Td>}
+                  {col("tipo") && <Td><StatusBadge value={t.type} meta={typeMeta} /></Td>}
                   {col("status") && (
                     <Td>
                       {canUpdate && t.status !== "CANCELADA" ? (

@@ -4,6 +4,8 @@ import { and, asc, eq, max, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
+  AGENCY_BRANDS,
+  BUSINESS_MODELS,
   HEALTH_STATUSES,
   clientHealthLogs,
   clients,
@@ -292,4 +294,79 @@ export async function bulkAssignClients(ids: string[], userId: string): Promise<
 }
 export async function bulkSetClientsHealth(ids: string[], health: string): Promise<BulkResult> {
   return bulkEditClients(ids, { healthStatus: health });
+}
+
+// ---------------------------------------------------------------------------
+// Criação rápida de cliente (card inline na coluna do Kanban)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cria um cliente direto na coluna do quadro, sem passar por /clientes/novo.
+ *
+ * Reaproveita as MESMAS regras da criação completa: status derivado
+ * (deriveClientStatus), entrada no fim da fila (boardOrder) e o evento
+ * CLIENT_CREATED — que dispara a automação de onboarding. A página completa
+ * segue existindo para o cadastro detalhado.
+ */
+export async function quickCreateClient(input: {
+  name: string;
+  pipelineStage: string;
+  agencyBrand: string;
+  businessModel: string;
+  healthStatus?: string | null;
+  strategistId?: string | null;
+  trafficManager1Id?: string | null;
+  trafficManager2Id?: string | null;
+}): Promise<{ error?: string; success?: string; clientId?: string }> {
+  const auth = await checkPermission("clients.create");
+  if (!auth.ok) return { error: auth.error };
+
+  const name = input.name.trim();
+  if (name.length < 2) return { error: "Nome do cliente é obrigatório." };
+
+  const stageValid =
+    (PIPELINE_STAGES as readonly string[]).includes(input.pipelineStage) ||
+    (await isValidOptionValue("operation", "pipeline", input.pipelineStage));
+  if (!stageValid) return { error: "Coluna inválida." };
+  const stage = input.pipelineStage as PipelineStage;
+
+  if (!(AGENCY_BRANDS as readonly string[]).includes(input.agencyBrand)) {
+    return { error: "Selecione a empresa/marca." };
+  }
+  if (!(BUSINESS_MODELS as readonly string[]).includes(input.businessModel)) {
+    return { error: "Selecione o modelo de negócio." };
+  }
+  const health = (HEALTH_STATUSES as readonly string[]).includes(input.healthStatus ?? "")
+    ? (input.healthStatus as HealthStatus)
+    : "ESTAVEL";
+
+  const [agg] = await db.select({ m: max(clients.boardOrder) }).from(clients);
+  const [client] = await db
+    .insert(clients)
+    .values({
+      name,
+      agencyBrand: input.agencyBrand as never,
+      businessModel: input.businessModel as never,
+      healthStatus: health,
+      pipelineStage: stage,
+      // status nunca vem do formulário — é derivado dos eixos canônicos
+      status: deriveClientStatus({ pipelineStage: stage, healthStatus: health, isPaused: false }),
+      boardOrder: (agg?.m ?? 0) + 10,
+      strategistId: input.strategistId || null,
+      trafficManager1Id: input.trafficManager1Id || null,
+      trafficManager2Id: input.trafficManager2Id || null,
+    })
+    .returning();
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "client.created",
+    entityType: "client",
+    entityId: client.id,
+    metadata: { name: client.name, quick: true },
+  });
+  await emitEvent("CLIENT_CREATED", { clientId: client.id, actorId: auth.session.userId });
+
+  revalidatePath("/operacao");
+  return { success: "Cliente criado.", clientId: client.id };
 }

@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { ADS_META, AGENCY_BRAND_META, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
+import { useRef, useState, useTransition } from "react";
+import { ADS_META, AGENCY_BRAND_META, BUSINESS_MODEL_LABEL, HEALTH_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { formatDateOnly, isDateOnlyOverdue, todayDateOnly } from "@/lib/date";
 import { Alert, Badge, Button, Field, Input, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { useBoardPan } from "@/components/use-board-pan";
+import { QuickPicker } from "@/components/ui/quick-picker";
+import { AGENCY_BRANDS, BUSINESS_MODELS, HEALTH_STATUSES } from "@/db/schema";
 import { Icon } from "@/components/ui/icon";
-import { CardTrash, SelectCircle } from "@/components/bulk-select";
+import { CardTrash, ColumnSelectAll, SelectCircle } from "@/components/bulk-select";
 import { MoveMenu } from "@/components/ui/move-menu";
-import { deleteClient, moveClientStage, reorderClientOnBoard } from "./actions";
+import { deleteClient, moveClientStage, quickCreateClient, reorderClientOnBoard } from "./actions";
 
 export type StageOption = { value: string; label: string; color: Tone };
 
@@ -38,12 +40,15 @@ export function OperationKanban({
   canMove,
   canCreate,
   canDelete,
+  users = [],
 }: {
   clients: KanbanClient[];
   columns: StageOption[];
   canMove: boolean;
   canCreate: boolean;
   canDelete?: boolean;
+  /** usuários para os seletores do card de criação */
+  users?: { id: string; name: string; avatar?: string | null }[];
 }) {
   const router = useRouter();
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
@@ -157,6 +162,7 @@ export function OperationKanban({
             >
               <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+                  <ColumnSelectAll ids={stageClients.map((c) => c.id)} />
                   <span className={`inline-block h-2 w-2 rounded-full border ${TONE_CLASSES[col.color]}`} />
                   {col.label}
                 </span>
@@ -236,12 +242,7 @@ export function OperationKanban({
                 ))}
                 </div>
                 {canCreate && col.value !== "__outros__" && (
-                  <Link
-                    href={`/clientes/novo?etapa=${encodeURIComponent(col.value)}`}
-                    className="mt-1 rounded-lg border border-dashed border-zinc-800 px-2 py-1.5 text-left text-[11px] text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300"
-                  >
-                    + Novo cliente nesta etapa
-                  </Link>
+                  <ClientQuickAdd stage={col.value} users={users} />
                 )}
               </div>
             </div>
@@ -275,6 +276,223 @@ export function OperationKanban({
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card de criação rápida de cliente (inline na coluna)
+// ---------------------------------------------------------------------------
+
+/** Linha do card: ícone + controle. */
+function QuickRow({
+  icon,
+  children,
+}: {
+  icon: React.ComponentProps<typeof Icon>["name"];
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded px-1 py-1 transition hover:bg-zinc-800/50">
+      <span className="w-3.5 shrink-0 text-center text-[11px] text-zinc-500">
+        <Icon name={icon} />
+      </span>
+      <span className="min-w-0 flex-1">{children}</span>
+    </div>
+  );
+}
+
+/**
+ * Cria um cliente direto na coluna, sem sair para /clientes/novo (que segue
+ * existindo para o cadastro completo). Traz os campos obrigatórios do cliente
+ * (nome, empresa, modelo) + saúde e os três responsáveis.
+ */
+function ClientQuickAdd({
+  stage,
+  users,
+}: {
+  stage: string;
+  users: { id: string; name: string; avatar?: string | null }[];
+}) {
+  const router = useRouter();
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [agencyBrand, setAgencyBrand] = useState("B2C_GESTAO");
+  const [businessModel, setBusinessModel] = useState("OUTROS");
+  const [healthStatus, setHealthStatus] = useState("ESTAVEL");
+  const [strategistId, setStrategistId] = useState("");
+  const [tm1, setTm1] = useState("");
+  const [tm2, setTm2] = useState("");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const userOpts = users.map((u) => ({ value: u.id, label: u.name, avatar: u.avatar ?? null }));
+  const filled = !!(name.trim() || strategistId || tm1 || tm2);
+
+  function reset() {
+    setName("");
+    setStrategistId("");
+    setTm1("");
+    setTm2("");
+    setHealthStatus("ESTAVEL");
+    setError(null);
+    setConfirmDiscard(false);
+    setEditing(false);
+  }
+
+  function submit() {
+    if (pending) return;
+    if (!name.trim()) {
+      setError("Informe o nome do cliente.");
+      nameRef.current?.focus();
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const r = await quickCreateClient({
+        name,
+        pipelineStage: stage,
+        agencyBrand,
+        businessModel,
+        healthStatus,
+        strategistId: strategistId || null,
+        trafficManager1Id: tm1 || null,
+        trafficManager2Id: tm2 || null,
+      });
+      if (r.error) setError(r.error);
+      else {
+        reset();
+        router.refresh();
+      }
+    });
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="mt-1 rounded-lg border border-dashed border-zinc-800 px-2 py-1.5 text-left text-[11px] text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300"
+      >
+        + Adicionar cliente
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="mt-1 rounded-lg border-2 border-emerald-600 bg-zinc-900 p-3"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          if (!filled) reset();
+          else setConfirmDiscard(true);
+        }
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <input
+          ref={nameRef}
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="Nome do cliente..."
+          className="min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-100 outline-none placeholder:text-zinc-500"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={pending}
+          className="shrink-0 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-600 disabled:opacity-50"
+        >
+          {pending ? "Salvando…" : "Salvar ⏎"}
+        </button>
+      </div>
+
+      <div className="mt-2 space-y-0.5">
+        <QuickRow icon="clients">
+          <QuickPicker
+            value={agencyBrand}
+            onChange={setAgencyBrand}
+            placeholder="Empresa / marca"
+            options={AGENCY_BRANDS.map((v) => ({ value: v, label: AGENCY_BRAND_META[v]?.label ?? v }))}
+          />
+        </QuickRow>
+        <QuickRow icon="chart">
+          <QuickPicker
+            value={businessModel}
+            onChange={setBusinessModel}
+            placeholder="Modelo de negócio"
+            options={BUSINESS_MODELS.map((v) => ({ value: v, label: BUSINESS_MODEL_LABEL[v] ?? v }))}
+          />
+        </QuickRow>
+        <QuickRow icon="heart">
+          <QuickPicker
+            value={healthStatus}
+            onChange={setHealthStatus}
+            placeholder="Saúde da conta"
+            options={HEALTH_STATUSES.map((v) => ({ value: v, label: HEALTH_META[v]?.label ?? v }))}
+          />
+        </QuickRow>
+        <QuickRow icon="brain">
+          <QuickPicker
+            value={strategistId}
+            onChange={setStrategistId}
+            placeholder="Adicionar estrategista"
+            searchable={users.length > 6}
+            options={userOpts}
+            emptyText="Nenhum usuário encontrado"
+          />
+        </QuickRow>
+        <QuickRow icon="user">
+          <QuickPicker
+            value={tm1}
+            onChange={setTm1}
+            placeholder="Adicionar gestor 1"
+            searchable={users.length > 6}
+            options={userOpts}
+            emptyText="Nenhum usuário encontrado"
+          />
+        </QuickRow>
+        <QuickRow icon="user">
+          <QuickPicker
+            value={tm2}
+            onChange={setTm2}
+            placeholder="Adicionar gestor 2"
+            searchable={users.length > 6}
+            options={userOpts}
+            emptyText="Nenhum usuário encontrado"
+          />
+        </QuickRow>
+      </div>
+
+      {error && <p className="mt-2 text-[11px] text-red-400">{error}</p>}
+
+      {confirmDiscard ? (
+        <div className="mt-2 rounded-md border border-amber-800 bg-amber-950/40 p-2">
+          <p className="text-[11px] text-amber-200">Deseja descartar este novo cliente?</p>
+          <div className="mt-1.5 flex gap-1">
+            <Button size="sm" variant="ghost" onClick={() => setConfirmDiscard(false)}>Continuar preenchendo</Button>
+            <Button size="sm" variant="secondary" onClick={reset}>Descartar</Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => (filled ? setConfirmDiscard(true) : reset())}
+          className="mt-2 text-[11px] text-zinc-500 transition hover:text-zinc-300"
+        >
+          Cancelar
+        </button>
+      )}
     </div>
   );
 }

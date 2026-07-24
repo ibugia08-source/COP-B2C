@@ -34,7 +34,7 @@ import { Icon } from "@/components/ui/icon";
 import { Segmented } from "@/components/ui/toolbar";
 import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
-import { BulkBar, CardTrash, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
+import { BulkBar, CardTrash, ColumnSelectAll, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
 import {
   bulkArchiveTasks,
   bulkAssignTasks,
@@ -371,7 +371,9 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
             minWidth="860px"
             head={
               <>
-                <Th className="w-8"></Th>
+                <Th className="w-8">
+                  <ColumnSelectAll ids={sorted.map((t) => t.id)} />
+                </Th>
                 <Th>{sortTh("titulo", "Tarefa")}</Th>
                 {col("tipo") && <Th>Tipo</Th>}
                 {col("status") && <Th>{sortTh("status", "Status")}</Th>}

@@ -149,7 +149,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
           orderBy: (c, { asc: a }) => [a(c.boardOrder), a(c.createdAt)],
         })
       : Promise.resolve([]),
-    db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
+    db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl }).from(users).where(eq(users.isActive, true)),
     showKanban ? db.selectDistinct({ niche: clients.niche }).from(clients).where(scope) : Promise.resolve([]),
     showKanban
       ? db
@@ -446,7 +446,14 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
               description="Cadastre clientes ou limpe os filtros para vê-los aqui."
             />
           ) : (
-            <OperationKanban clients={kanbanClients} columns={kanbanColumns} canMove={canMove} canCreate={canCreate} canDelete={canDelete} />
+            <OperationKanban
+              clients={kanbanClients}
+              columns={kanbanColumns}
+              canMove={canMove}
+              canCreate={canCreate}
+              canDelete={canDelete}
+              users={allUsers.map((u) => ({ id: u.id, name: u.name, avatar: avatarSrc(u.id, u.avatarUrl) ?? null }))}
+            />
           )}
             <BulkBar entityLabel="clientes" menus={bulkMenus} deleteAction={canDelete ? bulkDeleteClients : undefined} />
           </SelectionProvider>

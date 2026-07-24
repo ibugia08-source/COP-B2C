@@ -144,7 +144,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
     showKanban
       ? db.query.clients.findMany({
           where: filters.length ? and(...filters) : undefined,
-          with: { trafficManager1: true, strategist: true, operationalProfile: true },
+          with: { trafficManager1: true, trafficManager2: true, strategist: true, operationalProfile: true },
           // ordem manual do Kanban (boardOrder); cliente novo entra no fim da coluna
           orderBy: (c, { asc: a }) => [a(c.boardOrder), a(c.createdAt)],
         })
@@ -207,7 +207,10 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       pipelineStage: c.pipelineStage,
       gestor1: c.trafficManager1?.name ?? null,
       gestor1Avatar: avatarSrc(c.trafficManager1?.id, c.trafficManager1?.avatarUrl) ?? null,
+      estrategistaAvatar: avatarSrc(c.strategist?.id, c.strategist?.avatarUrl) ?? null,
       estrategista: c.strategist?.name ?? null,
+      gestor2: c.trafficManager2?.name ?? null,
+      gestor2Avatar: avatarSrc(c.trafficManager2?.id, c.trafficManager2?.avatarUrl) ?? null,
       nextDue: nextDue ?? null,
       pendencias,
     };

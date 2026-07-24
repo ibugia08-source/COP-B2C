@@ -27,7 +27,10 @@ export type KanbanClient = {
   pipelineStage: string;
   gestor1: string | null;
   gestor1Avatar?: string | null;
+  gestor2: string | null;
+  gestor2Avatar?: string | null;
   estrategista: string | null;
+  estrategistaAvatar?: string | null;
   nextDue: string | null; // data-only 'YYYY-MM-DD'
   pendencias: string[];
 };
@@ -191,51 +194,89 @@ export function OperationKanban({
                       e.stopPropagation();
                       onDropCard(c.id, col.value);
                     }}
-                    className={`rounded-lg border border-zinc-800 bg-zinc-900 p-3 shadow-sm transition hover:border-zinc-600 ${
+                    className={`group relative rounded-lg border border-zinc-800 bg-zinc-900 p-3 shadow-sm transition hover:border-zinc-600 ${
                       canMove ? "cursor-grab active:cursor-grabbing" : ""
                     } ${dragId === c.id ? "opacity-50" : ""} ${
                       dragId && dragId !== c.id ? "hover:border-emerald-500" : ""
                     }`}
                   >
-                    <div className="mb-1 flex items-center justify-between gap-2">
+                    {/* ações só no hover: não competem com o conteúdo */}
+                    <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100">
                       <SelectCircle id={c.id} />
-                      <div className="flex items-center gap-0.5">
-                        {canMove && (
-                          <MoveMenu
-                            options={moveOptions}
-                            currentValue={c.pipelineStage}
-                            onMove={(v) => doMove(c, v)}
-                            disabled={isPending}
-                            title={`Mover "${c.name}" para…`}
-                          />
-                        )}
-                        {canDelete && <CardTrash id={c.id} deleteAction={deleteClient} label="cliente" />}
-                      </div>
+                      {canMove && (
+                        <MoveMenu
+                          options={moveOptions}
+                          currentValue={c.pipelineStage}
+                          onMove={(v) => doMove(c, v)}
+                          disabled={isPending}
+                          title={`Mover "${c.name}" para…`}
+                        />
+                      )}
+                      {canDelete && <CardTrash id={c.id} deleteAction={deleteClient} label="cliente" />}
                     </div>
-                    <div className="flex items-start justify-between gap-2">
-                      <Link
-                        href={`/clientes/${c.id}`}
-                        className="text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300"
-                      >
-                        {c.name}
-                      </Link>
-                      <UserAvatar name={c.gestor1} size="sm" title={`Gestor 1: ${c.gestor1 ?? "—"}`} src={c.gestor1Avatar} />
-                    </div>
+
+                    {/* 1. identificação */}
+                    <Link
+                      href={`/clientes/${c.id}`}
+                      className="block pr-16 text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300"
+                    >
+                      {c.name}
+                    </Link>
                     {c.niche && <p className="mt-0.5 text-[11px] text-zinc-500">{c.niche}</p>}
+
+                    {/* 2. situação */}
                     <div className="mt-2 flex flex-wrap gap-1">
                       <StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} />
                       <StatusBadge value={c.healthStatus} meta={HEALTH_META} />
                       <StatusBadge value={c.adsStatus} meta={ADS_META} />
                     </div>
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
-                      <span title="Estrategista"><Icon name="brain" /> {c.estrategista?.split(" ")[0] ?? "—"}</span>
-                      <span title="Próximo prazo" className={isDateOnlyOverdue(c.nextDue) ? "text-red-400" : ""}>
-                        <Icon name="clock" /> {formatDateOnly(c.nextDue)}
-                      </span>
-                    </div>
-                    {c.pendencias.length > 0 && (
-                      <div className="mt-2">
-                        <Badge tone="amber"><Icon name="warning" /> {c.pendencias.length} pendência{c.pendencias.length > 1 ? "s" : ""}</Badge>
+
+                    {/* 3. prazo e pendências */}
+                    {(c.nextDue || c.pendencias.length > 0) && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                        {c.nextDue && (
+                          <span
+                            title="Próximo prazo"
+                            className={isDateOnlyOverdue(c.nextDue) ? "text-red-400" : "text-zinc-500"}
+                          >
+                            <Icon name="clock" /> {formatDateOnly(c.nextDue)}
+                          </span>
+                        )}
+                        {c.pendencias.length > 0 && (
+                          <Badge tone="amber">
+                            <Icon name="warning" /> {c.pendencias.length} pendência{c.pendencias.length > 1 ? "s" : ""}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 4. pessoas por último, uma embaixo da outra */}
+                    {(c.estrategista || c.gestor1 || c.gestor2) && (
+                      <div className="mt-2 space-y-1 border-t border-zinc-800 pt-2">
+                        {c.estrategista && (
+                          <PersonRow
+                            icon={<Icon name="brain" />}
+                            name={c.estrategista}
+                            avatar={c.estrategistaAvatar}
+                            title={`Estrategista: ${c.estrategista}`}
+                          />
+                        )}
+                        {c.gestor1 && (
+                          <PersonRow
+                            icon={<span className="text-[9px] font-semibold">G1</span>}
+                            name={c.gestor1}
+                            avatar={c.gestor1Avatar}
+                            title={`Gestor 1: ${c.gestor1}`}
+                          />
+                        )}
+                        {c.gestor2 && (
+                          <PersonRow
+                            icon={<span className="text-[9px] font-semibold">G2</span>}
+                            name={c.gestor2}
+                            avatar={c.gestor2Avatar}
+                            title={`Gestor 2: ${c.gestor2}`}
+                          />
+                        )}
                       </div>
                     )}
                   </div>
@@ -276,6 +317,27 @@ export function OperationKanban({
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+/** Linha de pessoa no card: rótulo/ícone + foto + nome. */
+function PersonRow({
+  icon,
+  name,
+  avatar,
+  title,
+}: {
+  icon: React.ReactNode;
+  name: string;
+  avatar?: string | null;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-zinc-400" title={title}>
+      <span className="flex w-4 shrink-0 justify-center text-zinc-500">{icon}</span>
+      <UserAvatar name={name} size="sm" src={avatar} />
+      <span className="truncate">{name}</span>
     </div>
   );
 }

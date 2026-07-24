@@ -115,7 +115,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
       with: { client: true, assignedTo: true, createdBy: true, subtasks: true },
       limit: 300,
     }),
-    db.select({ id: users.id, name: users.name }).from(users).where(eq(users.isActive, true)),
+    db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl }).from(users).where(eq(users.isActive, true)),
     db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
     resolveOptions("tasks", "status"),
     resolveOptions("tasks", "type", { activeOnly: true }),
@@ -163,6 +163,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     clientName: t.client?.name ?? null,
     assignee: t.assignedTo?.name ?? null,
     assigneeAvatar: avatarSrc(t.assignedTo?.id, t.assignedTo?.avatarUrl) ?? null,
+    tags: t.tags,
     dueDate: t.dueDate ?? null,
     overdue: !!t.dueDate && !t.completedAt && t.dueDate < todayStr && t.status !== "CONCLUIDA" && t.status !== "CANCELADA",
   }));
@@ -266,7 +267,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
             </Button>
             {canCreate && (
               <TaskCreateButton
-                users={allUsers}
+                users={allUsers.map((u) => ({ id: u.id, name: u.name, avatar: avatarSrc(u.id, u.avatarUrl) ?? null }))}
                 clients={allClients}
                 defaultClientId={cliente !== "__none__" ? cliente : undefined}
                 defaultType={str(sp.tipo)}
@@ -307,7 +308,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
           canCreate={canCreate}
           canDelete={canDelete}
           quickAddClientId={cliente !== "__none__" ? cliente : undefined}
-          users={allUsers}
+          users={allUsers.map((u) => ({ id: u.id, name: u.name, avatar: avatarSrc(u.id, u.avatarUrl) ?? null }))}
           clients={allClients}
           tagOptions={tags}
         />

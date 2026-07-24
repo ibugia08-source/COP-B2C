@@ -45,6 +45,17 @@ export function addDaysDateOnly(d: string, days: number): string {
 }
 
 /**
+ * A data-only é plausível? Campos <input type="date"> aceitam anos absurdos
+ * quando o usuário digita parcialmente (ex.: "0900-07-06"), e isso ia parar no
+ * banco. Use antes de gravar.
+ */
+export function isPlausibleDateOnly(d: string | null | undefined): boolean {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const year = Number(d.slice(0, 4));
+  return year >= 2000 && year <= 2100;
+}
+
+/**
  * 'YYYY-MM-DD' -> Date LOCAL à meia-noite do dia. Use apenas quando um componente
  * exige um Date (ex.: bucketing do calendário por getDate/getMonth locais). Como
  * é meia-noite LOCAL (não UTC), o dia do calendário não escorrega.

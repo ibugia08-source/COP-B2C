@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useActionState } from "react";
 import { PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/labels";
 import { formatDateOnly } from "@/lib/date";
-import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
+import { Alert, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { Icon } from "@/components/ui/icon";
 import { useBoardPan } from "@/components/use-board-pan";
@@ -307,6 +307,7 @@ export type KanbanTask = {
   clientName: string | null;
   assignee: string | null;
   assigneeAvatar?: string | null;
+  tags: string[];
   dueDate: string | null;
   overdue: boolean;
 };
@@ -316,14 +317,12 @@ function KanbanQuickAdd({
   clientId,
   users,
   clients,
-  columns,
   tagOptions,
 }: {
   status: string;
   clientId?: string;
-  users: { id: string; name: string }[];
+  users: { id: string; name: string; avatar?: string | null }[];
   clients: { id: string; name: string }[];
-  columns: Option[];
   tagOptions: string[];
 }) {
   const router = useRouter();
@@ -335,8 +334,6 @@ function KanbanQuickAdd({
   const [clientSel, setClientSel] = useState(clientId ?? "");
   const [tagsText, setTagsText] = useState("");
   const [dueDate, setDueDate] = useState("");
-  // começa na coluna onde o usuário clicou, mas pode ser trocado antes de salvar
-  const [statusSel, setStatusSel] = useState(status);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -348,7 +345,6 @@ function KanbanQuickAdd({
     setClientSel(clientId ?? "");
     setTagsText("");
     setDueDate("");
-    setStatusSel(status);
     setError(null);
     setConfirmDiscard(false);
     setEditing(false);
@@ -363,7 +359,7 @@ function KanbanQuickAdd({
     }
     setError(null);
     startTransition(async () => {
-      const result = await quickCreateTask(title, statusSel || status, clientSel || null, {
+      const result = await quickCreateTask(title, status, clientSel || null, {
         assignedToId: assignedToId || null,
         priority: priority || null,
         tags: tagsText.split(",").map((t) => t.trim()).filter(Boolean),
@@ -436,22 +432,35 @@ function KanbanQuickAdd({
 
       <div className="mt-2 space-y-0.5">
         <QuickRow icon="user">
-          <QuickSelect value={assignedToId} onChange={setAssignedToId} placeholder="Adicionar responsável">
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </QuickSelect>
+          <QuickPicker
+            value={assignedToId}
+            onChange={setAssignedToId}
+            placeholder="Adicionar responsável"
+            searchable={users.length > 6}
+            options={users.map((u) => ({ value: u.id, label: u.name, avatar: u.avatar ?? null }))}
+            emptyText="Nenhum usuário encontrado"
+          />
         </QuickRow>
 
         <QuickRow icon="alert">
-          <QuickSelect value={priority} onChange={setPriority} placeholder="Adicionar prioridade">
-            {Object.entries(PRIORITY_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
-          </QuickSelect>
+          <QuickPicker
+            value={priority}
+            onChange={setPriority}
+            placeholder="Adicionar prioridade"
+            options={Object.entries(PRIORITY_META).map(([v, m]) => ({ value: v, label: m.label }))}
+          />
         </QuickRow>
 
         <QuickRow icon="clients">
-          <QuickSelect value={clientSel} onChange={setClientSel} placeholder="Adicionar cliente">
-            {clients.length === 0 && <option value="" disabled>Nenhum cliente encontrado</option>}
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </QuickSelect>
+          {/* muitos clientes: busca por digitação OU clique na lista */}
+          <QuickPicker
+            value={clientSel}
+            onChange={setClientSel}
+            placeholder="Adicionar cliente"
+            searchable
+            options={clients.map((c) => ({ value: c.id, label: c.name }))}
+            emptyText="Nenhum cliente encontrado"
+          />
         </QuickRow>
 
         <QuickRow icon="pin">
@@ -470,18 +479,14 @@ function KanbanQuickAdd({
         <QuickRow icon="calendar">
           <input
             type="date"
+            min="2000-01-01"
+            max="2100-12-31"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
             className={`w-full bg-transparent text-[11px] outline-none ${dueDate ? "text-zinc-300" : "text-zinc-500"}`}
           />
         </QuickRow>
 
-        <QuickRow icon="module">
-          {/* §13: o andamento é escolhido AQUI, antes de salvar */}
-          <QuickSelect value={statusSel} onChange={setStatusSel} placeholder="Adicionar status">
-            {columns.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </QuickSelect>
-        </QuickRow>
       </div>
 
       {error && <p className="mt-2 text-[11px] text-red-400">{error}</p>}
@@ -519,32 +524,121 @@ function QuickRow({ icon, children }: { icon: React.ComponentProps<typeof Icon>[
   );
 }
 
+export type PickerOption = { value: string; label: string; avatar?: string | null };
+
 /**
- * Seletor das linhas do card. Usa <select> nativo de propósito: o menu nativo
- * não é cortado pelo overflow da coluna (§19) e não exige portal.
+ * Seletor das linhas do card: busca por digitação + clique na lista, com foto
+ * quando existir.
+ *
+ * O painel é `position: fixed` ancorado no gatilho — assim NÃO é cortado pelo
+ * overflow da coluna nem do quadro (§19), sem precisar de portal.
  */
-function QuickSelect({
+function QuickPicker({
   value,
   onChange,
+  options,
   placeholder,
-  children,
+  searchable = false,
+  emptyText = "Nenhum resultado",
 }: {
   value: string;
   onChange: (v: string) => void;
+  options: PickerOption[];
   placeholder: string;
-  children: React.ReactNode;
+  searchable?: boolean;
+  emptyText?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const selected = options.find((o) => o.value === value) ?? null;
+  const filtered = q.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(q.trim().toLowerCase()))
+    : options;
+
+  useEffect(() => {
+    if (!open) return;
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) });
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!triggerRef.current?.contains(t) && !panelRef.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  function pick(v: string) {
+    onChange(v);
+    setOpen(false);
+    setQ("");
+  }
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`w-full cursor-pointer bg-transparent text-[11px] outline-none ${
-        value ? "text-zinc-300" : "text-zinc-500"
-      }`}
-    >
-      <option value="">{placeholder}</option>
-      {children}
-    </select>
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-1.5 text-left text-[11px]"
+      >
+        {selected ? (
+          <>
+            {selected.avatar !== undefined && (
+              <UserAvatar name={selected.label} size="sm" src={selected.avatar} />
+            )}
+            <span className="truncate text-zinc-200">{selected.label}</span>
+          </>
+        ) : (
+          <span className="text-zinc-500">{placeholder}</span>
+        )}
+      </button>
+
+      {open && pos && (
+        <div
+          ref={panelRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 60 }}
+          className="max-h-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl"
+        >
+          {searchable && (
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar..."
+              className="mb-1 w-full rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] text-zinc-200 outline-none placeholder:text-zinc-500"
+            />
+          )}
+          {value && (
+            <button
+              type="button"
+              onClick={() => pick("")}
+              className="block w-full rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-500 hover:bg-zinc-800"
+            >
+              Limpar seleção
+            </button>
+          )}
+          {filtered.length === 0 ? (
+            <p className="px-2 py-2 text-[11px] text-zinc-500">{emptyText}</p>
+          ) : (
+            filtered.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => pick(o.value)}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800"
+              >
+                {o.avatar !== undefined && <UserAvatar name={o.label} size="sm" src={o.avatar} />}
+                <span className="truncate">{o.label}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -566,7 +660,7 @@ export function TasksKanban({
   canDelete?: boolean;
   quickAddClientId?: string;
   /** dados dos seletores do card de criação (vêm da página) */
-  users?: { id: string; name: string }[];
+  users?: { id: string; name: string; avatar?: string | null }[];
   clients?: { id: string; name: string }[];
   tagOptions?: string[];
 }) {
@@ -694,7 +788,7 @@ export function TasksKanban({
                       e.stopPropagation();
                       onDropCard(t.id, col.value);
                     }}
-                    className={`group rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition-all duration-150 hover:border-zinc-600 ${
+                    className={`group relative rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition-all duration-150 hover:border-zinc-600 ${
                       canUpdate ? "cursor-grab active:cursor-grabbing" : ""
                     } ${dragId === t.id ? "scale-[0.98] opacity-40" : ""} ${
                       overCardId === t.id && dragId !== t.id
@@ -702,26 +796,42 @@ export function TasksKanban({
                         : ""
                     }`}
                   >
-                    <div className="mb-1 flex items-center justify-between gap-2">
+                    {/* seleção em massa e lixeira só no hover: não poluem o card */}
+                    <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1.5 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100">
                       <SelectCircle id={t.id} />
                       {canDelete && <CardTrash id={t.id} deleteAction={deleteTask} label="tarefa" />}
                     </div>
-                    <Link href={`/tarefas/${t.id}`} className="text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300">
+
+                    <Link href={`/tarefas/${t.id}`} className="block pr-12 text-sm font-medium leading-tight text-zinc-100 hover:text-emerald-300">
                       {t.title}
                     </Link>
-                    {t.clientName && <p className="mt-0.5 text-[11px] text-zinc-500">{t.clientName}</p>}
-                    <div className="mt-2 flex flex-wrap items-center gap-1">
-                      <StatusBadge value={t.priority} meta={PRIORITY_META} />
-                      <StatusBadge value={t.type} meta={TASK_TYPE_META} />
-                      {t.overdue && <Badge tone="red">vencida</Badge>}
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500">
-                      <span className="flex items-center gap-1">
-                        {t.assignee ? <UserAvatar name={t.assignee} size="sm" src={t.assigneeAvatar} /> : <span className="text-amber-500">sem resp.</span>}
+
+                    {t.clientName && (
+                      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-400" title={t.clientName}>
+                        <Icon name="clients" /> <span className="truncate">{t.clientName}</span>
+                      </p>
+                    )}
+
+                    {t.tags.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                        {t.tags.slice(0, 3).map((tag) => (
+                          <span key={tag} className="rounded bg-emerald-950/60 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5">
+                        {t.assignee && <UserAvatar name={t.assignee} size="sm" src={t.assigneeAvatar} />}
+                        <StatusBadge value={t.priority} meta={PRIORITY_META} />
                       </span>
-                      <span className={t.overdue ? "text-red-400" : ""}>
-                        {t.dueDate ? formatDateOnly(t.dueDate) : ""}
-                      </span>
+                      {t.dueDate && (
+                        <span className={`flex shrink-0 items-center gap-1 text-[11px] ${t.overdue ? "text-red-400" : "text-zinc-500"}`}>
+                          <Icon name="calendar" /> {formatDateOnly(t.dueDate)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -732,7 +842,6 @@ export function TasksKanban({
                     clientId={quickAddClientId}
                     users={users}
                     clients={clients}
-                    columns={columns}
                     tagOptions={tagOptions}
                   />
                 )}

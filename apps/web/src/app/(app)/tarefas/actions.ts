@@ -19,6 +19,7 @@ import {
   type TaskStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { isPlausibleDateOnly } from "@/lib/date";
 import { checkPermission } from "@/lib/auth/guard";
 import { canAccessTask } from "@/lib/auth/ownership";
 import type { PermissionKey } from "@/lib/auth/permissions";
@@ -150,6 +151,7 @@ export async function createTask(_prev: ActionState, formData: FormData): Promis
 
   const status = d.status || (await resolveDefaultValue("tasks", "status", "A_FAZER"));
   if (!(await isValidTaskStatus(status))) return { error: "Status inválido." };
+  if (d.dueDate && !isPlausibleDateOnly(d.dueDate)) return { error: "Prazo inválido. Use uma data entre 2000 e 2100." };
 
   if (d.clientId) {
     const denied = await denyClientScopeForTask(auth.session, d.clientId, "createTask");
@@ -571,6 +573,11 @@ export async function quickCreateTask(
   const priority = (TASK_PRIORITIES as readonly string[]).includes(extra?.priority ?? "")
     ? (extra!.priority as TaskPriority)
     : "MEDIA";
+
+  // o <input type="date"> aceita ano digitado errado (ex.: 0900) — barra aqui
+  if (extra?.dueDate && !isPlausibleDateOnly(extra.dueDate)) {
+    return { error: "Prazo inválido. Use uma data entre 2000 e 2100." };
+  }
 
   // tarefa nova entra no fim da fila do Kanban (maior boardOrder)
   const [aggQuickOrder] = await db.select({ m: max(tasks.boardOrder) }).from(tasks);

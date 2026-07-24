@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { UserAvatar } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icon";
 
 export type PickerOption = { value: string; label: string; avatar?: string | null };
 
@@ -50,10 +51,24 @@ export function QuickPicker({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  function pick(v: string) {
-    onChange(v);
+  function close() {
     setOpen(false);
     setQ("");
+  }
+
+  function pick(v: string) {
+    onChange(v);
+    close();
+  }
+
+  // Esc fecha SÓ o seletor — stopPropagation impede que o Esc chegue ao card
+  // de criação (que interpretaria como "descartar o card").
+  function onEscape(e: React.KeyboardEvent) {
+    if (e.key === "Escape" && open) {
+      e.stopPropagation();
+      e.preventDefault();
+      close();
+    }
   }
 
   return (
@@ -62,6 +77,7 @@ export function QuickPicker({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={onEscape}
         className="flex w-full items-center gap-1.5 text-left text-[11px]"
       >
         {selected ? (
@@ -81,16 +97,30 @@ export function QuickPicker({
           ref={panelRef}
           style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 60 }}
           className="max-h-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl"
+          onKeyDown={onEscape}
         >
-          {searchable && (
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar..."
-              className="mb-1 w-full rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] text-zinc-200 outline-none placeholder:text-zinc-500"
-            />
-          )}
+          <div className="mb-1 flex items-center gap-1">
+            {searchable ? (
+              <input
+                autoFocus
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar..."
+                className="min-w-0 flex-1 rounded-md bg-zinc-800 px-2 py-1.5 text-[11px] text-zinc-200 outline-none placeholder:text-zinc-500"
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate px-2 text-[11px] text-zinc-500">{placeholder}</span>
+            )}
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Fechar"
+              title="Fechar (Esc)"
+              className="shrink-0 rounded-md p-1 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <Icon name="close" />
+            </button>
+          </div>
           {value && (
             <button
               type="button"

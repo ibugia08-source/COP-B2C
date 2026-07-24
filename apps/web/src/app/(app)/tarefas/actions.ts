@@ -20,9 +20,9 @@ import {
   type TaskStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { denyTaskWrite } from "@/lib/auth/ownership";
 import { isPlausibleDateOnly } from "@/lib/date";
 import { checkPermission } from "@/lib/auth/guard";
-import { canAccessTask } from "@/lib/auth/ownership";
 import type { PermissionKey } from "@/lib/auth/permissions";
 import type { SessionPayload } from "@/lib/auth/session";
 import { emitEvent } from "@/lib/automations/engine";
@@ -44,26 +44,15 @@ async function isValidTaskType(type: string): Promise<boolean> {
 
 export type ActionState = { error?: string; success?: string; taskId?: string };
 
-/**
- * Gate de ownership: escrever numa tarefa exige ser responsável (ou adicional),
- * criador, ou responsável pelo cliente da tarefa — OWNER/ADMIN operam tudo.
- * Negações são registradas em activityLogs.
- */
+/** Delegado ao ponto único em lib/auth/ownership.ts (denyTaskWrite) — ver a
+ * REGRA DE COLABORAÇÃO documentada lá: edição de tarefas é compartilhada. */
 async function denyTaskOutOfScope(
   session: SessionPayload,
   taskId: string,
   action: string,
   allKey: PermissionKey = "tasks.update",
 ): Promise<ActionState | null> {
-  if (await canAccessTask(session, taskId, allKey)) return null;
-  await logActivity({
-    userId: session.userId,
-    action: "task.ownershipDenied",
-    entityType: "task",
-    entityId: taskId,
-    metadata: { action, reason: "ownership_scope" },
-  });
-  return { error: "Você não é responsável por esta tarefa." };
+  return denyTaskWrite(session, taskId, action, allKey);
 }
 
 /**

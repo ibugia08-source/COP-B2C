@@ -95,6 +95,32 @@ export function taskScopeCondition(_session: SessionPayload): SQL | undefined {
 }
 
 /**
+ * REGRA DE COLABORAÇÃO (2026-07-24): a ESCRITA em tarefas é COMPARTILHADA.
+ * Qualquer usuário autenticado com a permissão do módulo (tasks.update /
+ * tasks.complete / tasks.delete — checadas via checkPermission em cada action)
+ * pode editar QUALQUER tarefa, independentemente de criador, responsável ou
+ * responsáveis adicionais. Decisão de negócio explícita; substitui o antigo
+ * gate individual (canAccessTask/isTaskOwner) usado pelas actions.
+ *
+ * O que CONTINUA bloqueando (e deve continuar):
+ *  - falta da permissão do módulo (checkPermission, em toda action);
+ *  - usuário desativado / sessão revogada (sessionVersion em session-server.ts);
+ *  - o deploy é single-tenant: uma organização por instância — não existe
+ *    tarefa de "outra organização" acessível por construção.
+ *
+ * Mantida como ponto único e testável (tests/task-collaboration.test.ts) para
+ * o caso de a regra voltar a existir no futuro.
+ */
+export async function denyTaskWrite(
+  _session: SessionPayload,
+  _taskId: string,
+  _action: string,
+  _allKey: PermissionKey = "tasks.update",
+): Promise<{ error: string } | null> {
+  return null;
+}
+
+/**
  * "Tarefas atreladas a mim": filtro OPCIONAL da tela de Tarefas (não é escopo
  * de permissão). Considera todos os vínculos possíveis do usuário:
  *  - é o responsável direto;

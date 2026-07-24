@@ -8,6 +8,7 @@ import { PRIORITY_META, TASK_TYPE_META, TONE_CLASSES, type Tone } from "@/lib/la
 import { formatDateOnly } from "@/lib/date";
 import { Alert, Badge, Button, Field, Input, Select, StatusBadge, Textarea, UserAvatar } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
+import { Icon } from "@/components/ui/icon";
 import { useBoardPan } from "@/components/use-board-pan";
 import { CardTrash, SelectCircle } from "@/components/bulk-select";
 import { changeTaskStatus, createTask, deleteTask, quickCreateTask, reorderTaskOnBoard, type ActionState } from "./actions";
@@ -157,8 +158,11 @@ export function TaskCreateButton({
     async (prev, formData) => {
       const result = await createTask(prev, formData);
       if (result.taskId) {
+        // Antes navegava para /tarefas/[id] — era a "segunda aba" onde se
+        // escolhia o andamento. A tarefa já nasce completa (status incluso),
+        // então só fechamos e atualizamos a lista no lugar.
         setOpen(false);
-        router.push(`/tarefas/${result.taskId}`);
+        router.refresh();
       }
       return result;
     },
@@ -307,23 +311,69 @@ export type KanbanTask = {
   overdue: boolean;
 };
 
-function KanbanQuickAdd({ status, clientId }: { status: string; clientId?: string }) {
+function KanbanQuickAdd({
+  status,
+  clientId,
+  users,
+  clients,
+  columns,
+  tagOptions,
+}: {
+  status: string;
+  clientId?: string;
+  users: { id: string; name: string }[];
+  clients: { id: string; name: string }[];
+  columns: Option[];
+  tagOptions: string[];
+}) {
   const router = useRouter();
+  const titleRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
+  const [assignedToId, setAssignedToId] = useState("");
+  const [priority, setPriority] = useState("");
+  const [clientSel, setClientSel] = useState(clientId ?? "");
+  const [tagsText, setTagsText] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  // começa na coluna onde o usuário clicou, mas pode ser trocado antes de salvar
+  const [statusSel, setStatusSel] = useState(status);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  function reset() {
+    setTitle("");
+    setAssignedToId("");
+    setPriority("");
+    setClientSel(clientId ?? "");
+    setTagsText("");
+    setDueDate("");
+    setStatusSel(status);
+    setError(null);
+    setConfirmDiscard(false);
+    setEditing(false);
+  }
+
   function submit() {
-    if (!title.trim()) return;
+    if (pending) return; // §15: evita duplicar com cliques repetidos
+    if (!title.trim()) {
+      setError("Informe o nome da tarefa.");
+      titleRef.current?.focus();
+      return;
+    }
     setError(null);
     startTransition(async () => {
-      const result = await quickCreateTask(title, status, clientId ?? null);
+      const result = await quickCreateTask(title, statusSel || status, clientSel || null, {
+        assignedToId: assignedToId || null,
+        priority: priority || null,
+        tags: tagsText.split(",").map((t) => t.trim()).filter(Boolean),
+        dueDate: dueDate || null,
+      });
+      // §15: em caso de erro mantém os dados preenchidos para nova tentativa
       if (result.error) setError(result.error);
       else {
-        setTitle("");
-        setEditing(false);
-        router.refresh();
+        reset();
+        router.refresh(); // atualiza card/contador sem recarregar a página
       }
     });
   }
@@ -339,25 +389,162 @@ function KanbanQuickAdd({ status, clientId }: { status: string; clientId?: strin
       </button>
     );
   }
+  const filled = !!(title.trim() || assignedToId || priority || dueDate || tagsText.trim() || clientSel);
+
+  function tryClose() {
+    // §18: sem dados fecha direto; com dados pede confirmação antes de descartar
+    if (!filled) return setEditing(false);
+    setConfirmDiscard(true);
+  }
+
   return (
-    <div className="mt-1 space-y-1">
-      <Input
-        autoFocus
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") { e.preventDefault(); submit(); }
-          if (e.key === "Escape") setEditing(false);
-        }}
-        placeholder="Título da tarefa..."
-        className="text-xs"
-      />
-      {error && <p className="text-[11px] text-red-400">{error}</p>}
-      <div className="flex gap-1">
-        <Button size="sm" disabled={pending || !title.trim()} onClick={submit}>{pending ? "..." : "Criar"}</Button>
-        <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancelar</Button>
+    <div
+      className="mt-1 rounded-lg border-2 border-emerald-600 bg-zinc-900 p-3"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          tryClose();
+        }
+      }}
+    >
+      {/* cabeçalho: nome + Salvar (igual ao print) */}
+      <div className="flex items-start justify-between gap-2">
+        <input
+          ref={titleRef}
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter salva, desde que o foco não esteja num seletor aberto
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="Nome da tarefa..."
+          className="min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-100 outline-none placeholder:text-zinc-500"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={pending}
+          className="shrink-0 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-600 disabled:opacity-50"
+        >
+          {pending ? "Salvando…" : "Salvar ⏎"}
+        </button>
       </div>
+
+      <div className="mt-2 space-y-0.5">
+        <QuickRow icon="user">
+          <QuickSelect value={assignedToId} onChange={setAssignedToId} placeholder="Adicionar responsável">
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </QuickSelect>
+        </QuickRow>
+
+        <QuickRow icon="alert">
+          <QuickSelect value={priority} onChange={setPriority} placeholder="Adicionar prioridade">
+            {Object.entries(PRIORITY_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
+          </QuickSelect>
+        </QuickRow>
+
+        <QuickRow icon="clients">
+          <QuickSelect value={clientSel} onChange={setClientSel} placeholder="Adicionar cliente">
+            {clients.length === 0 && <option value="" disabled>Nenhum cliente encontrado</option>}
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </QuickSelect>
+        </QuickRow>
+
+        <QuickRow icon="pin">
+          <input
+            value={tagsText}
+            onChange={(e) => setTagsText(e.target.value)}
+            list="quick-task-tags"
+            placeholder="Adicionar tag"
+            className="w-full bg-transparent text-[11px] text-zinc-300 outline-none placeholder:text-zinc-500"
+          />
+          <datalist id="quick-task-tags">
+            {tagOptions.map((t) => <option key={t} value={t} />)}
+          </datalist>
+        </QuickRow>
+
+        <QuickRow icon="calendar">
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className={`w-full bg-transparent text-[11px] outline-none ${dueDate ? "text-zinc-300" : "text-zinc-500"}`}
+          />
+        </QuickRow>
+
+        <QuickRow icon="module">
+          {/* §13: o andamento é escolhido AQUI, antes de salvar */}
+          <QuickSelect value={statusSel} onChange={setStatusSel} placeholder="Adicionar status">
+            {columns.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </QuickSelect>
+        </QuickRow>
+      </div>
+
+      {error && <p className="mt-2 text-[11px] text-red-400">{error}</p>}
+
+      {confirmDiscard ? (
+        <div className="mt-2 rounded-md border border-amber-800 bg-amber-950/40 p-2">
+          <p className="text-[11px] text-amber-200">Deseja descartar esta nova tarefa?</p>
+          <div className="mt-1.5 flex gap-1">
+            <Button size="sm" variant="ghost" onClick={() => setConfirmDiscard(false)}>Continuar preenchendo</Button>
+            <Button size="sm" variant="secondary" onClick={reset}>Descartar</Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={tryClose}
+          className="mt-2 text-[11px] text-zinc-500 transition hover:text-zinc-300"
+        >
+          Cancelar
+        </button>
+      )}
     </div>
+  );
+}
+
+/** Linha do card de criação: ícone + controle, como no print. */
+function QuickRow({ icon, children }: { icon: React.ComponentProps<typeof Icon>["name"]; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 rounded px-1 py-1 transition hover:bg-zinc-800/50">
+      <span className="w-3.5 shrink-0 text-center text-[11px] text-zinc-500">
+        <Icon name={icon} />
+      </span>
+      <span className="min-w-0 flex-1">{children}</span>
+    </div>
+  );
+}
+
+/**
+ * Seletor das linhas do card. Usa <select> nativo de propósito: o menu nativo
+ * não é cortado pelo overflow da coluna (§19) e não exige portal.
+ */
+function QuickSelect({
+  value,
+  onChange,
+  placeholder,
+  children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`w-full cursor-pointer bg-transparent text-[11px] outline-none ${
+        value ? "text-zinc-300" : "text-zinc-500"
+      }`}
+    >
+      <option value="">{placeholder}</option>
+      {children}
+    </select>
   );
 }
 
@@ -368,6 +555,9 @@ export function TasksKanban({
   canCreate,
   canDelete,
   quickAddClientId,
+  users = [],
+  clients = [],
+  tagOptions = [],
 }: {
   items: KanbanTask[];
   columns: Option[];
@@ -375,6 +565,10 @@ export function TasksKanban({
   canCreate: boolean;
   canDelete?: boolean;
   quickAddClientId?: string;
+  /** dados dos seletores do card de criação (vêm da página) */
+  users?: { id: string; name: string }[];
+  clients?: { id: string; name: string }[];
+  tagOptions?: string[];
 }) {
   const router = useRouter();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -533,7 +727,14 @@ export function TasksKanban({
                 ))}
                 </div>
                 {canCreate && col.value !== "__outros__" && col.value !== "CANCELADA" && (
-                  <KanbanQuickAdd status={col.value} clientId={quickAddClientId} />
+                  <KanbanQuickAdd
+                    status={col.value}
+                    clientId={quickAddClientId}
+                    users={users}
+                    clients={clients}
+                    columns={columns}
+                    tagOptions={tagOptions}
+                  />
                 )}
               </div>
             </div>

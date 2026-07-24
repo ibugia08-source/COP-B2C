@@ -307,6 +307,9 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
           canCreate={canCreate}
           canDelete={canDelete}
           quickAddClientId={cliente !== "__none__" ? cliente : undefined}
+          users={allUsers}
+          clients={allClients}
+          tagOptions={tags}
         />
       ) : visao === "calendario" ? (
         <CalendarMonth

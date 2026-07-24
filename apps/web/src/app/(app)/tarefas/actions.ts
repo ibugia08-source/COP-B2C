@@ -15,6 +15,7 @@ import {
   taskComments,
   tasks,
   type CreativeBrief,
+  type TaskPriority,
   type TaskStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
@@ -541,10 +542,19 @@ export async function addTimeEntry(taskId: string, minutes: number, description:
 }
 
 /** Criação rápida direto de uma coluna do Kanban ou do fim da Lista. */
+/** Campos opcionais do card de criação rápida (todos já existem em `tasks`). */
+export type QuickTaskFields = {
+  assignedToId?: string | null;
+  priority?: string | null;
+  tags?: string[] | null;
+  dueDate?: string | null; // data-only 'YYYY-MM-DD'
+};
+
 export async function quickCreateTask(
   title: string,
   status: string,
   clientId?: string | null,
+  extra?: QuickTaskFields,
 ): Promise<ActionState> {
   const auth = await checkPermission("tasks.create");
   if (!auth.ok) return { error: auth.error };
@@ -557,6 +567,11 @@ export async function quickCreateTask(
     if (denied) return denied;
   }
 
+  // prioridade fora do enum cai no padrão, em vez de gravar lixo
+  const priority = (TASK_PRIORITIES as readonly string[]).includes(extra?.priority ?? "")
+    ? (extra!.priority as TaskPriority)
+    : "MEDIA";
+
   // tarefa nova entra no fim da fila do Kanban (maior boardOrder)
   const [aggQuickOrder] = await db.select({ m: max(tasks.boardOrder) }).from(tasks);
   const [task] = await db
@@ -565,9 +580,12 @@ export async function quickCreateTask(
       boardOrder: (aggQuickOrder?.m ?? 0) + 10,
       title: clean,
       type: "OPERACIONAL",
-      priority: "MEDIA",
+      priority,
       status: status as TaskStatus,
       clientId: clientId || null,
+      assignedToId: extra?.assignedToId || null,
+      dueDate: extra?.dueDate || null,
+      tags: extra?.tags?.length ? extra.tags : [],
       createdById: auth.session.userId,
       completedAt: status === "CONCLUIDA" ? new Date() : null,
     })
@@ -583,8 +601,8 @@ export async function quickCreateTask(
   await emitEvent("TASK_CREATED", {
     taskId: task.id,
     clientId: task.clientId ?? undefined,
-    assigneeId: null,
-    withoutAssignee: true,
+    assigneeId: task.assignedToId,
+    withoutAssignee: !task.assignedToId,
     actorId: auth.session.userId,
   });
 

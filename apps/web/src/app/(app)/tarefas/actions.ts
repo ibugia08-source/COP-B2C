@@ -16,6 +16,7 @@ import {
   tasks,
   type CreativeBrief,
   type TaskPriority,
+  type TaskType,
   type TaskStatus,
 } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
@@ -33,6 +34,12 @@ import { applyTemplateToTask } from "@/lib/templates";
 async function isValidTaskStatus(status: string): Promise<boolean> {
   if ((TASK_STATUSES as readonly string[]).includes(status)) return true;
   return isValidOptionValue("tasks", "status", status);
+}
+
+/** Tipo válido = enum do sistema OU tipo criado pelo admin na configuração. */
+async function isValidTaskType(type: string): Promise<boolean> {
+  if ((TASK_TYPES as readonly string[]).includes(type)) return true;
+  return isValidOptionValue("tasks", "type", type);
 }
 
 export type ActionState = { error?: string; success?: string; taskId?: string };
@@ -546,6 +553,7 @@ export async function addTimeEntry(taskId: string, minutes: number, description:
 /** Criação rápida direto de uma coluna do Kanban ou do fim da Lista. */
 /** Campos opcionais do card de criação rápida (todos já existem em `tasks`). */
 export type QuickTaskFields = {
+  type?: string | null;
   assignedToId?: string | null;
   priority?: string | null;
   tags?: string[] | null;
@@ -579,6 +587,11 @@ export async function quickCreateTask(
     return { error: "Prazo inválido. Use uma data entre 2000 e 2100." };
   }
 
+  // tipo: usa o escolhido; se vier vazio/ inválido, cai no padrão configurado
+  const type = extra?.type && (await isValidTaskType(extra.type))
+    ? extra.type
+    : await resolveDefaultValue("tasks", "type", "OPERACIONAL");
+
   // tarefa nova entra no fim da fila do Kanban (maior boardOrder)
   const [aggQuickOrder] = await db.select({ m: max(tasks.boardOrder) }).from(tasks);
   const [task] = await db
@@ -586,7 +599,7 @@ export async function quickCreateTask(
     .values({
       boardOrder: (aggQuickOrder?.m ?? 0) + 10,
       title: clean,
-      type: "OPERACIONAL",
+      type: type as TaskType,
       priority,
       status: status as TaskStatus,
       clientId: clientId || null,

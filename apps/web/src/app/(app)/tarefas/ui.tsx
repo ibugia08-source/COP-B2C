@@ -319,12 +319,16 @@ function KanbanQuickAdd({
   users,
   clients,
   tagOptions,
+  typeOptions,
+  defaultType,
 }: {
   status: string;
   clientId?: string;
   users: { id: string; name: string; avatar?: string | null }[];
   clients: { id: string; name: string }[];
   tagOptions: string[];
+  typeOptions: Option[];
+  defaultType: string;
 }) {
   const router = useRouter();
   const titleRef = useRef<HTMLInputElement>(null);
@@ -332,6 +336,7 @@ function KanbanQuickAdd({
   const [title, setTitle] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
   const [priority, setPriority] = useState("");
+  const [type, setType] = useState(defaultType);
   const [clientSel, setClientSel] = useState(clientId ?? "");
   const [tagsText, setTagsText] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -343,6 +348,7 @@ function KanbanQuickAdd({
     setTitle("");
     setAssignedToId("");
     setPriority("");
+    setType(defaultType);
     setClientSel(clientId ?? "");
     setTagsText("");
     setDueDate("");
@@ -361,6 +367,7 @@ function KanbanQuickAdd({
     setError(null);
     startTransition(async () => {
       const result = await quickCreateTask(title, status, clientSel || null, {
+        type: type || null,
         assignedToId: assignedToId || null,
         priority: priority || null,
         tags: tagsText.split(",").map((t) => t.trim()).filter(Boolean),
@@ -452,6 +459,15 @@ function KanbanQuickAdd({
           />
         </QuickRow>
 
+        <QuickRow icon="clipboard">
+          <QuickPicker
+            value={type}
+            onChange={setType}
+            placeholder="Adicionar tipo"
+            options={typeOptions.map((o) => ({ value: o.value, label: o.label }))}
+          />
+        </QuickRow>
+
         <QuickRow icon="clients">
           {/* muitos clientes: busca por digitação OU clique na lista */}
           <QuickPicker
@@ -536,6 +552,8 @@ export function TasksKanban({
   users = [],
   clients = [],
   tagOptions = [],
+  typeOptions = [],
+  defaultType = "OPERACIONAL",
 }: {
   items: KanbanTask[];
   columns: Option[];
@@ -547,6 +565,8 @@ export function TasksKanban({
   users?: { id: string; name: string; avatar?: string | null }[];
   clients?: { id: string; name: string }[];
   tagOptions?: string[];
+  typeOptions?: Option[];
+  defaultType?: string;
 }) {
   const router = useRouter();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -728,6 +748,8 @@ export function TasksKanban({
                     users={users}
                     clients={clients}
                     tagOptions={tagOptions}
+                    typeOptions={typeOptions}
+                    defaultType={defaultType}
                   />
                 )}
               </div>

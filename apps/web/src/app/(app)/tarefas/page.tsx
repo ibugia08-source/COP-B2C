@@ -165,6 +165,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     kanbanColumns[0]?.value ?? "A_FAZER";
   const statusFilterOptions: Option[] = statusActive.map((o) => ({ value: o.value, label: o.label, color: o.color }));
   const typeOptions: Option[] = typeOptionsAll.map((o) => ({ value: o.value, label: o.label, color: o.color }));
+  const defaultType = typeOptionsAll.find((o) => o.isDefault)?.value ?? typeOptions[0]?.value ?? "OPERACIONAL";
 
   const tags = Array.from(new Set(allTags.flatMap((t) => t.tags))).sort();
   const kanbanItems: KanbanTask[] = rows.map((t) => ({
@@ -332,6 +333,8 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
           users={allUsers.map((u) => ({ id: u.id, name: u.name, avatar: avatarSrc(u.id, u.avatarUrl) ?? null }))}
           clients={allClients}
           tagOptions={tags}
+          typeOptions={typeOptions}
+          defaultType={defaultType}
         />
       ) : visao === "calendario" ? (
         <CalendarMonth

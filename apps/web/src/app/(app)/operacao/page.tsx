@@ -206,10 +206,13 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
       adsStatus: c.adsStatus,
       pipelineStage: c.pipelineStage,
       gestor1: c.trafficManager1?.name ?? null,
+      gestor1Id: c.trafficManager1Id,
       gestor1Avatar: avatarSrc(c.trafficManager1?.id, c.trafficManager1?.avatarUrl) ?? null,
       estrategistaAvatar: avatarSrc(c.strategist?.id, c.strategist?.avatarUrl) ?? null,
       estrategista: c.strategist?.name ?? null,
+      estrategistaId: c.strategistId,
       gestor2: c.trafficManager2?.name ?? null,
+      gestor2Id: c.trafficManager2Id,
       gestor2Avatar: avatarSrc(c.trafficManager2?.id, c.trafficManager2?.avatarUrl) ?? null,
       nextDue: nextDue ?? null,
       pendencias,
@@ -455,6 +458,7 @@ export default async function OperacaoPage({ searchParams }: { searchParams: Pro
               canMove={canMove}
               canCreate={canCreate}
               canDelete={canDelete}
+              canUpdate={canUpdate}
               users={allUsers.map((u) => ({ id: u.id, name: u.name, avatar: avatarSrc(u.id, u.avatarUrl) ?? null }))}
             />
           )}

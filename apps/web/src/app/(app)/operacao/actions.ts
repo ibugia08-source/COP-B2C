@@ -10,6 +10,7 @@ import {
   clientHealthLogs,
   clients,
   PIPELINE_STAGES,
+  users,
   type HealthStatus,
   type PipelineStage,
 } from "@/db/schema";
@@ -369,4 +370,67 @@ export async function quickCreateClient(input: {
 
   revalidatePath("/operacao");
   return { success: "Cliente criado.", clientId: client.id };
+}
+
+// ---------------------------------------------------------------------------
+// Edição inline de responsáveis no card do Kanban
+// ---------------------------------------------------------------------------
+
+export type ResponsibleRole = "estrategista" | "gestor1" | "gestor2";
+
+const RESPONSIBLE_COLUMN = {
+  estrategista: "strategistId",
+  gestor1: "trafficManager1Id",
+  gestor2: "trafficManager2Id",
+} as const;
+
+/**
+ * Troca um responsável do cliente direto do card (clicar na pessoa → escolher).
+ * `userId` null remove a atribuição. Mesmo gate de escrita do updateClient
+ * (permissão do módulo + escopo do cliente) e mesma trilha de auditoria.
+ */
+export async function setClientResponsible(
+  clientId: string,
+  role: ResponsibleRole,
+  userId: string | null,
+): Promise<MoveResult> {
+  const auth = await checkPermission("clients.update");
+  if (!auth.ok) return { error: auth.error };
+
+  const column = RESPONSIBLE_COLUMN[role];
+  if (!column) return { error: "Papel inválido." };
+
+  const denied = await denyClientOutOfScope(auth.session, clientId, "setClientResponsible");
+  if (denied) return denied;
+
+  const existing = await db.query.clients.findFirst({
+    where: eq(clients.id, clientId),
+    columns: { strategistId: true, trafficManager1Id: true, trafficManager2Id: true },
+  });
+  if (!existing) return { error: "Cliente não encontrado." };
+
+  if (userId) {
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { id: true, isActive: true },
+    });
+    if (!user || !user.isActive) return { error: "Usuário inválido ou inativo." };
+  }
+
+  await db
+    .update(clients)
+    .set({ [column]: userId } as Record<string, string | null>)
+    .where(eq(clients.id, clientId));
+
+  await logActivity({
+    userId: auth.session.userId,
+    action: "client.responsiblesChanged",
+    entityType: "client",
+    entityId: clientId,
+    metadata: { [column]: { from: existing[column], to: userId } },
+  });
+
+  revalidatePath("/operacao");
+  revalidatePath(`/clientes/${clientId}`);
+  return { success: "Responsável atualizado." };
 }

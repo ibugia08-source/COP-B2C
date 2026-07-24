@@ -14,7 +14,14 @@ import { AGENCY_BRANDS, BUSINESS_MODELS, HEALTH_STATUSES } from "@/db/schema";
 import { Icon } from "@/components/ui/icon";
 import { CardTrash, ColumnSelectAll, SelectCircle } from "@/components/bulk-select";
 import { MoveMenu } from "@/components/ui/move-menu";
-import { deleteClient, moveClientStage, quickCreateClient, reorderClientOnBoard } from "./actions";
+import {
+  deleteClient,
+  moveClientStage,
+  quickCreateClient,
+  reorderClientOnBoard,
+  setClientResponsible,
+  type ResponsibleRole,
+} from "./actions";
 
 export type StageOption = { value: string; label: string; color: Tone };
 
@@ -27,10 +34,13 @@ export type KanbanClient = {
   adsStatus: string;
   pipelineStage: string;
   gestor1: string | null;
+  gestor1Id: string | null;
   gestor1Avatar?: string | null;
   gestor2: string | null;
+  gestor2Id: string | null;
   gestor2Avatar?: string | null;
   estrategista: string | null;
+  estrategistaId: string | null;
   estrategistaAvatar?: string | null;
   nextDue: string | null; // data-only 'YYYY-MM-DD'
   pendencias: string[];
@@ -44,6 +54,7 @@ export function OperationKanban({
   canMove,
   canCreate,
   canDelete,
+  canUpdate = false,
   users = [],
 }: {
   clients: KanbanClient[];
@@ -51,6 +62,8 @@ export function OperationKanban({
   canMove: boolean;
   canCreate: boolean;
   canDelete?: boolean;
+  /** permite editar estrategista/G1/G2 clicando na pessoa (clients.update) */
+  canUpdate?: boolean;
   /** usuários para os seletores do card de criação */
   users?: { id: string; name: string; avatar?: string | null }[];
 }) {
@@ -251,35 +264,56 @@ export function OperationKanban({
                       </div>
                     )}
 
-                    {/* 4. pessoas por último, uma embaixo da outra */}
-                    {(c.estrategista || c.gestor1 || c.gestor2) && (
+                    {/* 4. pessoas por último — com clients.update, clicar edita */}
+                    {canUpdate ? (
+                      <div className="mt-2 space-y-1 border-t border-zinc-800 pt-2">
+                        <PersonEdit
+                          icon={<Icon name="brain" />}
+                          role="estrategista"
+                          client={c}
+                          value={c.estrategistaId}
+                          label={c.estrategista}
+                          placeholder="Adicionar estrategista"
+                          users={users}
+                          onChanged={() => router.refresh()}
+                          onError={setError}
+                        />
+                        <PersonEdit
+                          icon={<span className="text-[9px] font-semibold">G1</span>}
+                          role="gestor1"
+                          client={c}
+                          value={c.gestor1Id}
+                          label={c.gestor1}
+                          placeholder="Adicionar gestor 1"
+                          users={users}
+                          onChanged={() => router.refresh()}
+                          onError={setError}
+                        />
+                        <PersonEdit
+                          icon={<span className="text-[9px] font-semibold">G2</span>}
+                          role="gestor2"
+                          client={c}
+                          value={c.gestor2Id}
+                          label={c.gestor2}
+                          placeholder="Adicionar gestor 2"
+                          users={users}
+                          onChanged={() => router.refresh()}
+                          onError={setError}
+                        />
+                      </div>
+                    ) : (c.estrategista || c.gestor1 || c.gestor2) ? (
                       <div className="mt-2 space-y-1 border-t border-zinc-800 pt-2">
                         {c.estrategista && (
-                          <PersonRow
-                            icon={<Icon name="brain" />}
-                            name={c.estrategista}
-                            avatar={c.estrategistaAvatar}
-                            title={`Estrategista: ${c.estrategista}`}
-                          />
+                          <PersonRow icon={<Icon name="brain" />} name={c.estrategista} avatar={c.estrategistaAvatar} title={`Estrategista: ${c.estrategista}`} />
                         )}
                         {c.gestor1 && (
-                          <PersonRow
-                            icon={<span className="text-[9px] font-semibold">G1</span>}
-                            name={c.gestor1}
-                            avatar={c.gestor1Avatar}
-                            title={`Gestor 1: ${c.gestor1}`}
-                          />
+                          <PersonRow icon={<span className="text-[9px] font-semibold">G1</span>} name={c.gestor1} avatar={c.gestor1Avatar} title={`Gestor 1: ${c.gestor1}`} />
                         )}
                         {c.gestor2 && (
-                          <PersonRow
-                            icon={<span className="text-[9px] font-semibold">G2</span>}
-                            name={c.gestor2}
-                            avatar={c.gestor2Avatar}
-                            title={`Gestor 2: ${c.gestor2}`}
-                          />
+                          <PersonRow icon={<span className="text-[9px] font-semibold">G2</span>} name={c.gestor2} avatar={c.gestor2Avatar} title={`Gestor 2: ${c.gestor2}`} />
                         )}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 ))}
                 </div>
@@ -536,6 +570,67 @@ function ClientQuickAdd({
           Cancelar
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Linha de pessoa EDITÁVEL do card: clicar abre o seletor (busca + foto) e a
+ * escolha grava na hora via setClientResponsible. "Limpar seleção" remove.
+ */
+function PersonEdit({
+  icon,
+  role,
+  client,
+  value,
+  label,
+  placeholder,
+  users,
+  onChanged,
+  onError,
+}: {
+  icon: React.ReactNode;
+  role: ResponsibleRole;
+  client: KanbanClient;
+  value: string | null;
+  label: string | null;
+  placeholder: string;
+  users: { id: string; name: string; avatar?: string | null }[];
+  onChanged: () => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  function change(userId: string) {
+    if ((userId || null) === value) return;
+    onError(null);
+    startTransition(async () => {
+      const r = await setClientResponsible(client.id, role, userId || null);
+      if (r.error) onError(r.error);
+      else onChanged();
+    });
+  }
+
+  return (
+    <div
+      className={`flex items-center gap-1.5 text-[11px] ${pending ? "opacity-50" : ""}`}
+      title={label ? `${placeholder.replace("Adicionar ", "")}: ${label} — clique para trocar` : placeholder}
+      // impede que o clique/arraste no seletor vire drag do card
+      draggable={false}
+      onDragStart={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <span className="flex w-4 shrink-0 justify-center text-zinc-500">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <QuickPicker
+          value={value ?? ""}
+          onChange={change}
+          placeholder={placeholder}
+          searchable={users.length > 6}
+          options={users.map((u) => ({ value: u.id, label: u.name, avatar: u.avatar ?? null }))}
+          emptyText="Nenhum usuário encontrado"
+        />
+      </span>
     </div>
   );
 }

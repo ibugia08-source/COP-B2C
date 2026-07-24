@@ -931,15 +931,16 @@ export async function uploadAttachment(assetId: string, formData: FormData): Pro
   });
   if (!valid.ok) return { error: valid.error };
 
-  const { key, safeName } = buildStorageKey("ativos", file.name);
-  await getStorage().upload({ path: key, body: buffer, contentType: valid.mime });
+  const { key: path, safeName } = buildStorageKey("ativos", file.name);
+  // chave RETORNADA pelo storage (no Blob é a URL real) — não o path de entrada
+  const stored = await getStorage().upload({ path, body: buffer, contentType: valid.mime });
 
   await db.insert(digitalAssetAttachments).values({
     assetId,
     fileName: safeName,
     fileType: valid.mime,
     fileSize: file.size,
-    storagePath: key,
+    storagePath: stored.key,
     uploadedById: auth.session.userId,
   });
   await writeAssetAudit({

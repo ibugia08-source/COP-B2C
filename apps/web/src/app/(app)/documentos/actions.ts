@@ -240,8 +240,9 @@ export async function uploadDocument(_prev: ActionState, formData: FormData): Pr
   });
   if (!valid.ok) return { error: valid.error };
 
-  const { key, safeName } = buildStorageKey("documentos", file.name);
-  await getStorage().upload({ path: key, body: buffer, contentType: valid.mime });
+  const { key: path, safeName } = buildStorageKey("documentos", file.name);
+  // chave RETORNADA pelo storage (no Blob é a URL real) — não o path de entrada
+  const stored = await getStorage().upload({ path, body: buffer, contentType: valid.mime });
 
   const [doc] = await db
     .insert(documents)
@@ -250,7 +251,7 @@ export async function uploadDocument(_prev: ActionState, formData: FormData): Pr
       description,
       type: documentType as (typeof DOCUMENT_TYPES)[number],
       sourceType: "UPLOAD",
-      storagePath: key,
+      storagePath: stored.key,
       mimeType: valid.mime,
       clientId,
       taskId,

@@ -486,12 +486,15 @@ export async function uploadMemberAvatar(
   });
   if (!valid.ok) return { error: valid.error };
 
-  const { key } = buildStorageKey("avatars", file.name);
-  await getStorage().upload({ path: key, body: buffer, contentType: valid.mime });
+  const { key: path } = buildStorageKey("avatars", file.name);
+  // Grava a chave RETORNADA pelo storage, não o path de entrada: no Vercel Blob
+  // a chave real é a URL (com sufixo aleatório) — guardar o path de entrada
+  // deixava o arquivo irrecuperável (bug que órfãos todos os uploads em prod).
+  const stored = await getStorage().upload({ path, body: buffer, contentType: valid.mime });
 
   const previousKey = user.avatarUrl;
-  await db.update(users).set({ avatarUrl: key }).where(eq(users.id, userId));
-  if (previousKey && previousKey !== key) {
+  await db.update(users).set({ avatarUrl: stored.key }).where(eq(users.id, userId));
+  if (previousKey && previousKey !== stored.key) {
     try {
       await getStorage().delete(previousKey);
     } catch {

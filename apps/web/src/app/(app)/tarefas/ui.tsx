@@ -143,6 +143,7 @@ export function TaskCreateButton({
   parentTaskId,
   digitalAssetId,
   label,
+  hideTrigger,
 }: {
   users: { id: string; name: string }[];
   clients: { id: string; name: string }[];
@@ -152,6 +153,8 @@ export function TaskCreateButton({
   parentTaskId?: string;
   digitalAssetId?: string;
   label?: string;
+  /** true = só o modal (aberto via ?nova=1); o gatilho fica no menu ⋯ */
+  hideTrigger?: boolean;
 }) {
   const [open, setOpen] = useState(autoOpen ?? false);
   const [type, setType] = useState(defaultType ?? "OPERACIONAL");
@@ -171,12 +174,27 @@ export function TaskCreateButton({
     {},
   );
 
+  function close() {
+    setOpen(false);
+    // aberto por ?nova=1: tira o parâmetro para o próximo clique reabrir
+    if (autoOpen && typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.has("nova")) {
+        p.delete("nova");
+        const qs = p.toString();
+        router.replace(qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+      }
+    }
+  }
+
   return (
     <>
-      <Button onClick={() => setOpen(true)} size={parentTaskId ? "sm" : "md"} variant={parentTaskId ? "secondary" : "primary"}>
-        {label ?? "+ Nova tarefa"}
-      </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={parentTaskId ? "Nova subtarefa" : "Nova tarefa"} wide>
+      {!hideTrigger && (
+        <Button onClick={() => setOpen(true)} size={parentTaskId ? "sm" : "md"} variant={parentTaskId ? "secondary" : "primary"}>
+          {label ?? "+ Nova tarefa"}
+        </Button>
+      )}
+      <Modal open={open} onClose={close} title={parentTaskId ? "Nova subtarefa" : "Nova tarefa"} wide>
         <form action={formAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {parentTaskId && <input type="hidden" name="parentTaskId" value={parentTaskId} />}
           {digitalAssetId && <input type="hidden" name="digitalAssetId" value={digitalAssetId} />}

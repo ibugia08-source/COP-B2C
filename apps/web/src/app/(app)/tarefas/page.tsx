@@ -10,10 +10,9 @@ import { addDaysDateOnly, formatDateOnly, todayDateOnly } from "@/lib/date";
 import { avatarSrc } from "@/lib/avatar";
 import {
   Badge,
-  Button,
+  ChipLink,
   EmptyState,
   PageHeader,
-  StatCard,
   StatusBadge,
   Table,
   Td,
@@ -31,7 +30,7 @@ import {
 } from "./ui";
 import { ModuleConfig } from "../module-config";
 import { Icon } from "@/components/ui/icon";
-import { Segmented } from "@/components/ui/toolbar";
+import { OverflowItem, OverflowMenu, Segmented } from "@/components/ui/toolbar";
 import { FilterBar, type FilterDef } from "@/components/ui/filter-bar";
 import { CalendarMonth, type CalendarItem } from "@/components/calendar-month";
 import { BulkBar, CardTrash, ColumnSelectAll, SelectCircle, SelectionProvider, type BulkMenu } from "@/components/bulk-select";
@@ -133,9 +132,9 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     resolveOptions("tasks", "status"),
     resolveOptions("tasks", "type", { activeOnly: true }),
     Promise.all([
-      db.$count(tasks, and(eq(tasks.assignedToId, session.userId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])))),
-      db.$count(tasks, and(lt(tasks.dueDate, todayStr), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])))),
-      db.$count(tasks, and(isNull(tasks.assignedToId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])), isNull(tasks.parentTaskId))),
+      db.$count(tasks, and(myTasksCondition(session.userId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])), isNull(tasks.parentTaskId), isNull(tasks.archivedAt))),
+      db.$count(tasks, and(lt(tasks.dueDate, todayStr), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])), isNull(tasks.archivedAt))),
+      db.$count(tasks, and(isNull(tasks.assignedToId), not(inArray(tasks.status, ["CONCLUIDA", "CANCELADA"])), isNull(tasks.parentTaskId), isNull(tasks.archivedAt))),
     ]),
     visao === "calendario"
       ? db.query.clientMeetings.findMany({
@@ -151,7 +150,7 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     // universo global de tags (independe dos filtros aplicados) para o filtro de Tag
     db.query.tasks.findMany({ columns: { tags: true }, where: scope }),
   ]);
-  const [minhas, atrasadas, semResponsavel] = counts;
+  const [atreladas, atrasadas, semResponsavel] = counts;
 
   // meta de status (built-in + colunas custom do admin) para badges e selects
   const statusMeta: Record<string, { label: string; tone: Tone }> = { ...TASK_STATUS_META };
@@ -264,7 +263,6 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
     <div>
       <PageHeader
         title="Tarefas"
-        description="CRM interno de demandas — vinculadas ou não a clientes. Solicitações de criativo são tarefas do tipo Criativo."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Segmented
@@ -277,7 +275,6 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
                 { value: "arquivadas", label: "Arquivadas", href: buildHref({ visao: "arquivadas" }) },
               ]}
             />
-            <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" buttonLabel="Config." />
             <Link
               href={buildHref({ filtros: showFilters && activeFilterCount === 0 ? null : "1" })}
               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
@@ -288,11 +285,50 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
             >
               <Icon name="search" /> Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
             </Link>
-            <Button href="/tarefas/templates" variant="secondary" size="sm">
-              <Icon name="clipboard" /> Templates
-            </Button>
+
+            {/* chips: atalhos de filtro com a contagem (antes eram StatCards) */}
+            <ChipLink
+              href={buildHref({ prazo: str(sp.prazo) === "atrasadas" ? null : "atrasadas" })}
+              active={str(sp.prazo) === "atrasadas"}
+              tone="red"
+            >
+              Atrasadas <span className="nums font-semibold">{atrasadas}</span>
+            </ChipLink>
+            <ChipLink
+              href={buildHref(
+                resp === "__none__"
+                  ? { responsavel: null, status: null }
+                  : { responsavel: "__none__", status: "__abertas__" },
+              )}
+              active={resp === "__none__"}
+              tone="amber"
+            >
+              Sem responsável <span className="nums font-semibold">{semResponsavel}</span>
+            </ChipLink>
+            <ChipLink
+              href={buildHref(
+                resp === "__meus__"
+                  ? { responsavel: null, status: null }
+                  : { responsavel: "__meus__", status: "__abertas__" },
+              )}
+              active={resp === "__meus__"}
+              tone="sky"
+            >
+              Atreladas a mim <span className="nums font-semibold">{atreladas}</span>
+            </ChipLink>
+
+            {/* ações raras fora da disputa por atenção */}
+            <OverflowMenu>
+              {canCreate && <OverflowItem href={buildHref({ nova: "1" })}><Icon name="tasks" /> Nova tarefa (completa)</OverflowItem>}
+              <OverflowItem href="/tarefas/templates"><Icon name="clipboard" /> Templates</OverflowItem>
+              <ModuleConfig moduleKey="tasks" moduleLabel="Tarefas" buttonLabel="Configurar colunas" />
+            </OverflowMenu>
+
+            {/* montado SEM gatilho: alvo dos deep-links ?nova=1 (cliente/ativo
+                → nova tarefa) e do item "Nova tarefa (completa)" do menu ⋯ */}
             {canCreate && (
               <TaskCreateButton
+                hideTrigger
                 users={allUsers.map((u) => ({ id: u.id, name: u.name, avatar: avatarSrc(u.id, u.avatarUrl) ?? null }))}
                 clients={allClients}
                 defaultClientId={cliente !== "__none__" ? cliente : undefined}
@@ -304,12 +340,6 @@ export default async function TarefasPage({ searchParams }: { searchParams: Prom
           </div>
         }
       />
-
-      <div className="mb-4 grid grid-cols-3 gap-3 sm:max-w-md">
-        <StatCard label="Minhas abertas" value={minhas} tone="text-sky-400" href={`/tarefas?responsavel=${session.userId}&status=__abertas__`} />
-        <StatCard label="Atrasadas" value={atrasadas} tone="text-red-400" href="/tarefas?prazo=atrasadas" />
-        <StatCard label="Sem responsável" value={semResponsavel} tone="text-amber-400" href="/tarefas?responsavel=__none__&status=__abertas__" />
-      </div>
 
       {showFilters && (
         <FilterBar

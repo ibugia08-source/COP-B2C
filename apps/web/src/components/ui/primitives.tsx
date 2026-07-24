@@ -233,6 +233,42 @@ export function PageHeader({
   );
 }
 
+/**
+ * Chip-atalho de filtro com contagem embutida — substitui StatCards que só
+ * aplicavam um filtro. `active` destaca e o href correspondente deve LIMPAR
+ * o filtro (toggle).
+ */
+export function ChipLink({
+  href,
+  active = false,
+  tone = "zinc",
+  children,
+}: {
+  href: string;
+  active?: boolean;
+  tone?: "red" | "amber" | "sky" | "zinc";
+  children: ReactNode;
+}) {
+  const tones: Record<string, string> = {
+    red: "text-red-400",
+    amber: "text-amber-400",
+    sky: "text-sky-400",
+    zinc: "text-zinc-300",
+  };
+  return (
+    <Link
+      href={href}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+        active
+          ? "border-emerald-600 bg-emerald-950/40 text-emerald-300"
+          : `border-zinc-700 bg-zinc-900 hover:border-zinc-500 ${tones[tone]}`
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export function EmptyState({
   icon = "envelopeOpen",
   title,

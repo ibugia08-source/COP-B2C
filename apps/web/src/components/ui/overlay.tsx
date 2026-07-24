@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "./primitives";
 import { Icon } from "@/components/ui/icon";
@@ -8,6 +9,11 @@ import { Icon } from "@/components/ui/icon";
 // ---------------------------------------------------------------------------
 // Modal / Drawer
 // ---------------------------------------------------------------------------
+
+// "estamos no cliente?" sem setState em effect (padrão useSyncExternalStore)
+const subscribeNoop = () => () => {};
+const isClient = () => true;
+const isServer = () => false;
 
 export function Modal({
   open,
@@ -29,8 +35,13 @@ export function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
-  return (
+  // Portal para o <body>: o modal não pode ser afetado por overflow/display do
+  // contêiner onde o GATILHO mora (ex.: item dentro do OverflowMenu, cards de
+  // coluna com overflow). SSR não tem document — só monta no cliente.
+  const mounted = useSyncExternalStore(subscribeNoop, isClient, isServer);
+
+  if (!open || !mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/40 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
@@ -53,7 +64,8 @@ export function Modal({
         </div>
         <div className="p-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

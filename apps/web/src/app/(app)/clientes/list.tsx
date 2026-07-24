@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   ADS_META,
   AGENCY_BRAND_META,
-  BUSINESS_MODEL_LABEL,
   CLIENT_STATUS_META,
   HEALTH_META,
 } from "@/lib/labels";
@@ -211,14 +210,12 @@ export function ClientsList({
   return (
     <SelectionProvider>
       <Table
-        minWidth="900px"
+        minWidth="760px"
         head={
           <>
             <Th className="w-8"></Th>
             <Th>Cliente</Th>
             <Th>Empresa</Th>
-            <Th>Nicho</Th>
-            <Th>Modelo</Th>
             <Th>Status</Th>
             <Th>Saúde</Th>
             <Th>Ads</Th>
@@ -238,8 +235,6 @@ export function ClientsList({
               {c.city && <p className="text-xs text-zinc-500">{c.city}{c.state ? `/${c.state}` : ""}</p>}
             </Td>
             <Td><StatusBadge value={c.agencyBrand} meta={AGENCY_BRAND_META} /></Td>
-            <Td className="text-zinc-400">{c.niche ?? "—"}</Td>
-            <Td className="text-zinc-400">{BUSINESS_MODEL_LABEL[c.businessModel] ?? c.businessModel}</Td>
             <Td><StatusBadge value={c.status} meta={CLIENT_STATUS_META} /></Td>
             <Td><StatusBadge value={c.healthStatus} meta={HEALTH_META} /></Td>
             <Td><StatusBadge value={c.adsStatus} meta={ADS_META} /></Td>
